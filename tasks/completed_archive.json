@@ -1,0 +1,38 @@
+[
+  {
+    "id": "s1-research",
+    "subject": "Research Qwen3-ASR-0.6B CPU inference path + streaming support",
+    "completedAt": "2026-06-11",
+    "learnings": "Official qwen-asr Python streams only via vLLM (GPU); antirez/qwen-asr C engine is the real CPU path — but its interactive --stream re-encodes the partial tail and falls 2.3x behind real-time paced input."
+  },
+  {
+    "id": "s1-scaffold",
+    "subject": "Scaffold TuParles project (git init, poetry, package layout)",
+    "completedAt": "2026-06-11",
+    "learnings": ""
+  },
+  {
+    "id": "s1-spike",
+    "subject": "Spike: backend selection on Fr-En code-switched audio",
+    "completedAt": "2026-06-11",
+    "learnings": "Whisper-family on CPU costs a fixed ~30s encoder window per call regardless of audio length; faster-whisper chunk_length is a no-op on encoder compute. Always lspci before CPU latency engineering — an idle RTX 4080 invalidated a day of careful CPU arithmetic in one benchmark."
+  },
+  {
+    "id": "s1-punctuation",
+    "subject": "Build bilingual spoken-punctuation post-processor",
+    "completedAt": "2026-06-11",
+    "learnings": "Bare 'point' must map for French dictation but is everyday English vocabulary — shield by context (determiner/compound before, 'of' after), since dictated punctuation arrives as a standalone clause-final word."
+  },
+  {
+    "id": "1",
+    "subject": "Build audio capture module (16 kHz mono ring buffer, level meter)",
+    "completedAt": "2026-06-11",
+    "learnings": "33ms blocks (SAMPLE_RATE//30) give 30fps RMS levels for free in the same callback that accumulates audio."
+  },
+  {
+    "id": "5",
+    "subject": "Build text delivery (xdotool type into focus + clipboard backup)",
+    "completedAt": "2026-06-11",
+    "learnings": "xdotool type at 12ms/key reads as a UI freeze on long transcripts; also never self-test type-into-focus from a background agent — it lands in whatever window the user has open."
+  }
+]
