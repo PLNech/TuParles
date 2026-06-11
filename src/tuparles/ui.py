@@ -23,10 +23,13 @@ from PySide6.QtCore import (
     Qt,
     QTimer,
 )
+from PySide6.QtCore import QRect
 from PySide6.QtGui import QColor, QFontMetrics, QPainter
 from PySide6.QtWidgets import QApplication, QWidget
 
 WIDTH, HEIGHT = 460, 56
+MAX_HEIGHT = 300  # full view stops growing here; older lines trim with …
+V_PAD = 16  # full-view vertical text padding
 MARGIN_BOTTOM = 64  # gap between bubble and screen bottom
 BAR_COUNT, BAR_W, BAR_GAP = 18, 3, 3
 FPS_MS = 33  # one repaint per Recorder level sample
@@ -42,7 +45,9 @@ _PLACEHOLDER = "Je t'écoute…"
 
 
 class Bubble(QWidget):
-    def __init__(self, level_source: Callable[[], float]) -> None:
+    def __init__(
+        self, level_source: Callable[[], float], view: str = "minimal"
+    ) -> None:
         super().__init__(
             None,
             Qt.FramelessWindowHint
@@ -61,6 +66,7 @@ class Bubble(QWidget):
         self._level_source = level_source
         self._levels: deque[float] = deque([0.0] * BAR_COUNT, maxlen=BAR_COUNT)
         self._state = "idle"  # idle | recording | processing | final | error
+        self._view = view  # minimal (one eliding line) | full (wrapped, grows)
         self._text = ""
         self._phase = 0.0  # drives the breathing wave while processing
 
@@ -111,7 +117,37 @@ class Bubble(QWidget):
             self._state = state
         if text is not None:
             self._text = text
+        self._apply_size()
         self.update()
+
+    def set_view(self, view: str) -> None:
+        self._view = view
+        self._apply_size()
+        self.update()
+
+    # ── geometry ────────────────────────────────────────────────────────
+
+    def _text_width(self) -> int:
+        bars_end = 24 + BAR_COUNT * (BAR_W + BAR_GAP)
+        return WIDTH - (bars_end + 14) - 24
+
+    def _desired_height(self) -> int:
+        if self._view != "full" or not self._text:
+            return HEIGHT
+        needed = QFontMetrics(self.font()).boundingRect(
+            QRect(0, 0, self._text_width(), 10_000),
+            Qt.TextWordWrap,
+            self._text,
+        ).height()
+        return max(HEIGHT, min(MAX_HEIGHT, needed + 2 * V_PAD))
+
+    def _apply_size(self) -> None:
+        """Grow/shrink (full view), staying anchored above the screen bottom."""
+        h = self._desired_height()
+        if h != self.height():
+            self.setFixedSize(WIDTH, h)
+            if self.isVisible():
+                self.move(self._home_pos())
 
     # ── animation plumbing ──────────────────────────────────────────────
 
@@ -126,7 +162,7 @@ class Bubble(QWidget):
         screen = QApplication.primaryScreen().availableGeometry()
         return QPoint(
             screen.center().x() - WIDTH // 2,
-            screen.bottom() - HEIGHT - MARGIN_BOTTOM,
+            screen.bottom() - self.height() - MARGIN_BOTTOM,
         )
 
     def _fade_in(self) -> None:
@@ -185,7 +221,7 @@ class Bubble(QWidget):
         p.setBrush(color)
 
         x = 24.0
-        cy = HEIGHT / 2
+        cy = self.height() / 2
         max_half = (HEIGHT - 22) / 2
         for i in range(BAR_COUNT):
             if self._state == "recording":
@@ -206,10 +242,31 @@ class Bubble(QWidget):
         }.get(self._state, _TEXT_DIM)
 
         bars_end = 24 + BAR_COUNT * (BAR_W + BAR_GAP)
+        p.setPen(color)
+
+        # Full view (once text actually wraps): the whole take, top-aligned.
+        # Overflow past MAX_HEIGHT trims oldest words behind an ellipsis.
+        if self._view == "full" and self.height() > HEIGHT:
+            rect = self.rect().adjusted(bars_end + 14, V_PAD, -24, -V_PAD)
+            p.drawText(
+                rect,
+                Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignTop,
+                self._trim_to_fit(text, rect),
+            )
+            return
+
         rect = self.rect().adjusted(bars_end + 14, 0, -24, 0)
         # Live speech: elide left so the freshest words stay visible.
         # Final flash: elide right — it reads as "this is what landed".
         mode = Qt.ElideRight if self._state == "final" else Qt.ElideLeft
         elided = QFontMetrics(self.font()).elidedText(text, mode, rect.width())
-        p.setPen(color)
         p.drawText(rect, Qt.AlignVCenter | Qt.AlignLeft, elided)
+
+    def _trim_to_fit(self, text: str, rect) -> str:
+        fm = QFontMetrics(self.font())
+        while fm.boundingRect(rect, Qt.TextWordWrap, text).height() > rect.height():
+            cut = text.find(" ", 24)  # drop the oldest word, keep the tail
+            if cut == -1:
+                break
+            text = "…" + text[cut + 1 :].lstrip()
+        return text

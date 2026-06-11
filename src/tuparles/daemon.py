@@ -16,7 +16,7 @@ import time
 from PySide6.QtCore import QObject, QTimer, Signal, Slot
 from PySide6.QtWidgets import QApplication
 
-from tuparles import history
+from tuparles import history, settings
 from tuparles.audio import Recorder
 from tuparles.config import (
     PARTIAL_MIN_AUDIO_S,
@@ -124,7 +124,9 @@ def run() -> None:
 
     recorder = Recorder()
     bridge = Bridge()
-    bubble = Bubble(level_source=lambda: recorder.level)
+    bubble = Bubble(
+        level_source=lambda: recorder.level, view=settings.get("view")
+    )
     controller = Controller(engine, recorder, bubble, bridge)
 
     bridge.toggled.connect(controller.toggle)
@@ -136,6 +138,7 @@ def run() -> None:
     bridge.state.connect(tray.set_state)
     bridge.final.connect(tray.on_final)
     tray.toggle_requested.connect(controller.toggle)
+    tray.view_changed.connect(bubble.set_view)
     tray.quit_requested.connect(app.quit)
 
     listener = HotkeyListener(on_toggle=bridge.toggled.emit)

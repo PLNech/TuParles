@@ -7,11 +7,11 @@ quit cleanly. History entries copy to clipboard on click — never typed
 into focus, because focus just moved to a menu.
 """
 
-from PySide6.QtCore import QObject, QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
+from PySide6.QtCore import QObject, QRectF, Qt, QUrl, Signal
+from PySide6.QtGui import QColor, QDesktopServices, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import QMenu, QSystemTrayIcon
 
-from tuparles import history
+from tuparles import history, settings
 from tuparles.delivery import to_clipboard
 
 _IDLE = QColor(205, 214, 244)
@@ -21,6 +21,7 @@ _PROCESSING = QColor(127, 132, 156)
 _BAR_HEIGHTS = (0.45, 0.85, 0.60)  # the bubble's waveform, frozen mid-breath
 _HISTORY_SHOWN = 8
 _LABEL_CHARS = 46
+_README_URL = "https://github.com/PLNech/TuParles#readme"
 
 
 def _glyph(color: QColor) -> QIcon:
@@ -43,6 +44,7 @@ def _glyph(color: QColor) -> QIcon:
 class Tray(QObject):
     toggle_requested = Signal()
     quit_requested = Signal()
+    view_changed = Signal(str)
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -63,7 +65,15 @@ class Tray(QObject):
         self._hist_menu = self._menu.addMenu("Historique")
         self._hist_menu.aboutToShow.connect(self._rebuild_history)
 
+        self._full_act = self._menu.addAction("Affichage complet")
+        self._full_act.setCheckable(True)
+        self._full_act.setChecked(settings.get("view") == "full")
+        self._full_act.toggled.connect(self._on_view_toggled)
+
         self._menu.addSeparator()
+        self._menu.addAction("À propos").triggered.connect(
+            lambda: QDesktopServices.openUrl(QUrl(_README_URL))
+        )
         self._menu.addAction("Quitter").triggered.connect(self.quit_requested.emit)
 
         self._tray = QSystemTrayIcon(self._icons["idle"], self)
@@ -79,6 +89,11 @@ class Tray(QObject):
 
     def on_final(self, _text: str) -> None:
         self._copy_act.setEnabled(True)
+
+    def _on_view_toggled(self, checked: bool) -> None:
+        mode = "full" if checked else "minimal"
+        settings.put("view", mode)
+        self.view_changed.emit(mode)
 
     def _copy_last(self) -> None:
         text = history.last()
