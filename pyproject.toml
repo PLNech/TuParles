@@ -11,6 +11,7 @@ python = "^3.11"
 sounddevice = "^0.5"
 numpy = "^2.0"
 pynput = "^1.7"
+faster-whisper = "^1.2.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0"
