@@ -28,6 +28,7 @@ from tuparles.delivery import deliver
 from tuparles.engine import load_engine
 from tuparles.lexicon import apply_lexicon
 from tuparles.punctuation import apply_spoken_punctuation
+from tuparles.repeats import collapse_repeats
 
 
 class Bridge(QObject):
@@ -95,7 +96,7 @@ class Controller(QObject):
         try:
             with self._engine_lock:
                 raw = self._engine.transcribe(audio)
-            text = apply_lexicon(apply_spoken_punctuation(raw))
+            text = collapse_repeats(apply_lexicon(apply_spoken_punctuation(raw)))
             if text:
                 deliver(text)
                 try:
