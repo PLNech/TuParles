@@ -1,6 +1,7 @@
 """Deliver final text: type into the focused window, mirror to clipboard."""
 
 import subprocess
+import time
 
 # Every modifier the stop-tap (RCtrl+RAlt/AltGr) or a hasty hand might hold
 # when typing starts. Released explicitly *before* typing instead of using
@@ -19,8 +20,18 @@ _MODIFIERS = [
 def deliver(text: str) -> None:
     if not text:
         return
+    t0 = time.monotonic()
     to_clipboard(text)
+    t1 = time.monotonic()
     _type_into_focus(text)
+    t2 = time.monotonic()
+    # Pastes have clocked at ~3 s where ~0.3 s is expected — when delivery
+    # drags, say which leg (clipboard vs xdotool) so the journal can tell.
+    if t2 - t0 > 1.0:
+        print(
+            f"deliver slow: clipboard {t1 - t0:.1f}s, "
+            f"focus-injection {t2 - t1:.1f}s ({len(text)} chars)"
+        )
 
 
 # Above this, char-by-char typing takes whole seconds (10 ms/char) and the

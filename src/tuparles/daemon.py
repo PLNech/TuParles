@@ -156,6 +156,10 @@ class Controller(QObject):
 
 
 def run() -> None:
+    import fcntl
+    import os
+    from pathlib import Path
+
     from tuparles.hotkey import HotkeyListener
     from tuparles.tray import Tray
     from tuparles.ui import Bubble
@@ -164,6 +168,18 @@ def run() -> None:
     # buffers: the forensic prints below never flushed during the freeze
     # hunts. Line-buffer explicitly so the journal sees them as they happen.
     sys.stdout.reconfigure(line_buffering=True)
+
+    # Single instance: two daemons mean two hotkey listeners — every take
+    # double-toggles and double-delivers. The flock dies with the process,
+    # so a crashed daemon never wedges the next launch.
+    lock_file = open(
+        Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "tuparles.lock", "w"
+    )
+    try:
+        fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        print("TuParles tourne déjà — cette instance s'efface.")
+        return
 
     app = QApplication([])
     app.setQuitOnLastWindowClosed(False)  # the bubble hides, the daemon lives
