@@ -1,10 +1,10 @@
-"""Entry point. Grows into the daemon launcher; for now, a sign of life."""
-
-from tuparles import __version__
+"""Entry point: `tuparles` starts the dictation daemon."""
 
 
 def main() -> None:
-    print(f"TuParles {__version__} — le daemon arrive bientôt.")
+    from tuparles.daemon import run
+
+    run()
 
 
 if __name__ == "__main__":
