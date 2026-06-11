@@ -16,6 +16,10 @@ QWEN_THREADS = 14
 # Tap window: both keys seen pressed within this span = trigger.
 HOTKEY_DEBOUNCE_S = 0.4
 
+# Combo held at least this long = push-to-talk: releasing stops the take.
+# Shorter = a tap → toggle mode, recording continues until the next tap.
+HOTKEY_HOLD_S = 0.5
+
 # Personal glossary fed to Whisper as initial_prompt (names, jargon).
 VOCAB_FILE = REPO_ROOT / "vocab.txt"
 

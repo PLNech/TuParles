@@ -19,6 +19,7 @@ from PySide6.QtWidgets import QApplication
 from tuparles import history, settings
 from tuparles.audio import Recorder
 from tuparles.config import (
+    HOTKEY_HOLD_S,
     PARTIAL_MIN_AUDIO_S,
     PARTIAL_PERIOD_S,
     PARTIAL_WINDOW_S,
@@ -35,6 +36,7 @@ class Bridge(QObject):
     """Thread-safe funnel: emitted anywhere, delivered on the GUI thread."""
 
     toggled = Signal()
+    combo_released = Signal(float)  # hotkey combo let go after N seconds
     partial = Signal(str)
     final = Signal(str)
     error = Signal(str)
@@ -52,10 +54,13 @@ class Controller(QObject):
         self._recorder = recorder
         self._engine_lock = threading.Lock()  # partials vs final decode
         self._stop_partials = threading.Event()
+        self._press_started_take = False  # hold-to-talk: release only stops
+        # a recording the same press started, never an ongoing toggled take
 
     @Slot()
     def toggle(self) -> None:
         if self._recorder.recording:
+            self._press_started_take = False
             self._stop_partials.set()
             audio = self._recorder.stop()
             self._bubble.start_processing()
@@ -64,12 +69,24 @@ class Controller(QObject):
                 target=self._finish, args=(audio,), daemon=True
             ).start()
         else:
+            self._press_started_take = True
             self._recorder.start()
             self._bubble.start_recording()
             self._bridge.state.emit("recording")
             if getattr(self._engine, "supports_partials", False):
                 self._stop_partials.clear()
                 threading.Thread(target=self._partials_loop, daemon=True).start()
+
+    @Slot(float)
+    def on_combo_release(self, held_s: float) -> None:
+        """Hold-to-talk: combo held past the threshold → release ends the take.
+        A short tap leaves the recording running (toggle mode)."""
+        if (
+            held_s >= HOTKEY_HOLD_S
+            and self._recorder.recording
+            and self._press_started_take
+        ):
+            self.toggle()
 
     def _partials_loop(self) -> None:
         """~1 Hz greedy re-decode of the whole growing buffer (≤1 s on GPU)."""
@@ -151,6 +168,7 @@ def run() -> None:
     controller = Controller(engine, recorder, bubble, bridge)
 
     bridge.toggled.connect(controller.toggle)
+    bridge.combo_released.connect(controller.on_combo_release)
     bridge.partial.connect(bubble.set_partial)
     bridge.final.connect(bubble.show_final)
     bridge.error.connect(bubble.show_error)
@@ -162,7 +180,10 @@ def run() -> None:
     tray.view_changed.connect(bubble.set_view)
     tray.quit_requested.connect(app.quit)
 
-    listener = HotkeyListener(on_toggle=bridge.toggled.emit)
+    listener = HotkeyListener(
+        on_toggle=bridge.toggled.emit,
+        on_combo_release=bridge.combo_released.emit,
+    )
     listener.start()
     app.aboutToQuit.connect(listener.stop)
     print("TuParles daemon up — Right Ctrl + Right Alt to dictate. Ctrl-C quits.")
