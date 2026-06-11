@@ -18,6 +18,7 @@ pyside6-essentials = "^6.11.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0"
+ruff = "^0.9"
 
 [tool.poetry.scripts]
 tuparles = "tuparles.cli:main"
