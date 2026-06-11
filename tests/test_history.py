@@ -41,3 +41,45 @@ class TestHistory:
         # every call opens a fresh connection — this is the cross-restart story
         assert history.last() == "durable"
         assert (tmp_path / "tuparles" / "history.db").exists()
+
+
+class TestTelemetry:
+    def test_metadata_stored_and_wpm_derived(self, tmp_path, monkeypatch):
+        _isolate(tmp_path, monkeypatch)
+        history.record(
+            "dix mots exactement pour faire un test de débit propre",
+            audio_s=30.0, decode_s=1.5, deliver_s=0.1,
+            lang="fr", lang_prob=0.97,
+        )
+        s = history.summarize()
+        assert s["takes"] == 1
+        assert s["words"] == 10
+        assert s["avg_wpm"] == 20.0  # 10 words / half a minute
+        assert s["decode_x_realtime"] == 20.0
+        assert s["langs"] == [("fr", 1)]
+
+    def test_metadata_optional(self, tmp_path, monkeypatch):
+        _isolate(tmp_path, monkeypatch)
+        history.record("sans métadonnées")
+        s = history.summarize()
+        assert s["takes"] == 1
+        assert s["avg_wpm"] is None
+
+    def test_migration_from_old_schema(self, tmp_path, monkeypatch):
+        import sqlite3
+
+        _isolate(tmp_path, monkeypatch)
+        path = tmp_path / "tuparles" / "history.db"
+        path.parent.mkdir(parents=True)
+        with sqlite3.connect(path) as conn:
+            conn.execute(
+                "CREATE TABLE dictations (id INTEGER PRIMARY KEY,"
+                " ts TEXT NOT NULL, text TEXT NOT NULL,"
+                " engine TEXT NOT NULL DEFAULT '')"
+            )
+            conn.execute(
+                "INSERT INTO dictations (ts, text) VALUES ('2026-06-11', 'vieux')"
+            )
+        history.record("nouveau", audio_s=6.0, lang="en")  # triggers migration
+        assert [t for _, t in history.recent(5)] == ["nouveau", "vieux"]
+        assert history.summarize()["langs"] == [("en", 1)]

@@ -10,6 +10,7 @@ import ctypes
 import subprocess
 import tempfile
 import wave
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -23,6 +24,15 @@ from tuparles.config import (
     VOCAB_FILE,
 )
 from tuparles.languages import snap_language
+
+
+@dataclass
+class Transcription:
+    """Final-decode result: text + the metadata engines used to discard."""
+
+    text: str
+    language: str | None = None
+    language_prob: float | None = None
 
 
 def _vocab_prompt() -> str | None:
@@ -72,12 +82,12 @@ class GpuEngine:
         self._batched = BatchedInferencePipeline(model=self._model)
         self._prompt = _vocab_prompt()
 
-    def transcribe(self, audio: np.ndarray) -> str:
-        """int16 mono 16 kHz → text. Full-quality beam decode, batched."""
+    def transcribe(self, audio: np.ndarray) -> Transcription:
+        """int16 mono 16 kHz → full-quality beam decode, batched."""
         if audio.size == 0:
-            return ""
+            return Transcription("")
         pcm = audio.astype(np.float32) / 32768.0
-        segments, _ = self._batched.transcribe(
+        segments, info = self._batched.transcribe(
             pcm,
             batch_size=16,
             beam_size=5,
@@ -85,7 +95,12 @@ class GpuEngine:
             initial_prompt=self._prompt,
             language=self._constrain_language(pcm),
         )
-        return " ".join(s.text.strip() for s in segments).strip()
+        text = " ".join(s.text.strip() for s in segments).strip()
+        return Transcription(
+            text,
+            language=getattr(info, "language", None),
+            language_prob=getattr(info, "language_probability", None),
+        )
 
     def _constrain_language(self, pcm: np.ndarray) -> str | None:
         """Apply the user's language selection (settings, hot-reloaded).
@@ -135,9 +150,9 @@ class QwenCpuEngine:
     # within seconds (see docs/spike-backend.md) — waveform-only bubble.
     supports_partials = False
 
-    def transcribe(self, audio: np.ndarray) -> str:
+    def transcribe(self, audio: np.ndarray) -> Transcription:
         if audio.size == 0:
-            return ""
+            return Transcription("")
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as tmp:
             _write_wav(Path(tmp.name), audio)
             result = subprocess.run(
@@ -154,7 +169,7 @@ class QwenCpuEngine:
             )
         if result.returncode != 0:
             raise RuntimeError(f"qwen_asr failed: {result.stderr.strip()[:500]}")
-        return result.stdout.strip()
+        return Transcription(result.stdout.strip())
 
 
 def load_engine():

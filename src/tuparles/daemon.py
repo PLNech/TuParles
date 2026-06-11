@@ -96,19 +96,31 @@ class Controller(QObject):
         try:
             t0 = time.monotonic()
             with self._engine_lock:
-                raw = self._engine.transcribe(audio)
+                result = self._engine.transcribe(audio)
             decode_s = time.monotonic() - t0
-            text = collapse_repeats(apply_lexicon(apply_spoken_punctuation(raw)))
+            text = collapse_repeats(
+                apply_lexicon(apply_spoken_punctuation(result.text))
+            )
             if text:
                 t1 = time.monotonic()
                 deliver(text)
+                deliver_s = time.monotonic() - t1
+                audio_s = audio.size / SAMPLE_RATE
                 print(
-                    f"take: {audio.size / SAMPLE_RATE:.0f}s audio → "
-                    f"decode {decode_s:.1f}s, deliver "
-                    f"{time.monotonic() - t1:.1f}s, {len(text)} chars"
+                    f"take: {audio_s:.0f}s audio → decode {decode_s:.1f}s, "
+                    f"deliver {deliver_s:.1f}s, {len(text)} chars, "
+                    f"lang={result.language}"
                 )
                 try:
-                    history.record(text, engine=type(self._engine).__name__)
+                    history.record(
+                        text,
+                        engine=type(self._engine).__name__,
+                        audio_s=audio_s,
+                        decode_s=decode_s,
+                        deliver_s=deliver_s,
+                        lang=result.language,
+                        lang_prob=result.language_prob,
+                    )
                 except Exception:
                     pass  # a lost history row must never cost a delivery
                 self._bridge.final.emit(text)
