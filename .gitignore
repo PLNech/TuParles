@@ -1,0 +1,15 @@
+# Third-party engines and model weights — rebuilt/redownloaded, never committed
+vendor/
+models/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+dist/
+.pytest_cache/
+
+# Local artifacts
+*.wav
+*.log
+.tuparles/

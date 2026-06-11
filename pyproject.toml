@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "tuparles"
+version = "0.1.0"
+description = "Local push-to-talk dictation for Fr-En code-switchers. Speak, see, ship."
+authors = ["PLN <PLNech@users.noreply.github.com>"]
+readme = "README.md"
+packages = [{ include = "tuparles", from = "src" }]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+sounddevice = "^0.5"
+numpy = "^2.0"
+pynput = "^1.7"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
+
+[tool.poetry.scripts]
+tuparles = "tuparles.cli:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
