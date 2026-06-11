@@ -109,6 +109,13 @@ Copy `vocab.example.txt` to `vocab.txt` and put your recurring names and
 jargon there — it biases decoding toward your vocabulary. The file stays
 local (gitignored), like everything you dictate.
 
+Better: let your own dictations grow it. `tuparles vocab suggest` mines
+your history for recurring technical tokens and proper nouns;
+`tuparles vocab review` walks you through them one by one (oui/non) and
+appends the keepers. You approve every word — suggestions never auto-apply,
+because a glossary that grows on its own is just autocorrect with extra
+steps. Changes take effect on the next take, no restart.
+
 ## CLI
 
 ```bash
@@ -116,6 +123,8 @@ tuparles                  # start the daemon (or launch from GNOME search)
 tuparles history          # last 20 takes
 tuparles history "tokens" # search your dictations
 tuparles stats            # local telemetry: takes, débit, decode speed, language mix
+tuparles vocab suggest    # mine your history for glossary candidates
+tuparles vocab review     # accept/reject them interactively
 ```
 
 Everything lives in `~/.local/share/tuparles/history.db` and

@@ -13,6 +13,19 @@ def main() -> None:
     hist.add_argument("query", nargs="?", default="", help="substring to search")
     hist.add_argument("-n", type=int, default=20, help="max results")
     sub.add_parser("stats", help="Local dictation telemetry")
+    voc = sub.add_parser(
+        "vocab", help="Personal glossary: list, suggest from history, review, add"
+    )
+    voc.add_argument(
+        "action",
+        nargs="?",
+        default="list",
+        choices=["list", "suggest", "review", "add"],
+    )
+    voc.add_argument("words", nargs="*", help="words to add (action: add)")
+    voc.add_argument(
+        "--min-count", type=int, default=2, help="suggest words seen ≥ N times"
+    )
     args = parser.parse_args()
 
     if args.cmd == "history":
@@ -23,10 +36,57 @@ def main() -> None:
             print(f"[{ts}] {text}")
     elif args.cmd == "stats":
         _print_stats()
+    elif args.cmd == "vocab":
+        _vocab(args)
     else:
         from tuparles.daemon import run
 
         run()
+
+
+def _vocab(args) -> None:
+    from tuparles import vocab
+    from tuparles.history import recent
+
+    if args.action == "add":
+        added = vocab.add(args.words)
+        print(f"Ajouté : {', '.join(added)}" if added else "Rien de nouveau.")
+        return
+    if args.action == "list":
+        words = vocab.load()
+        print("\n".join(words) if words else "Glossaire vide — `tuparles vocab suggest`.")
+        return
+
+    # suggest / review share the mining pass over the whole local history.
+    texts = [text for _ts, text in recent(1000)]
+    existing = set(vocab.load())
+    found = vocab.suggest(texts, existing, min_count=args.min_count)
+    if not found:
+        print("Aucun candidat — dicte encore un peu, le glossaire viendra.")
+        return
+    if args.action == "suggest":
+        for word, n in found:
+            print(f"{n:>4}×  {word}")
+        print(f"\n{len(found)} candidats — `tuparles vocab review` pour trier.")
+        return
+
+    accepted: list[str] = []
+    print(f"{len(found)} candidats. [o]ui / [N]on / [q]uitter")
+    for word, n in found:
+        try:
+            answer = input(f"  {word}  (vu {n}×)  ? ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            break
+        if answer == "q":
+            break
+        if answer in ("o", "y", "oui", "yes"):
+            accepted.append(word)
+    if accepted:
+        vocab.add(accepted)
+        print(f"Ajouté : {', '.join(accepted)} — actif dès la prochaine dictée.")
+    else:
+        print("Rien ajouté.")
 
 
 def _print_stats() -> None:

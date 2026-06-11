@@ -80,7 +80,6 @@ class GpuEngine:
         # the difference between ~linear-in-length and ~seconds (the "1 min
         # frozen after a long dictation" bug); on short takes it's a no-op.
         self._batched = BatchedInferencePipeline(model=self._model)
-        self._prompt = _vocab_prompt()
 
     def transcribe(self, audio: np.ndarray) -> Transcription:
         """int16 mono 16 kHz → full-quality beam decode, batched."""
@@ -92,7 +91,9 @@ class GpuEngine:
             batch_size=16,
             beam_size=5,
             vad_filter=True,
-            initial_prompt=self._prompt,
+            # Re-read per decode: `tuparles vocab add` applies to the next
+            # take, no restart (like the language setting).
+            initial_prompt=_vocab_prompt(),
             language=self._constrain_language(pcm),
         )
         text = " ".join(s.text.strip() for s in segments).strip()
@@ -136,7 +137,7 @@ class GpuEngine:
             vad_filter=True,
             condition_on_previous_text=False,
             without_timestamps=True,
-            initial_prompt=self._prompt,
+            initial_prompt=_vocab_prompt(),
             language=self._constrain_language(pcm),
         )
         return " ".join(s.text.strip() for s in segments).strip()
