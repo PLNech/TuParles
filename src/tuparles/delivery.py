@@ -6,7 +6,7 @@ import subprocess
 def deliver(text: str) -> None:
     if not text:
         return
-    _clipboard(text)
+    to_clipboard(text)
     _type_into_focus(text)
 
 
@@ -22,7 +22,7 @@ def _type_into_focus(text: str) -> None:
     )
 
 
-def _clipboard(text: str) -> None:
+def to_clipboard(text: str) -> None:
     subprocess.run(
         ["xsel", "--clipboard", "--input"],
         input=text.encode(),

@@ -16,6 +16,7 @@ import time
 from PySide6.QtCore import QObject, QTimer, Signal, Slot
 from PySide6.QtWidgets import QApplication
 
+from tuparles import history
 from tuparles.audio import Recorder
 from tuparles.config import (
     PARTIAL_MIN_AUDIO_S,
@@ -36,6 +37,7 @@ class Bridge(QObject):
     partial = Signal(str)
     final = Signal(str)
     error = Signal(str)
+    state = Signal(str)  # idle | recording | processing — tray glyph follows
 
 
 class Controller(QObject):
@@ -56,12 +58,14 @@ class Controller(QObject):
             self._stop_partials.set()
             audio = self._recorder.stop()
             self._bubble.start_processing()
+            self._bridge.state.emit("processing")
             threading.Thread(
                 target=self._finish, args=(audio,), daemon=True
             ).start()
         else:
             self._recorder.start()
             self._bubble.start_recording()
+            self._bridge.state.emit("recording")
             if getattr(self._engine, "supports_partials", False):
                 self._stop_partials.clear()
                 threading.Thread(target=self._partials_loop, daemon=True).start()
@@ -94,15 +98,22 @@ class Controller(QObject):
             text = apply_lexicon(apply_spoken_punctuation(raw))
             if text:
                 deliver(text)
+                try:
+                    history.record(text, engine=type(self._engine).__name__)
+                except Exception:
+                    pass  # a lost history row must never cost a delivery
                 self._bridge.final.emit(text)
             else:
                 self._bridge.error.emit("Rien entendu")
         except Exception as exc:  # surface in the bubble, never crash
             self._bridge.error.emit(str(exc)[:120])
+        finally:
+            self._bridge.state.emit("idle")
 
 
 def run() -> None:
     from tuparles.hotkey import HotkeyListener
+    from tuparles.tray import Tray
     from tuparles.ui import Bubble
 
     app = QApplication([])
@@ -121,8 +132,15 @@ def run() -> None:
     bridge.final.connect(bubble.show_final)
     bridge.error.connect(bubble.show_error)
 
+    tray = Tray()
+    bridge.state.connect(tray.set_state)
+    bridge.final.connect(tray.on_final)
+    tray.toggle_requested.connect(controller.toggle)
+    tray.quit_requested.connect(app.quit)
+
     listener = HotkeyListener(on_toggle=bridge.toggled.emit)
     listener.start()
+    app.aboutToQuit.connect(listener.stop)
     print("TuParles daemon up — Right Ctrl + Right Alt to dictate. Ctrl-C quits.")
 
     # Qt's loop won't run Python signal handlers unless the interpreter gets
