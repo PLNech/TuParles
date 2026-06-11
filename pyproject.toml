@@ -2,7 +2,7 @@
 name = "tuparles"
 version = "0.1.0"
 description = "Local push-to-talk dictation for Fr-En code-switchers. Speak, see, ship."
-authors = ["PLN <PLNech@users.noreply.github.com>"]
+authors = ["PLNech <PLNech@users.noreply.github.com>"]
 readme = "README.md"
 packages = [{ include = "tuparles", from = "src" }]
 

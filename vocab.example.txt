@@ -1,0 +1,15 @@
+# Glossaire personnel — un mot ou nom propre par ligne.
+# Copiez ce fichier vers vocab.txt et adaptez-le : il est injecté comme
+# initial_prompt Whisper et biaise le décodage vers vos termes (noms
+# récurrents d'abord, jargon ensuite). Les lignes # sont ignorées.
+# vocab.txt reste local (gitignored) : vos noms n'appartiennent qu'à vous.
+Ada
+Grace
+catch-up
+evals
+KPI
+API
+CI
+pull request
+max_tokens
+pipeline

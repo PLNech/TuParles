@@ -13,3 +13,6 @@ dist/
 *.wav
 *.log
 .tuparles/
+
+# Personal glossary — yours, not the repo's (start from vocab.example.txt)
+vocab.txt
