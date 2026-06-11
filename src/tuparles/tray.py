@@ -63,11 +63,13 @@ class Tray(QObject):
         self._copy_act.setEnabled(history.last() is not None)
 
         self._hist_menu = self._menu.addMenu("Historique")
-        # GNOME tray menus travel over DBus (AppIndicator): submenu
-        # aboutToShow never reaches us, so a lazily-built menu stays empty
-        # forever. Build eagerly, refresh after every landed transcript;
-        # keep the hook for desktops where it does fire.
-        self._hist_menu.aboutToShow.connect(self._rebuild_history)
+        # GNOME tray menus travel over DBus (AppIndicator), which makes lazy
+        # population doubly cursed: aboutToShow arrives unreliably, AND a
+        # rebuild while the menu is displayed invalidates the exported
+        # layout — the submenu flashes and closes. So: never touch the menu
+        # on show. Build eagerly, refresh only when a transcript lands, and
+        # only if content actually changed.
+        self._hist_shown: list[tuple[str, str]] = []
         self._rebuild_history()
 
         self._settings_act = self._menu.addAction("Réglages…")
@@ -117,8 +119,11 @@ class Tray(QObject):
             to_clipboard(text)
 
     def _rebuild_history(self) -> None:
-        self._hist_menu.clear()
         entries = history.recent(_HISTORY_SHOWN)
+        if entries == self._hist_shown:
+            return
+        self._hist_shown = entries
+        self._hist_menu.clear()
         if not entries:
             self._hist_menu.addAction("(vide)").setEnabled(False)
         for _ts, text in entries:
