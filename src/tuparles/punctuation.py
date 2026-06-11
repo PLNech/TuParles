@@ -101,6 +101,9 @@ def _tidy(text: str) -> str:
     text = re.sub(r"[ \t]+([,.;:?!])", r"\1", text)
     text = re.sub(r"([,;:])(?=\S)", r"\1 ", text)
     text = re.sub(r"[ \t]*\n[ \t]*", "\n", text)
+    # ASR sometimes glues sentences: "question.Alors" — reopen the gap, but
+    # only lowercase→[.?!]→Uppercase so filenames (main.py) and decimals survive
+    text = re.sub(r"([a-zà-ÿ][.?!])(?=[A-ZÀ-Ÿ])", r"\1 ", text)
     text = re.sub(r"\.{4,}", "...", text)
     text = re.sub(
         r"([.?!]\s+|\n+)([a-zà-ÿ])",

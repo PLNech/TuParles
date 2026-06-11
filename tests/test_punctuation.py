@@ -90,3 +90,18 @@ class TestTidy:
 
     def test_no_double_spaces_around_symbols(self):
         assert p("a virgule b virgule c") == "A, b, c"
+
+
+class TestGluedSentences:
+    def test_reopen_gap_after_period(self):
+        assert p("je me pose une question.Alors je tente") == (
+            "Je me pose une question. Alors je tente"
+        )
+
+    def test_filenames_survive(self):
+        assert p("ouvre le fichier main.py s'il te plaît") == (
+            "Ouvre le fichier main.py s'il te plaît"
+        )
+
+    def test_decimals_survive(self):
+        assert p("la valeur est 3.14 environ") == "La valeur est 3.14 environ"

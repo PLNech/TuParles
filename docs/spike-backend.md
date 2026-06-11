@@ -49,3 +49,26 @@ phrase-by-phrase in the bubble; on stop only the tail segment remains
 - **OpenVINO**: encoder on the Iris Xe iGPU. Intel-specific, potentially 2-3x.
 - **Background re-decode**: paste qwen text immediately, re-transcribe with
   turbo in the background for the searchable history archive (best of both).
+
+## Amendment (same day): the laptop had an RTX 4080 all along
+
+User greenlit GPU use; `lspci` revealed an RTX 4080 Laptop (12 GB) idle
+behind the Iris Xe. Everything above is now the fallback path.
+
+| Backend | 20 s clip | 4 s clip |
+|---|---|---|
+| faster-whisper large-v3-turbo fp16 CUDA (warm) | **0.69 s (29x RT)** | **0.43 s** |
+
+Model load: 1.6 s once at daemon startup; ~1.6 GB VRAM resident.
+cuBLAS/cuDNN via pip wheels (`nvidia-cublas-cu12`, `nvidia-cudnn-cu12`),
+preloaded with ctypes — no system CUDA install needed.
+
+## Revised decision
+
+- **Primary: persistent `GpuEngine`** (large-v3-turbo fp16, beam 5, VAD on).
+  Live partials = re-decode the entire growing buffer every ~1 s (cost ≤1 s
+  even at 20 s of audio). Final decode sub-second. No VAD segmentation
+  pipeline needed — deleted before it was built.
+- **Fallback: `QwenCpuEngine`** (vendored C binary) when CUDA is unavailable
+  — e.g. on battery or driver trouble. The v2 CPU tracks (whisper.cpp
+  --audio-ctx, OpenVINO) are parked unless CPU-only becomes a daily mode.

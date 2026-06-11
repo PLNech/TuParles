@@ -9,7 +9,7 @@ import threading
 
 from tuparles.audio import Recorder
 from tuparles.delivery import deliver
-from tuparles.engine import transcribe
+from tuparles.engine import load_engine
 from tuparles.punctuation import apply_spoken_punctuation
 
 
@@ -24,6 +24,7 @@ def _notify(msg: str, ms: int = 2000) -> None:
 class Daemon:
     def __init__(self) -> None:
         self._recorder = Recorder()
+        self._engine = load_engine()
         self._busy = threading.Lock()
 
     def toggle(self) -> None:
@@ -43,7 +44,7 @@ class Daemon:
             _notify("⚠️ Still transcribing the previous take")
             return
         try:
-            text = apply_spoken_punctuation(transcribe(audio))
+            text = apply_spoken_punctuation(self._engine.transcribe(audio))
             if text:
                 deliver(text)
                 _notify(f"✅ {text[:80]}")
