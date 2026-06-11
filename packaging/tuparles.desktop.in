@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=TuParles
+GenericName=Dictation
+Comment=Local push-to-talk dictation, Fr-En code-switching friendly
+Exec=@EXEC@
+Icon=tuparles
+Terminal=false
+Categories=Utility;Audio;
+Keywords=dictation;voice;speech;stt;whisper;dictée;vocale;
+StartupNotify=false

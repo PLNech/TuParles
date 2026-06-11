@@ -1,5 +1,8 @@
 # TuParles
 
+[![CI](https://github.com/PLNech/TuParles/actions/workflows/ci.yml/badge.svg)](https://github.com/PLNech/TuParles/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 Local, private, push-to-talk dictation for people who code-switch entre le
 français and English mid-sentence — and need their tech vocab (`max_tokens`,
 KPIs, la contingence) to survive transcription.
@@ -43,18 +46,41 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
 - **Fallbacks**: whisper.cpp (plan B), faster-whisper (plan C), behind the same
   transcriber interface.
 
-## Setup
+## Install
+
+One-liner (Ubuntu/Debian, X11, needs git + poetry):
 
 ```bash
-sudo apt install libopenblas-dev xdotool   # one-time system deps
-make -C vendor/qwen-asr blas               # build the C engine
-poetry install
+curl -fsSL https://github.com/PLNech/TuParles/releases/latest/download/install.sh | bash
 ```
 
-Model weights live in `models/` (gitignored), engine source in `vendor/`
-(gitignored, cloned from upstream).
+This pulls the repo, installs system + Python deps, builds the CPU fallback
+engine, downloads the model weights, and registers TuParles in GNOME search.
 
-## Status
+<details>
+<summary>Manual setup</summary>
 
-Early days — see task ledger. Spike phase: validating Qwen3-ASR-0.6B CPU
-latency and Fr-En code-switching quality before committing to the backend.
+```bash
+sudo apt install libopenblas-dev xdotool xsel libportaudio2 ffmpeg
+git clone https://github.com/PLNech/TuParles && cd TuParles
+poetry install
+git clone --depth 1 https://github.com/antirez/qwen-asr vendor/qwen-asr
+make -C vendor/qwen-asr blas
+# model weights: see install.sh for the five files to fetch into models/
+cp vocab.example.txt vocab.txt           # then add your own names/jargon
+bash scripts/install_desktop.sh          # GNOME launcher (optional)
+poetry run tuparles
+```
+
+</details>
+
+GPU (any recent NVIDIA card) is detected automatically and used for the
+primary faster-whisper engine; without one, the C fallback engine
+transcribes on CPU.
+
+## Personal glossary
+
+Copy `vocab.example.txt` to `vocab.txt` and put your recurring names and
+jargon there — it biases decoding toward your vocabulary. The file stays
+local (gitignored), like everything you dictate: history lives in
+`~/.local/share/tuparles/`, searchable via `tuparles history "query"`.
