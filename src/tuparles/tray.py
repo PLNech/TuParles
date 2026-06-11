@@ -43,6 +43,7 @@ def _glyph(color: QColor) -> QIcon:
 
 class Tray(QObject):
     toggle_requested = Signal()
+    restart_requested = Signal()
     quit_requested = Signal()
     view_changed = Signal(str)
 
@@ -83,6 +84,9 @@ class Tray(QObject):
         self._menu.addSeparator()
         self._menu.addAction("À propos").triggered.connect(
             lambda: QDesktopServices.openUrl(QUrl(_README_URL))
+        )
+        self._menu.addAction("Redémarrer").triggered.connect(
+            self.restart_requested.emit
         )
         self._menu.addAction("Quitter").triggered.connect(self.quit_requested.emit)
 

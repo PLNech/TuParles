@@ -207,6 +207,17 @@ def run() -> None:
     tray.view_changed.connect(bubble.set_view)
     tray.quit_requested.connect(app.quit)
 
+    def _restart() -> None:
+        """Become a fresh daemon in place. execv swaps the process image,
+        so the instance flock (CLOEXEC) releases exactly when the new self
+        takes over — no window for a double daemon or an orphaned one."""
+        if recorder.recording:
+            return  # never drop an in-flight take; stop dictating first
+        print("Redémarrage…")
+        os.execv(sys.argv[0], sys.argv)
+
+    tray.restart_requested.connect(_restart)
+
     listener = HotkeyListener(
         on_toggle=bridge.toggled.emit,
         on_combo_release=bridge.combo_released.emit,
