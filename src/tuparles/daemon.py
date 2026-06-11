@@ -1,74 +1,130 @@
-"""The demo spine: hotkey → record → transcribe → punctuate → deliver.
+"""The daemon: hotkey → record (live partials in the bubble) → final decode
+→ punctuate → deliver into the focused window.
 
-Single-shot decode for now (no live partials yet) — tap to start, speak,
-tap again, text lands in the focused window a few seconds later.
+Threading map — Qt owns the main thread, everything else marshals in:
+  pynput thread        → Bridge.toggled (queued)  → Controller.toggle (GUI)
+  partials thread      → Bridge.partial (queued)  → Bubble.set_partial (GUI)
+  final-decode thread  → Bridge.final / .error    → Bubble + deliver
+A single engine lock serializes GPU calls so an in-flight partial can
+never race the final beam decode.
 """
 
-import subprocess
+import signal
 import threading
+import time
+
+from PySide6.QtCore import QObject, QTimer, Signal, Slot
+from PySide6.QtWidgets import QApplication
 
 from tuparles.audio import Recorder
+from tuparles.config import SAMPLE_RATE
 from tuparles.delivery import deliver
 from tuparles.engine import load_engine
 from tuparles.punctuation import apply_spoken_punctuation
 
-
-def _notify(msg: str, ms: int = 2000) -> None:
-    # Fire-and-forget: notify-send blocks on the notification server's reply
-    # and GNOME's daemon sometimes stalls for seconds. Never wait, never raise.
-    try:
-        subprocess.Popen(
-            ["notify-send", "-a", "TuParles", "-t", str(ms), "TuParles", msg],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-    except OSError:
-        pass
+PARTIAL_PERIOD_S = 1.0
+PARTIAL_MIN_AUDIO_S = 0.5
 
 
-class Daemon:
-    def __init__(self) -> None:
-        self._recorder = Recorder()
-        self._engine = load_engine()
-        self._busy = threading.Lock()
+class Bridge(QObject):
+    """Thread-safe funnel: emitted anywhere, delivered on the GUI thread."""
 
+    toggled = Signal()
+    partial = Signal(str)
+    final = Signal(str)
+    error = Signal(str)
+
+
+class Controller(QObject):
+    """Owns recorder + engine + worker threads. Slots run on the GUI thread."""
+
+    def __init__(self, engine, recorder: Recorder, bubble, bridge: Bridge) -> None:
+        super().__init__()
+        self._engine = engine
+        self._bubble = bubble
+        self._bridge = bridge
+        self._recorder = recorder
+        self._engine_lock = threading.Lock()  # partials vs final decode
+        self._stop_partials = threading.Event()
+
+    @Slot()
     def toggle(self) -> None:
         if self._recorder.recording:
+            self._stop_partials.set()
             audio = self._recorder.stop()
-            seconds = len(audio) / 16_000
-            _notify(f"⏳ Transcribing {seconds:.0f}s…")
+            self._bubble.start_processing()
             threading.Thread(
                 target=self._finish, args=(audio,), daemon=True
             ).start()
         else:
             self._recorder.start()
-            _notify("🎙️ Recording — tap again to stop")
+            self._bubble.start_recording()
+            if getattr(self._engine, "supports_partials", False):
+                self._stop_partials.clear()
+                threading.Thread(target=self._partials_loop, daemon=True).start()
+
+    def _partials_loop(self) -> None:
+        """~1 Hz greedy re-decode of the whole growing buffer (≤1 s on GPU)."""
+        while not self._stop_partials.is_set():
+            started = time.monotonic()
+            audio = self._recorder.snapshot()
+            if audio.size >= SAMPLE_RATE * PARTIAL_MIN_AUDIO_S:
+                with self._engine_lock:
+                    if self._stop_partials.is_set():
+                        return
+                    try:
+                        text = self._engine.transcribe_partial(audio)
+                    except Exception:
+                        text = ""  # a dropped partial is invisible; final decode rules
+                if text and not self._stop_partials.is_set():
+                    self._bridge.partial.emit(text)
+            elapsed = time.monotonic() - started
+            self._stop_partials.wait(max(0.1, PARTIAL_PERIOD_S - elapsed))
 
     def _finish(self, audio) -> None:
-        if not self._busy.acquire(blocking=False):
-            _notify("⚠️ Still transcribing the previous take")
-            return
         try:
-            text = apply_spoken_punctuation(self._engine.transcribe(audio))
+            with self._engine_lock:
+                raw = self._engine.transcribe(audio)
+            text = apply_spoken_punctuation(raw)
             if text:
                 deliver(text)
-                _notify(f"✅ {text[:80]}")
+                self._bridge.final.emit(text)
             else:
-                _notify("🤷 Nothing heard")
-        except Exception as exc:  # surface, never crash the daemon
-            _notify(f"❌ {exc}", ms=5000)
-        finally:
-            self._busy.release()
+                self._bridge.error.emit("Rien entendu")
+        except Exception as exc:  # surface in the bubble, never crash
+            self._bridge.error.emit(str(exc)[:120])
 
 
 def run() -> None:
     from tuparles.hotkey import HotkeyListener
+    from tuparles.ui import Bubble
 
-    daemon = Daemon()
-    listener = HotkeyListener(on_toggle=daemon.toggle)
+    app = QApplication([])
+    app.setQuitOnLastWindowClosed(False)  # the bubble hides, the daemon lives
+
+    print("Warming up the engine…")
+    engine = load_engine()
+
+    recorder = Recorder()
+    bridge = Bridge()
+    bubble = Bubble(level_source=lambda: recorder.level)
+    controller = Controller(engine, recorder, bubble, bridge)
+
+    bridge.toggled.connect(controller.toggle)
+    bridge.partial.connect(bubble.set_partial)
+    bridge.final.connect(bubble.show_final)
+    bridge.error.connect(bubble.show_error)
+
+    listener = HotkeyListener(on_toggle=bridge.toggled.emit)
     listener.start()
     print("TuParles daemon up — Right Ctrl + Right Alt to dictate. Ctrl-C quits.")
-    try:
-        listener.join()
-    except KeyboardInterrupt:
-        print("\nÀ la prochaine.")
+
+    # Qt's loop won't run Python signal handlers unless the interpreter gets
+    # scheduled; the no-op timer keeps Ctrl-C responsive.
+    signal.signal(signal.SIGINT, lambda *_: app.quit())
+    waker = QTimer()
+    waker.start(200)
+    waker.timeout.connect(lambda: None)
+
+    app.exec()
+    print("\nÀ la prochaine.")

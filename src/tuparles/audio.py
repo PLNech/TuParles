@@ -42,6 +42,17 @@ class Recorder:
         rms = float(np.sqrt(np.mean(indata.astype(np.float32) ** 2)))
         self.level = min(1.0, rms / 8000.0)
 
+    def snapshot(self) -> np.ndarray:
+        """Copy of everything captured so far, without stopping.
+
+        Feeds the live-partials loop: the GPU re-decodes this growing
+        buffer ~1x/s while the user keeps talking.
+        """
+        with self._lock:
+            if not self._chunks:
+                return np.zeros(0, dtype=np.int16)
+            return np.concatenate(self._chunks).reshape(-1)
+
     def stop(self) -> np.ndarray:
         """Stop capture and return the whole take as int16 mono."""
         if self._stream is None:

@@ -35,6 +35,8 @@ def _preload_cuda_libs() -> None:
 class GpuEngine:
     """Persistent large-v3-turbo on CUDA. Load once (~1.6 s), decode forever."""
 
+    supports_partials = True
+
     def __init__(self) -> None:
         _preload_cuda_libs()
         from faster_whisper import WhisperModel
@@ -52,10 +54,33 @@ class GpuEngine:
         segments, _ = self._model.transcribe(pcm, beam_size=5, vad_filter=True)
         return " ".join(s.text.strip() for s in segments).strip()
 
+    def transcribe_partial(self, audio: np.ndarray) -> str:
+        """Fast greedy decode of the growing buffer for live partials.
+
+        beam_size=1 halves latency; condition_on_previous_text=False keeps
+        each partial independent so a mishear can't snowball across calls.
+        The final transcribe() re-decodes everything with the full beam.
+        """
+        if audio.size == 0:
+            return ""
+        pcm = audio.astype(np.float32) / 32768.0
+        segments, _ = self._model.transcribe(
+            pcm,
+            beam_size=1,
+            vad_filter=True,
+            condition_on_previous_text=False,
+            without_timestamps=True,
+        )
+        return " ".join(s.text.strip() for s in segments).strip()
+
 
 class QwenCpuEngine:
     """Fallback: vendored qwen-asr C binary, fresh process per utterance
     (weights are mmap'd, spawn costs ~0.65 s)."""
+
+    # Re-decoding a growing buffer at ~0.4x realtime would fall behind
+    # within seconds (see docs/spike-backend.md) — waveform-only bubble.
+    supports_partials = False
 
     def transcribe(self, audio: np.ndarray) -> str:
         if audio.size == 0:
