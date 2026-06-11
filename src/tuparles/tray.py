@@ -63,7 +63,15 @@ class Tray(QObject):
         self._copy_act.setEnabled(history.last() is not None)
 
         self._hist_menu = self._menu.addMenu("Historique")
+        # GNOME tray menus travel over DBus (AppIndicator): submenu
+        # aboutToShow never reaches us, so a lazily-built menu stays empty
+        # forever. Build eagerly, refresh after every landed transcript;
+        # keep the hook for desktops where it does fire.
         self._hist_menu.aboutToShow.connect(self._rebuild_history)
+        self._rebuild_history()
+
+        self._settings_act = self._menu.addAction("Réglages…")
+        self._settings_act.triggered.connect(self._open_settings)
 
         self._full_act = self._menu.addAction("Affichage complet")
         self._full_act.setCheckable(True)
@@ -89,6 +97,14 @@ class Tray(QObject):
 
     def on_final(self, _text: str) -> None:
         self._copy_act.setEnabled(True)
+        self._rebuild_history()
+
+    def _open_settings(self) -> None:
+        from tuparles.settings_ui import SettingsDialog
+
+        self._settings_dialog = SettingsDialog()  # ref kept: GC-proof
+        self._settings_dialog.show()
+        self._settings_dialog.raise_()
 
     def _on_view_toggled(self, checked: bool) -> None:
         mode = "full" if checked else "minimal"

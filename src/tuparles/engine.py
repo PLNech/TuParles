@@ -14,6 +14,7 @@ from pathlib import Path
 
 import numpy as np
 
+from tuparles import settings
 from tuparles.config import (
     QWEN_BINARY,
     QWEN_MODEL_DIR,
@@ -21,6 +22,7 @@ from tuparles.config import (
     SAMPLE_RATE,
     VOCAB_FILE,
 )
+from tuparles.languages import snap_language
 
 
 def _vocab_prompt() -> str | None:
@@ -81,8 +83,27 @@ class GpuEngine:
             beam_size=5,
             vad_filter=True,
             initial_prompt=self._prompt,
+            language=self._constrain_language(pcm),
         )
         return " ".join(s.text.strip() for s in segments).strip()
+
+    def _constrain_language(self, pcm: np.ndarray) -> str | None:
+        """Apply the user's language selection (settings, hot-reloaded).
+
+        None = auto-detect. One selected = forced. Several = detect then
+        snap to the most probable selected one — an extra encoder pass on
+        one 30 s window, ~tens of ms on GPU.
+        """
+        selected = settings.get("languages") or []
+        if not selected:
+            return None
+        if len(selected) == 1:
+            return selected[0]
+        try:
+            _, _, all_probs = self._model.detect_language(pcm)
+            return snap_language(all_probs or [], selected)
+        except Exception:
+            return None  # detector hiccup → auto, never block the take
 
     def transcribe_partial(self, audio: np.ndarray) -> str:
         """Fast greedy decode of the growing buffer for live partials.
@@ -101,6 +122,7 @@ class GpuEngine:
             condition_on_previous_text=False,
             without_timestamps=True,
             initial_prompt=self._prompt,
+            language=self._constrain_language(pcm),
         )
         return " ".join(s.text.strip() for s in segments).strip()
 
