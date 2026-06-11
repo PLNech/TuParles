@@ -60,6 +60,8 @@ class Bubble(QWidget):
         self.setAttribute(Qt.WA_ShowWithoutActivating)
         self.setFocusPolicy(Qt.NoFocus)
         self.setFixedSize(WIDTH, HEIGHT)
+        self._trim_key: tuple | None = None  # _trim_to_fit memo (see below)
+        self._trim_result = ""
         font = self.font()
         font.setPointSizeF(10.5)
         self.setFont(font)
@@ -280,10 +282,36 @@ class Bubble(QWidget):
         p.drawText(rect, Qt.AlignVCenter | Qt.AlignLeft, elided)
 
     def _trim_to_fit(self, text: str, rect) -> str:
+        """Oldest words behind an ellipsis so the tail fits the rect.
+
+        Called from paintEvent (30 fps while the waveform animates), so it
+        must be O(1) on repaint: the result is cached per (text, rect) and
+        recomputed — by bisection, not word-by-word — only when a new
+        partial lands or the bubble resizes.
+        """
+        key = (text, rect.width(), rect.height())
+        if self._trim_key != key:
+            self._trim_key = key
+            self._trim_result = self._trim_compute(text, rect)
+        return self._trim_result
+
+    def _trim_compute(self, text: str, rect) -> str:
         fm = QFontMetrics(self.font())
-        while fm.boundingRect(rect, Qt.TextWordWrap, text).height() > rect.height():
-            cut = text.find(" ", 24)  # drop the oldest word, keep the tail
-            if cut == -1:
-                break
-            text = "…" + text[cut + 1 :].lstrip()
-        return text
+
+        def fits(t: str) -> bool:
+            return (
+                fm.boundingRect(rect, Qt.TextWordWrap, t).height()
+                <= rect.height()
+            )
+
+        if fits(text):
+            return text
+        words = text.split(" ")
+        lo, hi = 1, len(words) - 1  # smallest cut whose tail fits
+        while lo < hi:
+            mid = (lo + hi) // 2
+            if fits("…" + " ".join(words[mid:])):
+                hi = mid
+            else:
+                lo = mid + 1
+        return "…" + " ".join(words[lo:])

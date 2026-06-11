@@ -10,6 +10,7 @@ never race the final beam decode.
 """
 
 import signal
+import sys
 import threading
 import time
 
@@ -105,6 +106,11 @@ class Controller(QObject):
                     except Exception:
                         text = ""  # a dropped partial is invisible; final decode rules
                 if text and not self._stop_partials.is_set():
+                    # Cap what reaches the UI: a hallucination loop can emit
+                    # thousands of chars and text layout is O(length) per
+                    # frame. The bubble shows ~600 chars at most anyway.
+                    if len(text) > 800:
+                        text = "…" + text[-800:]
                     self._bridge.partial.emit(text)
             elapsed = time.monotonic() - started
             self._stop_partials.wait(max(0.1, PARTIAL_PERIOD_S - elapsed))
@@ -154,6 +160,11 @@ def run() -> None:
     from tuparles.tray import Tray
     from tuparles.ui import Bubble
 
+    # GNOME launches us with stdout piped to journald, which Python block-
+    # buffers: the forensic prints below never flushed during the freeze
+    # hunts. Line-buffer explicitly so the journal sees them as they happen.
+    sys.stdout.reconfigure(line_buffering=True)
+
     app = QApplication([])
     app.setQuitOnLastWindowClosed(False)  # the bubble hides, the daemon lives
 
@@ -194,6 +205,22 @@ def run() -> None:
     waker = QTimer()
     waker.start(200)
     waker.timeout.connect(lambda: None)
+
+    # GUI-stall watchdog: a heartbeat that arrives late means the main
+    # thread was blocked — exactly the "UI frozen" reports. One journal
+    # line per stall turns the next one from a guess into a measurement.
+    stall_last = [time.monotonic()]
+
+    def _stall_check() -> None:
+        now = time.monotonic()
+        gap = now - stall_last[0]
+        if gap > 1.0:
+            print(f"GUI stall: main thread blocked ~{gap:.1f}s")
+        stall_last[0] = now
+
+    watchdog = QTimer()
+    watchdog.timeout.connect(_stall_check)
+    watchdog.start(250)
 
     app.exec()
     print("\nÀ la prochaine.")

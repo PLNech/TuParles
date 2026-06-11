@@ -127,6 +127,10 @@ class GpuEngine:
         beam_size=1 halves latency; condition_on_previous_text=False keeps
         each partial independent so a mishear can't snowball across calls.
         The final transcribe() re-decodes everything with the full beam.
+
+        No initial_prompt here: greedy decodes on short audio love to echo
+        the prompt verbatim ("Glossaire : …" flashing in the bubble). The
+        vocabulary bias only needs to land on the final decode.
         """
         if audio.size == 0:
             return ""
@@ -137,7 +141,6 @@ class GpuEngine:
             vad_filter=True,
             condition_on_previous_text=False,
             without_timestamps=True,
-            initial_prompt=_vocab_prompt(),
             language=self._constrain_language(pcm),
         )
         return " ".join(s.text.strip() for s in segments).strip()
