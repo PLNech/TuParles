@@ -15,36 +15,61 @@ text is typed into whatever window has focus. Everything runs on-device.
   <img src=".github/bubble-recording.png" alt="Recording: live waveform, transcript streaming in, freshest words kept visible"/>
 </p>
 
-| Vue complète (toggle dans le menu) | Le perchoir |
-|:---:|:---:|
-| <img src=".github/bubble-full.png" alt="Full view: the whole take, word-wrapped, growing as you speak"/> | <img src=".github/tray-menu.png" alt="Tray menu: start/stop, copy last, history, view toggle, about, quit"/> |
+| Vue complète (toggle dans le menu) | Le perchoir | Réglages |
+|:---:|:---:|:---:|
+| <img src=".github/bubble-full.png" alt="Full view: the whole take, word-wrapped, growing as you speak"/> | <img src=".github/tray-menu.png" alt="Tray menu: start/stop, copy last, history, settings, view toggle, about, quit"/> | <img src=".github/settings-langues.png" alt="Settings: searchable checklist of 100 languages, selected first"/> |
 
 *(screens rendered from the actual widgets by `scripts/readme_screens.py` —
 regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_screens.py`)*
 
+## Features
+
+- **Live transcript** — while you speak, the bubble streams a ~1 Hz greedy
+  preview of the last few seconds; on stop, the whole take gets a full
+  beam decode. On a long take that final pass runs batched (VAD-chunked,
+  parallel on GPU): a 3-minute monologue lands in about a second.
+- **Code-switching first-class** — by default the model auto-detects among
+  100 languages per take. In *Réglages* you can confine detection to your
+  own set: one language forces it, several means TuParles detects, then
+  snaps to the most probable of your selection — no more random Cyrillic
+  cameos when you mumble.
+- **Fast delivery** — short takes are typed into the focused window
+  (xdotool, modifier-safe); long ones are pasted (Ctrl+V, or
+  Ctrl+Shift+V in terminals), with the clipboard always set as backup.
+- **Cleanup that knows its place** — spoken punctuation ("virgule",
+  "point", "new line") in both languages, a personal lexicon for your
+  jargon, and deterministic collapse of Whisper repetition loops. No AI
+  rewriting: a visible mishear beats a confident wrong autocorrect.
+- **History & stats, local forever** — every take lands in SQLite with
+  its telemetry (duration, decode time, words/min, detected language).
+  `tuparles history "query"` searches it; `tuparles stats` shows your
+  dictation profile (débit, decode speed, language mix).
+
 ## Architecture
 
 ```
-            hotkey (tap=toggle / hold=push-to-talk)
+            hotkey (Right Ctrl + Right Alt)
                           │
    mic ── 16 kHz mono ────┤
     │                     ▼
-    │              ┌─────────────┐     raw s16le pipe     ┌──────────────────┐
-    ├─ levels ───► │   daemon    │ ─────────────────────► │ qwen_asr --stream │
-    │              │  (Python)   │ ◄───────────────────── │  (C, CPU/OpenBLAS)│
-    ▼              └─────────────┘     partial tokens      └──────────────────┘
- waveform              │      │
-  bubble UI ◄──────────┘      ├─► spoken-punctuation post-processor
-  (live transcript)           ├─► xdotool type into focused window (+ clipboard)
-                              └─► history (SQLite)
+    │              ┌─────────────┐   final: batched beam   ┌─────────────────────┐
+    ├─ levels ───► │   daemon    │ ──────────────────────► │ faster-whisper      │
+    │              │  (Python)   │ ◄────────────────────── │ large-v3-turbo fp16 │
+    ▼              └─────────────┘   partials: ~1 Hz greedy │ (GPU, persistent)   │
+ waveform              │      │                            └─────────────────────┘
+  bubble UI ◄──────────┘      ├─► punctuation → lexicon → repeat-collapse
+  (live transcript)           ├─► type or paste into focused window (+ clipboard)
+                              └─► history + telemetry (SQLite)
 ```
 
-- **STT engine**: [Qwen3-ASR-0.6B](https://huggingface.co/Qwen/Qwen3-ASR-0.6B)
-  via [antirez/qwen-asr](https://github.com/antirez/qwen-asr), a pure-C CPU
-  inference engine (OpenBLAS). Streaming mode decodes 2 s chunks with prefix
-  rollback — that's what feeds the live transcript view.
-- **Fallbacks**: whisper.cpp (plan B), faster-whisper (plan C), behind the same
-  transcriber interface.
+- **Primary engine**: [faster-whisper](https://github.com/SYSTRAN/faster-whisper)
+  `large-v3-turbo` in float16, persistent on the GPU (~29x realtime
+  measured on an RTX 4080). Finals go through the batched pipeline;
+  partials are cheap greedy decodes of a sliding window.
+- **CPU fallback**: [Qwen3-ASR-0.6B](https://huggingface.co/Qwen/Qwen3-ASR-0.6B)
+  via [antirez/qwen-asr](https://github.com/antirez/qwen-asr), a pure-C
+  inference engine (OpenBLAS) — used automatically when no GPU answers
+  (waveform-only bubble, no live partials).
 
 ## Install
 
@@ -82,5 +107,16 @@ transcribes on CPU.
 
 Copy `vocab.example.txt` to `vocab.txt` and put your recurring names and
 jargon there — it biases decoding toward your vocabulary. The file stays
-local (gitignored), like everything you dictate: history lives in
-`~/.local/share/tuparles/`, searchable via `tuparles history "query"`.
+local (gitignored), like everything you dictate.
+
+## CLI
+
+```bash
+tuparles                  # start the daemon (or launch from GNOME search)
+tuparles history          # last 20 takes
+tuparles history "tokens" # search your dictations
+tuparles stats            # local telemetry: takes, débit, decode speed, language mix
+```
+
+Everything lives in `~/.local/share/tuparles/history.db` and
+`~/.config/tuparles/settings.json` — yours, on disk, never synced anywhere.

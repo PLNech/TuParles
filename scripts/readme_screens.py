@@ -4,8 +4,11 @@ Usage:  QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_screens.py
 Output: .github/*.png (kept light; regenerate after any UI change)
 """
 
+import json
 import math
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -82,6 +85,22 @@ def main() -> None:
     menu.show()  # offscreen: forces layout, nothing appears anywhere
     menu.adjustSize()
     _snap(menu, OUT / "tray-menu.png")
+
+    print("Rendering settings dialog…")
+    # Isolated config so the render never touches the user's real settings.
+    with tempfile.TemporaryDirectory() as tmp:
+        cfg = Path(tmp) / "tuparles"
+        cfg.mkdir()
+        (cfg / "settings.json").write_text(
+            json.dumps({"languages": ["fr", "en"]})
+        )
+        os.environ["XDG_CONFIG_HOME"] = tmp
+        from tuparles.settings_ui import SettingsDialog
+
+        dlg = SettingsDialog()
+        dlg.show()
+        dlg.adjustSize()
+        _snap(dlg, OUT / "settings-langues.png")
 
     print("Done.")
 
