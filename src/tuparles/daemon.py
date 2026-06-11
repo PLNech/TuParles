@@ -14,11 +14,16 @@ from tuparles.punctuation import apply_spoken_punctuation
 
 
 def _notify(msg: str, ms: int = 2000) -> None:
-    subprocess.run(
-        ["notify-send", "-a", "TuParles", "-t", str(ms), "TuParles", msg],
-        check=False,
-        timeout=5,
-    )
+    # Fire-and-forget: notify-send blocks on the notification server's reply
+    # and GNOME's daemon sometimes stalls for seconds. Never wait, never raise.
+    try:
+        subprocess.Popen(
+            ["notify-send", "-a", "TuParles", "-t", str(ms), "TuParles", msg],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except OSError:
+        pass
 
 
 class Daemon:
