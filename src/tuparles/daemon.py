@@ -94,11 +94,19 @@ class Controller(QObject):
 
     def _finish(self, audio) -> None:
         try:
+            t0 = time.monotonic()
             with self._engine_lock:
                 raw = self._engine.transcribe(audio)
+            decode_s = time.monotonic() - t0
             text = collapse_repeats(apply_lexicon(apply_spoken_punctuation(raw)))
             if text:
+                t1 = time.monotonic()
                 deliver(text)
+                print(
+                    f"take: {audio.size / SAMPLE_RATE:.0f}s audio → "
+                    f"decode {decode_s:.1f}s, deliver "
+                    f"{time.monotonic() - t1:.1f}s, {len(text)} chars"
+                )
                 try:
                     history.record(text, engine=type(self._engine).__name__)
                 except Exception:

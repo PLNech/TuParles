@@ -58,21 +58,29 @@ class GpuEngine:
 
     def __init__(self) -> None:
         _preload_cuda_libs()
-        from faster_whisper import WhisperModel
+        from faster_whisper import BatchedInferencePipeline, WhisperModel
 
         self._model = WhisperModel(
             "large-v3-turbo", device="cuda", compute_type="float16"
         )
+        # Final decodes go through the batched pipeline: VAD splits the take
+        # into chunks decoded in parallel on the GPU. On long takes this is
+        # the difference between ~linear-in-length and ~seconds (the "1 min
+        # frozen after a long dictation" bug); on short takes it's a no-op.
+        self._batched = BatchedInferencePipeline(model=self._model)
         self._prompt = _vocab_prompt()
 
     def transcribe(self, audio: np.ndarray) -> str:
-        """int16 mono 16 kHz → text. Safe to call repeatedly on a growing
-        buffer for live partials (~0.5-1 s per call)."""
+        """int16 mono 16 kHz → text. Full-quality beam decode, batched."""
         if audio.size == 0:
             return ""
         pcm = audio.astype(np.float32) / 32768.0
-        segments, _ = self._model.transcribe(
-            pcm, beam_size=5, vad_filter=True, initial_prompt=self._prompt
+        segments, _ = self._batched.transcribe(
+            pcm,
+            batch_size=16,
+            beam_size=5,
+            vad_filter=True,
+            initial_prompt=self._prompt,
         )
         return " ".join(s.text.strip() for s in segments).strip()
 

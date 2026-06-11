@@ -11,6 +11,7 @@ queued signal connections, see daemon.py).
 """
 
 import math
+import subprocess
 from collections import deque
 from typing import Callable
 
@@ -24,7 +25,7 @@ from PySide6.QtCore import (
     QTimer,
 )
 from PySide6.QtCore import QRect
-from PySide6.QtGui import QColor, QFontMetrics, QPainter
+from PySide6.QtGui import QColor, QCursor, QFontMetrics, QPainter
 from PySide6.QtWidgets import QApplication, QWidget
 
 WIDTH, HEIGHT = 460, 56
@@ -159,10 +160,12 @@ class Bubble(QWidget):
         self.update()
 
     def _home_pos(self) -> QPoint:
-        screen = QApplication.primaryScreen().availableGeometry()
+        # The screen you're working on, not blindly the primary one.
+        screen = QApplication.screenAt(QCursor.pos()) or QApplication.primaryScreen()
+        geo = screen.availableGeometry()
         return QPoint(
-            screen.center().x() - WIDTH // 2,
-            screen.bottom() - self.height() - MARGIN_BOTTOM,
+            geo.center().x() - WIDTH // 2,
+            geo.bottom() - self.height() - MARGIN_BOTTOM,
         )
 
     def _fade_in(self) -> None:
@@ -170,7 +173,21 @@ class Bubble(QWidget):
         self.move(home + QPoint(0, 12))
         self.setWindowOpacity(0.0)
         self.show()
+        self._make_sticky()
         self._animate(opacity=1.0, pos=home, ms=160)
+
+    def _make_sticky(self) -> None:
+        """Pin to all virtual desktops: a mid-take workspace switch must not
+        strand the bubble. Fire-and-forget — cosmetic, never blocks."""
+        subprocess.Popen(
+            [
+                "xprop", "-id", str(int(self.winId())),
+                "-f", "_NET_WM_DESKTOP", "32c",
+                "-set", "_NET_WM_DESKTOP", "0xFFFFFFFF",
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
 
     def _fade_out(self) -> None:
         self._animate(
