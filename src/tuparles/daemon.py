@@ -17,13 +17,16 @@ from PySide6.QtCore import QObject, QTimer, Signal, Slot
 from PySide6.QtWidgets import QApplication
 
 from tuparles.audio import Recorder
-from tuparles.config import SAMPLE_RATE
+from tuparles.config import (
+    PARTIAL_MIN_AUDIO_S,
+    PARTIAL_PERIOD_S,
+    PARTIAL_WINDOW_S,
+    SAMPLE_RATE,
+)
 from tuparles.delivery import deliver
 from tuparles.engine import load_engine
+from tuparles.lexicon import apply_lexicon
 from tuparles.punctuation import apply_spoken_punctuation
-
-PARTIAL_PERIOD_S = 1.0
-PARTIAL_MIN_AUDIO_S = 0.5
 
 
 class Bridge(QObject):
@@ -67,7 +70,10 @@ class Controller(QObject):
         """~1 Hz greedy re-decode of the whole growing buffer (≤1 s on GPU)."""
         while not self._stop_partials.is_set():
             started = time.monotonic()
-            audio = self._recorder.snapshot()
+            # Tail window only: the bubble elides left so older audio is
+            # invisible anyway, and a bounded window bounds decode latency
+            # (full-buffer re-decode fell behind ~1 Hz on long takes).
+            audio = self._recorder.snapshot()[-SAMPLE_RATE * PARTIAL_WINDOW_S :]
             if audio.size >= SAMPLE_RATE * PARTIAL_MIN_AUDIO_S:
                 with self._engine_lock:
                     if self._stop_partials.is_set():
@@ -85,7 +91,7 @@ class Controller(QObject):
         try:
             with self._engine_lock:
                 raw = self._engine.transcribe(audio)
-            text = apply_spoken_punctuation(raw)
+            text = apply_lexicon(apply_spoken_punctuation(raw))
             if text:
                 deliver(text)
                 self._bridge.final.emit(text)

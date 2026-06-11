@@ -14,7 +14,26 @@ from pathlib import Path
 
 import numpy as np
 
-from tuparles.config import QWEN_BINARY, QWEN_MODEL_DIR, QWEN_THREADS, SAMPLE_RATE
+from tuparles.config import (
+    QWEN_BINARY,
+    QWEN_MODEL_DIR,
+    QWEN_THREADS,
+    SAMPLE_RATE,
+    VOCAB_FILE,
+)
+
+
+def _vocab_prompt() -> str | None:
+    """Personal glossary → initial_prompt. Whisper treats it as preceding
+    context, which measurably biases decoding toward these spellings."""
+    if not VOCAB_FILE.exists():
+        return None
+    words = [
+        w.strip()
+        for w in VOCAB_FILE.read_text().splitlines()
+        if w.strip() and not w.lstrip().startswith("#")
+    ]
+    return f"Glossaire : {', '.join(words)}." if words else None
 
 
 def _preload_cuda_libs() -> None:
@@ -44,6 +63,7 @@ class GpuEngine:
         self._model = WhisperModel(
             "large-v3-turbo", device="cuda", compute_type="float16"
         )
+        self._prompt = _vocab_prompt()
 
     def transcribe(self, audio: np.ndarray) -> str:
         """int16 mono 16 kHz → text. Safe to call repeatedly on a growing
@@ -51,7 +71,9 @@ class GpuEngine:
         if audio.size == 0:
             return ""
         pcm = audio.astype(np.float32) / 32768.0
-        segments, _ = self._model.transcribe(pcm, beam_size=5, vad_filter=True)
+        segments, _ = self._model.transcribe(
+            pcm, beam_size=5, vad_filter=True, initial_prompt=self._prompt
+        )
         return " ".join(s.text.strip() for s in segments).strip()
 
     def transcribe_partial(self, audio: np.ndarray) -> str:
@@ -70,6 +92,7 @@ class GpuEngine:
             vad_filter=True,
             condition_on_previous_text=False,
             without_timestamps=True,
+            initial_prompt=self._prompt,
         )
         return " ".join(s.text.strip() for s in segments).strip()
 

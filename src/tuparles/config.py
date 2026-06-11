@@ -15,3 +15,13 @@ QWEN_THREADS = 14
 
 # Tap window: both keys seen pressed within this span = trigger.
 HOTKEY_DEBOUNCE_S = 0.4
+
+# Personal glossary fed to Whisper as initial_prompt (names, jargon).
+VOCAB_FILE = REPO_ROOT / "vocab.txt"
+
+# Live partials: decode only the last N seconds (the bubble elides left,
+# only the tail is visible — bounding the window bounds the latency).
+PARTIAL_WINDOW_S = 20
+# Below this much audio, language auto-detect is a coin flip (privet!).
+PARTIAL_MIN_AUDIO_S = 1.0
+PARTIAL_PERIOD_S = 1.0
