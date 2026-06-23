@@ -1,5 +1,30 @@
 # Changelog
 
+## Sprint 4 — 2026-06-23 · La voix qui commande (sans le cloud)
+
+### Added
+- **Voice command meta-language** (#41) — a take is now either text *or* a
+  small, fixed, deterministic edit command, never a probabilistic guess. The
+  honest local answer to cloud "agent modes": no model, no round-trip, no
+  surprises. Bilingual (FR + EN code-switch). Grammar: delete by
+  word/char/line/all with degrees ("efface efface trois mots", repetition, or
+  explicit count), `annule`/`undo` (chainable), `un peu plus`/`un peu moins`
+  nudges the last edit, `ouvre un terminal`. Confirmation toast in the bubble.
+
+### Doctrine
+- **Command-vs-dictation safety is structural, not heuristic** (#41): delete
+  requires a *doubled* trigger ("efface efface") — nobody doubles a verb in
+  prose, so the doubling *is* the interlock. Plus a length guard (commands are
+  terse) and a literal-escape ('dis "efface efface"') that fires only when the
+  remainder would itself be a command. Bias is asymmetric and absolute: when in
+  doubt, it's text. The test suite leads with an adversarial prose corpus that
+  must all classify as non-commands — that corpus is the real spec.
+- Edit execution reuses the paste backends (xdotool/ydotool) under the same
+  best-effort contract: a failed keystroke is logged, never crashes the daemon.
+- Design record: `docs/research/2026-06-23-voice-commands-design.md`. The
+  held-modifier "command quasimode" and live/Wayland validation are the
+  documented follow-up (#50, behind real-use validation #34).
+
 ## Sprint 3 — 2026-06-23 · Cap sur les réunions, et Wayland sans X11
 
 ### Added

@@ -178,5 +178,11 @@
     "subject": "Portable audio backend: mic selection + Bluetooth/headset-aware",
     "completedAt": "2026-06-23",
     "learnings": "Store the chosen mic by NAME, not PortAudio index — plug in a Bluetooth/USB device and every index after it shifts, but names are stable. Re-resolve at each take; if the name is gone (headset disconnected), rescan once then fall back to default rather than kill the take. Guard `import sounddevice` (try/except OSError,ImportError → None) so the pure device-matching logic imports without libportaudio — that's what lets it run in CI. PortAudio snapshots its device list at init, so a hotplugged mic needs sd._terminate()/_initialize() to appear."
+  },
+  {
+    "id": "41",
+    "subject": "Voice command meta-language: delete/undo/nudge by voice, no cloud",
+    "completedAt": "2026-06-23",
+    "learnings": "Command-vs-dictation is the whole problem; solve it STRUCTURALLY, not with a confidence score. The doubled trigger ('efface efface') is the interlock — nobody doubles a verb in prose, so a single trigger is always text. Bias is asymmetric: a false positive edits the user's prose (unforgivable), a false negative just types a command they retry (trivial) — so when in doubt, it's text. Literal-escape must be CONDITIONAL (fire only when the remainder would itself parse as a command) or it hijacks every sentence starting with 'dis'/'say'. The adversarial prose corpus IS the spec — write it first, the grammar is what's left once misfires are impossible. Reused the paste key-senders (xdotool/ydotool) for edits with the same never-raise contract. Pure-voice layer needs no hotkey changes and is fully unit-testable without a GPU — that's why it shipped before the 'lead design' held-modifier quasimode (#50). Sentence-unit deletion was dropped: no keystroke deletes 'a sentence' reliably across apps, and an unreliable edit is worse than an honest refusal."
   }
 ]
