@@ -15,6 +15,7 @@ does by calling this. Keep it that way.
 from tuparles.lexicon import apply_lexicon
 from tuparles.punctuation import apply_spoken_punctuation
 from tuparles.repeats import collapse_repeats
+from tuparles import syntax_features  # noqa: F401  (import = register families)
 from tuparles.syntax import SyntaxContext, apply_syntax
 
 
