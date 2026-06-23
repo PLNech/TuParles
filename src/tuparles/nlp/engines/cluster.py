@@ -27,15 +27,21 @@ def cluster_terms(
     corpus: Corpus,
     backend: EmbeddingBackend,
     *,
+    cands: list | None = None,
     n_clusters: int = 8,
     min_count: int = 2,
     label_n: int = 6,
     random_state: int = 0,
 ) -> list[Cluster]:
-    """Embed candidate terms, KMeans them, label by salience. Themes for free."""
+    """Embed candidate terms, KMeans them, label by salience. Themes for free.
+
+    Pass an explicit `cands` list to cluster a subset (e.g. the top-distinctive
+    terms) instead of the full `corpus.candidates(min_count)`.
+    """
     from sklearn.cluster import KMeans
 
-    cands = corpus.candidates(min_count)
+    if cands is None:
+        cands = corpus.candidates(min_count)
     if not cands:
         return []
     n_clusters = min(n_clusters, len(cands))
