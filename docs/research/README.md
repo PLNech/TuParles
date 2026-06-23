@@ -30,6 +30,10 @@ listens → you get notes). Five orthogonal dimensions:
 - [Voice UI command & control](2026-06-23-voice-ui-command-control.md) — Dragon,
   Talon, the command-vs-dictation disambiguation problem. Feeds the "effacer
   effacer effacer" meta-language idea and task #33.
+- [Granola, up close](2026-06-23-granola-deep-dive.md) — a close-range competitive
+  study of the category leader (researched from inside an actual call): full feature
+  surface, the API/MCP platform, the privacy varnish, and every user complaint that
+  maps to a local-first opening. The companion deep-dive to the landscape brief.
 
 ## The story so far (one paragraph, for the eventual post)
 
