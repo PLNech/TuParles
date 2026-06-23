@@ -208,5 +208,29 @@
     "subject": "Spoken quotes: first syntax family (bilingual, paired, configurable marks)",
     "completedAt": "2026-06-24",
     "learnings": "The bare-'guillemets' collision (it's also an ordinary word) is solved STRUCTURALLY with a pair-count guard: a lone bare trigger stays text, >=2 makes it quotes. This honors the user's 'bare auto-alternate' choice AND the when-in-doubt-it's-text doctrine simultaneously. Sentinel tokens (\\x00qo/qc<lang>\\x00) let one hug+substitute pass serve straight/curly/guillemets uniformly, and carry language to mark-resolution. Default marks straight \" both langs (tech-friendly) over the user's literal FR-straight/EN-context answer — flagged for correction."
+  },
+  {
+    "id": "64",
+    "subject": "Dict-seed: folder parser-into-dict (symbol extraction)",
+    "completedAt": "2026-06-24",
+    "learnings": "The SrcType->weight table (dep 10, def 6, H1 5, ident 3, comment 1) IS the moat and lives in one place (nlp/parse.py). git ls-files gives free .gitignore respect; the kind filter is essential (AlgoliaSaaS: 66% of tracked files are generated fixtures/logs). Python+Markdown get real ASTs; other langs a coarse identifier sweep (tree-sitter deferred, YAGNI). NON-OBVIOUS: raw Sigma-salience is VOLUME-biased -- a dep (weight 10) vanishes under the mass of weight-2 C++ idents (code_ident = 72.9% of total salience, dep = 0.0%)."
+  },
+  {
+    "id": "65",
+    "subject": "Dict-seed: TF-IDF ranker over a folder corpus",
+    "completedAt": "2026-06-24",
+    "learnings": "Rented sklearn (DictVectorizer + TfidfTransformer) instead of hand-rolling. KEY: norm=None, else a term alone in a doc peaks at 1.0 (l2 artefact) and distinctiveness inverts. The payoff finding: symbol-top15 vs tfidf-top15 overlap = 0/15 -- symbol surfaces const/std/the, TF-IDF surfaces GeoRecord/idxCompiler. TF-IDF is what rescues symbol's volume bias; neither signal is usable alone at scale."
+  },
+  {
+    "id": "66",
+    "subject": "Dict-seed: local-embeddings term signal",
+    "completedAt": "2026-06-24",
+    "learnings": "fastembed (ONNX, CPU, no torch) is the lean shippable backend; sentence-transformers wired but deferred (its torch won't import on the CUDA-wedged box). GOTCHA: 'intfloat/multilingual-e5-small' isn't in fastembed 0.8's list -> use 'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2'. Embedding rank is near-ORTHOGONAL to symbol/tfidf (Spearman <=0.08) = genuinely independent signal. And clustering QUARANTINES noise for free: test/assert macros collapse into one cluster -> cluster-based denoising beats a hand stoplist."
+  },
+  {
+    "id": "67",
+    "subject": "Dict-seed: RRF fusion ranker",
+    "completedAt": "2026-06-24",
+    "learnings": "RRF is the boring/calibration-free choice, and it's empirically justified: the 3 signals are near-independent (|Pearson|<=0.15, Spearman embed<->others <=0.08), which is exactly when fusion adds value. dictseed combines them as seed_score = RRF(symbol,tfidf[,embed]) * (0.25 + 0.75*whisper_risk) -- prominence GATED by how hard the token is for Whisper, so a salient common French word (risk~0) doesn't get seeded."
   }
 ]
