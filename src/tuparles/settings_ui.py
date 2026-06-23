@@ -31,8 +31,9 @@ class SettingsDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel("<b>Langues de dictée</b>"))
         hint = QLabel(
-            "Aucune cochée = détection automatique (100 langues). "
-            "Plusieurs = la détection reste confinée à votre sélection."
+            "Aucune = détection automatique. Une seule = forcée. "
+            "Plusieurs = code-switching : la langue est détectée segment "
+            "par segment, pour passer de l'une à l'autre en cours de phrase."
         )
         hint.setWordWrap(True)
         layout.addWidget(hint)

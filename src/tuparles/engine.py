@@ -23,7 +23,6 @@ from tuparles.config import (
     SAMPLE_RATE,
     VOCAB_FILE,
 )
-from tuparles.languages import snap_language
 from tuparles.preprocess import normalize_audio
 
 
@@ -34,6 +33,26 @@ class Transcription:
     text: str
     language: str | None = None
     language_prob: float | None = None
+
+
+def decode_language_opts(selected: list[str]) -> tuple[str | None, bool]:
+    """Map the user's language selection to faster-whisper's
+    (language, multilingual) arguments.
+
+    0 selected → (None, False): detect once among all languages.
+    1 selected → (code, False): forced — the user wants only this one.
+    2+ selected → (None, True): per-segment language detection, so
+        mid-sentence code-switching survives. This is the whole reason
+        TuParles exists. Forcing one language frenchifies/anglicizes the
+        others ("can I switch to English" → "peux-je changer en anglais");
+        detect-then-snap had the same flaw — one language for the whole take.
+        multilingual=True lets large-v3 follow the switch segment by segment.
+        Trade-off: per-segment detection can rarely mis-pick on a short/noisy
+        chunk, but for a code-switcher that beats mangling a whole language.
+    """
+    if len(selected) == 1:
+        return selected[0], False
+    return None, len(selected) >= 2
 
 
 def _vocab_prompt() -> str | None:
@@ -87,6 +106,7 @@ class GpuEngine:
         if audio.size == 0:
             return Transcription("")
         pcm = normalize_audio(audio.astype(np.float32) / 32768.0)
+        language, multilingual = self._decode_language_opts()
         segments, info = self._batched.transcribe(
             pcm,
             batch_size=16,
@@ -95,7 +115,8 @@ class GpuEngine:
             # Re-read per decode: `tuparles vocab add` applies to the next
             # take, no restart (like the language setting).
             initial_prompt=_vocab_prompt(),
-            language=self._constrain_language(pcm),
+            language=language,
+            multilingual=multilingual,
         )
         text = " ".join(s.text.strip() for s in segments).strip()
         return Transcription(
@@ -104,23 +125,9 @@ class GpuEngine:
             language_prob=getattr(info, "language_probability", None),
         )
 
-    def _constrain_language(self, pcm: np.ndarray) -> str | None:
-        """Apply the user's language selection (settings, hot-reloaded).
-
-        None = auto-detect. One selected = forced. Several = detect then
-        snap to the most probable selected one — an extra encoder pass on
-        one 30 s window, ~tens of ms on GPU.
-        """
-        selected = settings.get("languages") or []
-        if not selected:
-            return None
-        if len(selected) == 1:
-            return selected[0]
-        try:
-            _, _, all_probs = self._model.detect_language(pcm)
-            return snap_language(all_probs or [], selected)
-        except Exception:
-            return None  # detector hiccup → auto, never block the take
+    def _decode_language_opts(self) -> tuple[str | None, bool]:
+        """(language, multilingual) from the user's selection, hot-reloaded."""
+        return decode_language_opts(settings.get("languages") or [])
 
     def transcribe_partial(self, audio: np.ndarray) -> str:
         """Fast greedy decode of the growing buffer for live partials.
@@ -136,13 +143,15 @@ class GpuEngine:
         if audio.size == 0:
             return ""
         pcm = normalize_audio(audio.astype(np.float32) / 32768.0)
+        language, multilingual = self._decode_language_opts()
         segments, _ = self._model.transcribe(
             pcm,
             beam_size=1,
             vad_filter=True,
             condition_on_previous_text=False,
             without_timestamps=True,
-            language=self._constrain_language(pcm),
+            language=language,
+            multilingual=multilingual,
         )
         return " ".join(s.text.strip() for s in segments).strip()
 

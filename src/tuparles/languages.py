@@ -37,17 +37,3 @@ LANGUAGES = {
     "tt": "Tatar", "haw": "Hawaiian", "ln": "Lingala", "ha": "Hausa",
     "ba": "Bashkir", "jw": "Javanese", "su": "Sundanese", "yue": "Cantonese",
 }
-
-
-def snap_language(
-    all_probs: list[tuple[str, float]], selected: list[str]
-) -> str | None:
-    """Most probable language among the user's selection, None if the
-    detector offers nothing from the set (caller falls back to auto)."""
-    sel = set(selected)
-    best = max(
-        (lp for lp in all_probs if lp[0] in sel),
-        key=lambda lp: lp[1],
-        default=None,
-    )
-    return best[0] if best else None
