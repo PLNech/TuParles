@@ -72,11 +72,16 @@ def _type_into_focus(text: str) -> None:
         ["xdotool", "keyup", *_MODIFIERS], check=False, timeout=5
     )
     if _should_paste(text):
-        try:
-            _paste_into_focus()
-            return
-        except Exception:
-            pass  # unknown window class etc. — fall back to typing
+        # Paste and return UNCONDITIONALLY: the clipboard already holds the
+        # exact text, so paste is the guarantee. Never fall back to typing
+        # here — typing long/accented text on a mismatched layout both
+        # corrupts it and triggers the keymap-remap freeze. The old fallback
+        # bit hard: on a saturated X server the `xdotool key ctrl+v` call
+        # pasted fine but timed out *waiting to return*, so we wrongly
+        # concluded failure and re-typed all 1127 chars on top (paste-then-
+        # type-during-freeze). Best-effort paste, clipboard is the net.
+        _paste_into_focus()
+        return
     # delay 10: at 2 ms, ibus/app input queues drop and reorder chars under
     # load ("l'application et" landed as "l'applicat ionet" while the history
     # DB held the correct text). The old "frozen keyboard" complaint that
@@ -89,16 +94,30 @@ def _type_into_focus(text: str) -> None:
 
 
 def _paste_into_focus() -> None:
-    """The clipboard already holds the text (deliver() set it first)."""
-    wm_class = subprocess.run(
-        ["xdotool", "getactivewindow", "getwindowclassname"],
-        capture_output=True,
-        text=True,
-        check=True,
-        timeout=5,
-    ).stdout
+    """Best-effort Ctrl+V into the focused window. The clipboard already
+    holds the text (deliver() set it first), so every step here is allowed
+    to fail quietly — a missed paste leaves the text one manual Ctrl+V away,
+    never re-typed."""
+    try:
+        wm_class = subprocess.run(
+            ["xdotool", "getactivewindow", "getwindowclassname"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=2,
+        ).stdout
+    except subprocess.SubprocessError:
+        wm_class = ""  # unknown focus → assume not a terminal, plain Ctrl+V
     combo = "ctrl+shift+v" if _is_terminal(wm_class) else "ctrl+v"
-    subprocess.run(["xdotool", "key", combo], check=True, timeout=5)
+    # check=False + swallow timeout: the keystroke is dispatched to the X
+    # server synchronously, so whether xdotool *returns* promptly under load
+    # is irrelevant to whether the paste landed. A TimeoutExpired here used
+    # to bubble up and trigger a re-type — never again.
+    try:
+        subprocess.run(["xdotool", "key", combo], check=False, timeout=10)
+    except subprocess.SubprocessError:
+        pass
+    print(f"paste: {combo} into '{wm_class.strip() or '?'}'")
 
 
 def to_clipboard(text: str) -> None:
