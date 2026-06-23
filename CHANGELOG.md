@@ -1,5 +1,46 @@
 # Changelog
 
+## Sprint 5 — 2026-06-24 · Mesurer le code-switch, et poser la grammaire parlée
+
+### Added
+- **Adversarial code-switch eval suite** (#51) — a reproducible yardstick for
+  the bilingual moat. An 18-case corpus of FR-EN traps (English verb-borrows,
+  cross-lingual homophones, mid-sentence switches, English numbers, acronyms),
+  each declaring the token that *must survive* and the misfire it must *not*
+  become — seeded with the real `fan out` → `fais un air` bug that prompted it.
+  Multi-engine WAV generation (piper neural + espeak), cross-lingual voicing (a
+  French voice on English tokens = the realistic trap), all ffmpeg-normalised
+  to 16 kHz mono. Scoring = slot-gate + WER-trend. A GPU-gated integration test
+  runs the full pipeline; the scorer + corpus integrity run in CI now.
+- **Spoken-syntax core** (#57) — the framework every structured-dictation
+  family plugs into: an ordered, settings-gated feature registry with a
+  never-crash-the-take contract and a `SyntaxContext` that threads the
+  output-format target. The first brick of the spoken-syntax moat (EPIC #53).
+- **Spoken quotes** (#32) — first family on that core. Bilingual triggers
+  (`ouvre/ferme les guillemets`, `open/close quote`, `unquote`, `entre
+  guillemets`, bare `guillemets` auto-alternating, auto-close), configurable
+  marks (straight default; guillemets with U+202F/U+00A0 spacing, or curly), and
+  a structural pair-guard so a lone spoken "guillemets" stays text.
+
+### Changed
+- Extracted `pipeline.postprocess()` so the daemon and the eval harness run the
+  *identical* text path (punctuation → lexicon → spoken-syntax → repeat-collapse)
+  — a test that skipped post-processing would measure a fiction.
+- **Project `CLAUDE.md`** added (#56): the docs-honesty duty (update docs +
+  in-product help when big things ship) and the doctrines now guiding the moats.
+
+### Doctrine
+- **You can't improve a moat you can't measure.** The eval suite is the
+  substrate the #49 fine-tune and #34 validation presuppose; synthesised
+  franglais is a reproducible proxy, real recordings drop into the same scorer.
+- **Safety is structural, and lives in the feature.** The syntax core provides
+  the place to hang an interlock + the never-crash contract; each family brings
+  its own (quotes' pair-guard). When in doubt, it's text.
+- **"It's a setting" — smart default, total override.** Every syntax knob ships
+  a sensible default and a Réglages toggle; we don't argue the One True Default.
+- Design program tracked as four epics with dependency chains: spoken-syntax
+  (#53), codebase-aware dict seeding (#54), agentic/MCP (#46), onboarding (#55).
+
 ## Sprint 4 — 2026-06-23 · La voix qui commande (sans le cloud)
 
 ### Added

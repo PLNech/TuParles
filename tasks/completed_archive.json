@@ -184,5 +184,29 @@
     "subject": "Voice command meta-language: delete/undo/nudge by voice, no cloud",
     "completedAt": "2026-06-23",
     "learnings": "Command-vs-dictation is the whole problem; solve it STRUCTURALLY, not with a confidence score. The doubled trigger ('efface efface') is the interlock — nobody doubles a verb in prose, so a single trigger is always text. Bias is asymmetric: a false positive edits the user's prose (unforgivable), a false negative just types a command they retry (trivial) — so when in doubt, it's text. Literal-escape must be CONDITIONAL (fire only when the remainder would itself parse as a command) or it hijacks every sentence starting with 'dis'/'say'. The adversarial prose corpus IS the spec — write it first, the grammar is what's left once misfires are impossible. Reused the paste key-senders (xdotool/ydotool) for edits with the same never-raise contract. Pure-voice layer needs no hotkey changes and is fully unit-testable without a GPU — that's why it shipped before the 'lead design' held-modifier quasimode (#50). Sentence-unit deletion was dropped: no keystroke deletes 'a sentence' reliably across apps, and an unreliable edit is worse than an honest refusal."
+  },
+  {
+    "id": "51",
+    "subject": "Adversarial code-switch eval suite: corpus + multi-engine WAV gen + Whisper integration test",
+    "completedAt": "2026-06-24",
+    "learnings": "TTS franglais is the realistic adversarial signal — a FRENCH voice reading English tokens reproduces the exact phonetics that trips Whisper (the seed: 'fan out'->'fais un air'). Multi-engine (piper+espeak) all ffmpeg-normalised to 16k mono so the harness loads WAVs into the SAME int16 array the mic path makes. Manifest scanned from disk, not from this-run's voices, so regenerating one engine never silently drops another's WAVs. Scoring = slots-gate (must_contain/must_not_contain, contiguous-token match) + WER-trend (never a gate). The corpus is itself under test (no dup ids; every must_contain present in its own reference; every must_not_contain absent)."
+  },
+  {
+    "id": "56",
+    "subject": "Add project CLAUDE.md (docs-honesty duty + moat doctrines)",
+    "completedAt": "2026-06-24",
+    "learnings": "Project-local CLAUDE.md captures the doctrines where future sessions actually see them: 'it's a setting' (smart default + total override), structural-not-statistical safety, wrong-autocorrect>visible-mishear, measure-before-trust (the eval), MCP-lean. The docs-honesty duty explicitly counts in-product help (cheat-sheet/wizard/tutorial) as documentation — 'a spoken command nobody can discover does not exist.'"
+  },
+  {
+    "id": "57",
+    "subject": "Spoken-syntax core: registry + interlocks + settings scaffold",
+    "completedAt": "2026-06-24",
+    "learnings": "Interlocks live IN each feature (quotes pair, caps mark next word), NOT in the core — resisted a speculative universal-interlock abstraction (YAGNI; extract when a 2nd family reveals the shared shape). Core only provides: ordered settings-gated registry, a never-crash-the-take contract (best-effort per feature), and a SyntaxContext that threads the output-format target (#58) it does not itself decide. Empty registry = identity, so it wired into pipeline.postprocess safely before any family existed."
+  },
+  {
+    "id": "32",
+    "subject": "Spoken quotes: first syntax family (bilingual, paired, configurable marks)",
+    "completedAt": "2026-06-24",
+    "learnings": "The bare-'guillemets' collision (it's also an ordinary word) is solved STRUCTURALLY with a pair-count guard: a lone bare trigger stays text, >=2 makes it quotes. This honors the user's 'bare auto-alternate' choice AND the when-in-doubt-it's-text doctrine simultaneously. Sentinel tokens (\\x00qo/qc<lang>\\x00) let one hug+substitute pass serve straight/curly/guillemets uniformly, and carry language to mark-resolution. Default marks straight \" both langs (tech-friendly) over the user's literal FR-straight/EN-context answer — flagged for correction."
   }
 ]
