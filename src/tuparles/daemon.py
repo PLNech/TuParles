@@ -63,11 +63,16 @@ class Controller(QObject):
         if self._recorder.recording:
             self._press_started_take = False
             self._stop_partials.set()
+            # stop() drains and closes the PortAudio stream on the GUI thread —
+            # if it ever blocks, the whole UI freezes here, before any decode.
+            # Time it so a freeze accuses the right step instead of "decode".
+            t_stop = time.monotonic()
             audio = self._recorder.stop()
+            stop_s = time.monotonic() - t_stop
             self._bubble.start_processing()
             self._bridge.state.emit("processing")
             threading.Thread(
-                target=self._finish, args=(audio,), daemon=True
+                target=self._finish, args=(audio, stop_s), daemon=True
             ).start()
         else:
             self._press_started_take = True
@@ -115,24 +120,34 @@ class Controller(QObject):
             elapsed = time.monotonic() - started
             self._stop_partials.wait(max(0.1, PARTIAL_PERIOD_S - elapsed))
 
-    def _finish(self, audio) -> None:
+    def _finish(self, audio, stop_s: float = 0.0) -> None:
         try:
-            t0 = time.monotonic()
+            # Acquiring the lock can block behind an in-flight partial decode:
+            # measure that wait apart from the decode it gates.
+            t_lock = time.monotonic()
             with self._engine_lock:
+                lock_wait_s = time.monotonic() - t_lock
+                t_decode = time.monotonic()
                 result = self._engine.transcribe(audio)
-            decode_s = time.monotonic() - t0
+                decode_s = time.monotonic() - t_decode
+            t_post = time.monotonic()
             text = collapse_repeats(
                 apply_lexicon(apply_spoken_punctuation(result.text))
             )
+            post_s = time.monotonic() - t_post
             if text:
                 t1 = time.monotonic()
                 deliver(text)
                 deliver_s = time.monotonic() - t1
                 audio_s = audio.size / SAMPLE_RATE
+                # Full per-step breakdown: stop (GUI thread) + lock-wait +
+                # decode + post-process + deliver. The dominant term names
+                # the freeze; total ≈ perceived stop→paste latency.
                 print(
-                    f"take: {audio_s:.0f}s audio → decode {decode_s:.1f}s, "
-                    f"deliver {deliver_s:.1f}s, {len(text)} chars, "
-                    f"lang={result.language}"
+                    f"take: {audio_s:.0f}s audio, {len(text)} chars, "
+                    f"lang={result.language} | stop {stop_s:.2f}s, "
+                    f"lock {lock_wait_s:.2f}s, decode {decode_s:.2f}s, "
+                    f"post {post_s:.2f}s, deliver {deliver_s:.2f}s"
                 )
                 try:
                     history.record(
