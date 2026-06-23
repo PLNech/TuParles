@@ -34,6 +34,11 @@ listens → you get notes). Five orthogonal dimensions:
   study of the category leader (researched from inside an actual call): full feature
   surface, the API/MCP platform, the privacy varnish, and every user complaint that
   maps to a local-first opening. The companion deep-dive to the landscape brief.
+- [Genspark Speakly, up close](2026-06-23-genspark-speakly-deep-dive.md) — the
+  **dictation** leader and TuParles' architectural opposite (cloud-only, undisclosed
+  STT, train-by-default). Feature surface, Agent Mode, the privacy reality vs the
+  billboard, the cloud-vs-local landscape, and the eight product decisions it drove
+  (see §5). Where Granola is the meeting-notes foil, this is the dictation foil.
 
 ## The story so far (one paragraph, for the eventual post)
 
