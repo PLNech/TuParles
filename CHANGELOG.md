@@ -1,5 +1,45 @@
 # Changelog
 
+## Sprint 3 — 2026-06-23 · Cap sur les réunions : la recherche, et durcir le socle
+
+### Added
+- **Microphone selection** in *Réglages* — pick your input device instead of
+  PortAudio's default ("the first mic isn't always the right one"). Stored by
+  name (indices shuffle on Bluetooth/USB hotplug, names don't), re-resolved per
+  take, falls back to the default if it vanished mid-session (#40)
+- **Meeting note-taking research**: five verbatim SOTA briefs in
+  `docs/research/` — commercial landscape (Granola/Otter/…), speaker
+  diarization (WhisperX + pyannote), local LLM summarization (Ollama,
+  augment-my-notes), Linux dual-side capture (mic + monitor = free
+  diarization), voice command-and-control (Dragon/Talon) — plus `SOURCES`.
+  Opens the Sprint 3 backlog (#35-#42)
+
+### Fixed
+- **Self-healing CUDA**: a laptop suspend/resume invalidates the long-lived
+  CUDA context — `nvidia-smi` stays happy but context creation throws
+  `unknown error`, and the old design only fell back to CPU at *load* time, so
+  every post-resume take silently yielded nothing. The engine now rebuilds the
+  context on a decode failure (fresh context in-process) and only drops to
+  qwen-CPU if that also fails (`ResilientEngine`)
+- **CI was red** for four runs: the suite grew numpy-importing tests but CI
+  installed only pytest+ruff → collection error. Now installs numpy
+
+### Changed
+- **README** told the truth again: code-switching is per-segment detection,
+  not the removed detect-then-snap; documented the self-healing GPU
+
+### Infra
+- **CI is a cross-OS matrix**: ubuntu/macos/windows × py3.11/3.12 — proves the
+  pure-python layer is portable. CUDA and the Qt/audio frontends can't run on
+  hosted runners (no GPU, no display); they're validated locally
+
+### Doctrine
+- **Store hardware identities by stable name, not enumeration index** — indices
+  shuffle on hotplug, names survive.
+- **A long-lived GPU context is fragile across power events.** Resilience is
+  rebuild-then-fallback, not load-time fallback alone. Forensic tell: a journal
+  suspend/resume pair + a GUI stall at the resume timestamp names the cause.
+
 ## Sprint 2 — 2026-06-23 · Le grand débogage: code-switching réel, gel terrassé, voix sous contrôle
 
 ### Added
