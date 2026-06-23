@@ -12,5 +12,6 @@ there is no consent or transport layer to get wrong.
 """
 
 from tuparles.telemetry.record import enabled, event, set_enabled, timer
+from tuparles.telemetry.sink import clear
 
-__all__ = ["enabled", "event", "set_enabled", "timer"]
+__all__ = ["clear", "enabled", "event", "set_enabled", "timer"]

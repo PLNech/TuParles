@@ -9,6 +9,7 @@ Settings are read on the next take, no daemon restart.
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -16,11 +17,12 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QMessageBox,
     QPushButton,
     QVBoxLayout,
 )
 
-from tuparles import settings
+from tuparles import settings, telemetry
 from tuparles.audio import list_input_devices
 from tuparles.languages import LANGUAGES
 
@@ -87,6 +89,21 @@ class SettingsDialog(QDialog):
         clear.clicked.connect(self._clear_all)
         layout.addWidget(clear)
 
+        layout.addWidget(QLabel("<b>Confidentialité</b>"))
+        privacy_hint = QLabel(
+            "Le suivi d'usage est <b>100 % local</b> : il sert à voir quelles "
+            "fonctions tu utilises vraiment, et ne quitte jamais ta machine. "
+            "Décoche pour tout désactiver."
+        )
+        privacy_hint.setWordWrap(True)
+        layout.addWidget(privacy_hint)
+        self._telemetry = QCheckBox("Suivi d'usage local")
+        self._telemetry.setChecked(telemetry.enabled())
+        layout.addWidget(self._telemetry)
+        forget = QPushButton("Effacer mes statistiques d'usage")
+        forget.clicked.connect(self._forget_telemetry)
+        layout.addWidget(forget)
+
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
@@ -102,6 +119,21 @@ class SettingsDialog(QDialog):
         for i in range(self._list.count()):
             self._list.item(i).setCheckState(Qt.Unchecked)
 
+    def _forget_telemetry(self) -> None:
+        """Wipe the local usage log — irreversible, so confirm first."""
+        confirm = QMessageBox.question(
+            self,
+            "Effacer les statistiques",
+            "Effacer définitivement tes statistiques d'usage locales ?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if confirm == QMessageBox.Yes:
+            removed = telemetry.clear()
+            QMessageBox.information(
+                self, "Effacé", f"{removed} évènement(s) supprimé(s)."
+            )
+
     def _save(self) -> None:
         codes = [
             self._list.item(i).data(Qt.UserRole)
@@ -110,4 +142,5 @@ class SettingsDialog(QDialog):
         ]
         settings.put("languages", codes)
         settings.put("input_device", self._mic.currentData())
+        telemetry.set_enabled(self._telemetry.isChecked())
         self.accept()
