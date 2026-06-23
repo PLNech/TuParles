@@ -1,5 +1,41 @@
 # Changelog
 
+## Sprint 3 — 2026-06-23 · Wayland sans X11: le focus volé, le collage rendu
+
+### Added
+- **Native Wayland (GNOME) support**: evdev hotkey backend (reads
+  `/dev/input` — Wayland never forwards global keys to clients; needs the
+  `input` group), ydotool + wl-copy delivery (never types — ydotool assumes
+  a US keymap and garbles azerty).
+- **GNOME focus-window extension** (`packaging/gnome-extension/`): publishes
+  the focused window's class on the session bus — the only way a Wayland
+  client can read it — so paste picks Ctrl+Shift+V in terminals, Ctrl+V in
+  apps. Graceful Ctrl+V fallback when absent.
+- `scripts/setup_wayland.sh`: one-time privileged setup (input group, uinput
+  rule, wl-clipboard/ydotool, GNOME extension), idempotent, refuses sudo.
+- evdev per-device modifier tracking: Ctrl on one keyboard never combines
+  with Alt on another into a phantom combo; live device hotplug rescan.
+
+### Changed
+- `delivery`/`hotkey` choose their backend from one `IS_WAYLAND` probe so
+  they can't disagree. X11 path unchanged. `_TERMINALS` now also matches
+  `gnome-terminal`/`org.gnome.console` (incidentally fixes X11 detection).
+
+### Fixed
+- **Wayland auto-paste landed nowhere.** Root cause, proven after three wrong
+  guesses (ydotool syntax, paste combo, device delay): the Qt bubble STEALS
+  keyboard focus on Wayland — Mutter ignores the no-focus hints X11 honours —
+  so the ydotool paste fired into the bubble, not the user's window (measured
+  0/8 with the bubble up → 8/8 hidden). Fix: capture the focus class at
+  take-START, and hide the bubble on the GUI thread right before the
+  keystroke so focus returns to the target.
+
+### Doctrine
+- **Forensics before theory, again**: an evdev monitor and a focused-QLineEdit
+  harness disproved the syntax and device-delay theories and pinned the
+  focus-theft. The memory note that *named* the wrong cause was corrected,
+  not trusted.
+
 ## Sprint 2 — 2026-06-23 · Le grand débogage: code-switching réel, gel terrassé, voix sous contrôle
 
 ### Added

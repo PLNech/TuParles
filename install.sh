@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# TuParles installer — Ubuntu/Debian, X11.
+# TuParles installer — Ubuntu/Debian. X11 out of the box; a Wayland session
+# additionally needs `bash scripts/setup_wayland.sh` afterward (see README).
 #
 #   curl -fsSL https://github.com/PLNech/TuParles/releases/latest/download/install.sh | bash
 #
@@ -17,7 +18,8 @@ die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 command -v git >/dev/null || die "git is required"
 command -v poetry >/dev/null || die "poetry is required (https://python-poetry.org)"
 [[ "${XDG_SESSION_TYPE:-}" == "wayland" ]] && \
-    echo "warning: Wayland session detected — typing into focus needs X11" >&2
+    echo "note: Wayland session — after this finishes, run 'bash scripts/setup_wayland.sh'" \
+         "for native Wayland delivery (or keep using the X11 path under XWayland)" >&2
 
 say "System dependencies (sudo)…"
 sudo apt-get install -y -q libopenblas-dev xdotool xsel libportaudio2 ffmpeg
@@ -53,3 +55,5 @@ bash scripts/install_desktop.sh
 
 say "Done. Launch 'TuParles' from GNOME search, or: cd $DIR && poetry run tuparles"
 say "Dictate with Right Ctrl + Right Alt. Edit vocab.txt with your own names."
+[[ "${XDG_SESSION_TYPE:-}" == "wayland" ]] && \
+    say "Wayland: run 'bash $DIR/scripts/setup_wayland.sh' first, then log out and back in."

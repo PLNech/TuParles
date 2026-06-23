@@ -107,12 +107,19 @@ class Bubble(QWidget):
         if self._state == "recording":
             return  # next take already started; the text landed regardless
         self._set(state="final", text=text)
+        if not self.isVisible():
+            # Re-show after the Wayland paste hid us to free keyboard focus
+            # (see daemon._hide_bubble_for_paste). Opacity is untouched by a
+            # bare hide(), so a plain show() restores the bubble at full alpha.
+            self.show()
         self._hide_timer.start(1400)
 
     def show_error(self, msg: str) -> None:
         if self._state == "recording":
             return
         self._set(state="error", text=msg)
+        if not self.isVisible():
+            self.show()  # a Wayland paste error fires after the bubble-hide
         self._hide_timer.start(2500)
 
     def cancel(self) -> None:

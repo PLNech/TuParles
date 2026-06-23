@@ -1,8 +1,14 @@
 """Central knobs. One place to retune when the hardware or taste changes."""
 
+import os
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# Wayland needs different hotkey and delivery backends than X11 (evdev +
+# ydotool/wl-copy instead of pynput + xdotool/xsel). One probe imported by
+# both modules so they can never disagree and leave a half-Wayland setup.
+IS_WAYLAND = os.environ.get("XDG_SESSION_TYPE") == "wayland"
 
 QWEN_BINARY = REPO_ROOT / "vendor" / "qwen-asr" / "qwen_asr"
 QWEN_MODEL_DIR = REPO_ROOT / "models" / "qwen3-asr-0.6b"

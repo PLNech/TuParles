@@ -1,0 +1,7 @@
+{
+  "uuid": "focuswindow@tuparles.local",
+  "name": "TuParles Focus Window",
+  "description": "Exposes the focused window's WM class on the session bus (org.tuparles.FocusWindow) so TuParles can choose Ctrl+V vs Ctrl+Shift+V when pasting on Wayland — Wayland gives clients no other way to read the focused window. Read-only, no UI.",
+  "shell-version": ["45", "46", "47", "48"],
+  "version": 1
+}

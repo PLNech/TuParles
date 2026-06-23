@@ -8,7 +8,7 @@ they keep it small and opinionated.
 ```bash
 git clone https://github.com/PLNech/TuParles && cd TuParles
 poetry install
-poetry run pytest          # 53 tests, sub-second
+poetry run pytest          # 109 tests, sub-second
 poetry run ruff check src tests scripts
 ```
 

@@ -14,19 +14,20 @@ import sys
 import threading
 import time
 
-from PySide6.QtCore import QObject, QTimer, Signal, Slot
+from PySide6.QtCore import QMetaObject, QObject, Qt, QTimer, Signal, Slot
 from PySide6.QtWidgets import QApplication
 
 from tuparles import history, settings
 from tuparles.audio import Recorder
 from tuparles.config import (
     HOTKEY_HOLD_S,
+    IS_WAYLAND,
     PARTIAL_MIN_AUDIO_S,
     PARTIAL_PERIOD_S,
     PARTIAL_WINDOW_S,
     SAMPLE_RATE,
 )
-from tuparles.delivery import deliver
+from tuparles.delivery import capture_focus_class, deliver
 from tuparles.engine import load_engine
 from tuparles.lexicon import apply_lexicon
 from tuparles.punctuation import apply_spoken_punctuation
@@ -58,6 +59,8 @@ class Controller(QObject):
         self._stop_partials = threading.Event()
         self._press_started_take = False  # hold-to-talk: release only stops
         # a recording the same press started, never an ongoing toggled take
+        self._target_focus = ""  # window class captured when a take starts;
+        # delivery pastes Ctrl+Shift+V vs Ctrl+V from this (see capture below)
 
     @Slot()
     def toggle(self) -> None:
@@ -77,6 +80,13 @@ class Controller(QObject):
             ).start()
         else:
             self._press_started_take = True
+            # Wayland only: read focus NOW, while the target window still has
+            # it and gnome-shell is calm — before the bubble shows and steals
+            # it. A delivery-time read raced that and missed terminals (~12 ms,
+            # GUI ok). X11 keeps its live delivery-time read (the bubble never
+            # steals focus there, so it stays accurate and pastes where focus
+            # actually is, not merely where the take began).
+            self._target_focus = capture_focus_class() if IS_WAYLAND else ""
             self._recorder.start()
             self._bubble.start_recording()
             self._bridge.state.emit("recording")
@@ -108,6 +118,17 @@ class Controller(QObject):
             and self._press_started_take
         ):
             self.toggle()
+
+    def _hide_bubble_for_paste(self) -> None:
+        """Wayland only: the bubble steals keyboard focus (Mutter ignores the
+        no-focus hints X11 honours), so a ydotool paste fired while it's up
+        lands in the bubble, not the user's window. Hide it first — focus
+        returns to the target — and the final-text emit re-shows it after.
+        Called from the delivery worker thread, so the hide is marshalled onto
+        the GUI thread and blocks until done before the keystroke fires."""
+        QMetaObject.invokeMethod(
+            self._bubble, "hide", Qt.ConnectionType.BlockingQueuedConnection
+        )
 
     def _partials_loop(self) -> None:
         """~1 Hz greedy re-decode of the whole growing buffer (≤1 s on GPU)."""
@@ -152,7 +173,11 @@ class Controller(QObject):
             post_s = time.monotonic() - t_post
             if text:
                 t1 = time.monotonic()
-                deliver(text)
+                deliver(
+                    text,
+                    self._target_focus,
+                    before_paste=self._hide_bubble_for_paste if IS_WAYLAND else None,
+                )
                 deliver_s = time.monotonic() - t1
                 audio_s = audio.size / SAMPLE_RATE
                 # Full per-step breakdown: stop (GUI thread) + lock-wait +

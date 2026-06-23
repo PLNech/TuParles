@@ -33,9 +33,10 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
   own set: one language forces it, several means TuParles detects, then
   snaps to the most probable of your selection — no more random Cyrillic
   cameos when you mumble.
-- **Fast delivery** — short takes are typed into the focused window
-  (xdotool, modifier-safe); long ones are pasted (Ctrl+V, or
-  Ctrl+Shift+V in terminals), with the clipboard always set as backup.
+- **Fast delivery, X11 and Wayland** — short takes typed into focus
+  (xdotool, modifier-safe), long ones pasted (Ctrl+V, or Ctrl+Shift+V in
+  terminals); Wayland (GNOME) pastes everything via ydotool. Clipboard
+  always set as backup.
 - **Cleanup that knows its place** — spoken punctuation ("virgule",
   "point", "new line") in both languages, a personal lexicon for your
   jargon, and deterministic collapse of Whisper repetition loops. No AI
@@ -58,7 +59,7 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
     ▼              └─────────────┘   partials: ~1 Hz greedy │ (GPU, persistent)   │
  waveform              │      │                            └─────────────────────┘
   bubble UI ◄──────────┘      ├─► punctuation → lexicon → repeat-collapse
-  (live transcript)           ├─► type or paste into focused window (+ clipboard)
+  (live transcript)           ├─► type/paste into focus (X11 xdotool · Wayland ydotool) + clipboard
                               └─► history + telemetry (SQLite)
 ```
 
@@ -73,7 +74,7 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
 
 ## Install
 
-One-liner (Ubuntu/Debian, X11, needs git + poetry):
+One-liner (Ubuntu/Debian, X11 — needs git + poetry; Wayland adds one step, below):
 
 ```bash
 curl -fsSL https://github.com/PLNech/TuParles/releases/latest/download/install.sh | bash
@@ -102,6 +103,17 @@ poetry run tuparles
 GPU (any recent NVIDIA card) is detected automatically and used for the
 primary faster-whisper engine; without one, the C fallback engine
 transcribes on CPU.
+
+### Wayland (GNOME)
+
+Same install, then this once — and log out and back in afterwards:
+
+```bash
+bash scripts/setup_wayland.sh   # input group · uinput rule · wl-clipboard/ydotool · GNOME extension
+```
+
+Other Wayland compositors fall back to Ctrl+V (no terminal detection without
+the GNOME extension); the X11 path also works under XWayland.
 
 ## Personal glossary
 
