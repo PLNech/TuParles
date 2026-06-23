@@ -40,6 +40,13 @@ listens → you get notes). Five orthogonal dimensions:
   billboard, the cloud-vs-local landscape, and the eight product decisions it drove
   (see §5). Where Granola is the meeting-notes foil, this is the dictation foil.
 
+### Build notes (decisions as we ship)
+- [Voice commands, the local way](2026-06-23-voice-commands-design.md) — the
+  design record for the voice command meta-language (#41): the cloud "agent
+  mode" foil, the command-vs-dictation problem, why the safety is *structural*
+  (doubled trigger, length guard, conditional literal-escape) rather than a
+  confidence threshold, the v1 grammar, and what was deliberately left out.
+
 ## The story so far (one paragraph, for the eventual post)
 
 TuParles started as push-to-talk dictation for French-English code-switchers.
