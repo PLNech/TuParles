@@ -17,7 +17,7 @@ import time
 from PySide6.QtCore import QMetaObject, QObject, Qt, QTimer, Signal, Slot
 from PySide6.QtWidgets import QApplication
 
-from tuparles import history, settings
+from tuparles import history, settings, telemetry
 from tuparles.audio import Recorder
 from tuparles.commands import Command
 from tuparles.commands import parse as parse_command
@@ -63,6 +63,17 @@ class Controller(QObject):
         self._target_focus = ""  # window class captured when a take starts;
         # delivery pastes Ctrl+Shift+V vs Ctrl+V from this (see capture below)
         self._last_edit: Command | None = None  # last delete, for "un peu plus"
+        self._entry_source = "hotkey"  # how the current take was started (telemetry)
+
+    @Slot()
+    def toggle_from_hotkey(self) -> None:
+        self._entry_source = "hotkey"
+        self.toggle()
+
+    @Slot()
+    def toggle_from_tray(self) -> None:
+        self._entry_source = "tray"
+        self.toggle()
 
     @Slot()
     def toggle(self) -> None:
@@ -90,6 +101,7 @@ class Controller(QObject):
             # actually is, not merely where the take began).
             self._target_focus = capture_focus_class() if IS_WAYLAND else ""
             self._recorder.start()
+            telemetry.event("entry.dictation", source=self._entry_source)
             self._bubble.start_recording()
             self._bridge.state.emit("recording")
             if getattr(self._engine, "supports_partials", False):
@@ -169,7 +181,10 @@ class Controller(QObject):
                 result = self._engine.transcribe(audio)
                 decode_s = time.monotonic() - t_decode
             t_post = time.monotonic()
-            text = postprocess(result.text)
+            text = postprocess(
+                result.text,
+                on_syntax_fire=lambda name: telemetry.event("syntax.used", name=name),
+            )
             post_s = time.monotonic() - t_post
             # Command layer: a take is EITHER an edit command or text, never
             # both. A literal-escape ('dis "efface"') unwraps back to text.
@@ -233,6 +248,7 @@ class Controller(QObject):
         worker thread (like deliver), so the Wayland bubble-hide is marshalled
         to the GUI thread first — otherwise the keystroke lands in the focus-
         stealing bubble, not the user's window (see _hide_bubble_for_paste)."""
+        telemetry.event("command.fired", name=cmd.action)
         if cmd.action == "nudge":
             resolved = self._resolve_nudge(cmd)
             if resolved is None:
@@ -287,7 +303,7 @@ def run() -> None:
     bubble = Bubble(level_source=lambda: recorder.level, view=settings.get("view"))
     controller = Controller(engine, recorder, bubble, bridge)
 
-    bridge.toggled.connect(controller.toggle)
+    bridge.toggled.connect(controller.toggle_from_hotkey)
     bridge.combo_released.connect(controller.on_combo_release)
     bridge.cancelled.connect(controller.cancel)
     bridge.partial.connect(bubble.set_partial)
@@ -298,7 +314,7 @@ def run() -> None:
     tray = Tray()
     bridge.state.connect(tray.set_state)
     bridge.final.connect(tray.on_final)
-    tray.toggle_requested.connect(controller.toggle)
+    tray.toggle_requested.connect(controller.toggle_from_tray)
     tray.view_changed.connect(bubble.set_view)
     tray.quit_requested.connect(app.quit)
 
