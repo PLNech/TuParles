@@ -1,13 +1,15 @@
-"""Settings dialog: language selection (more knobs will move in here).
+"""Settings dialog: microphone + language selection.
 
-Searchable checklist of Whisper's 100 languages. Empty selection = full
-auto-detect; one = forced; several = detect-then-snap (see languages.py).
-Settings are read by the engine on every decode — changes apply to the
-next take, no daemon restart.
+Mic: a picker over the input devices, rescanned each time the dialog opens
+(so a headset plugged in after launch shows up). The mic is stored by name,
+empty = system default. Languages: searchable checklist of Whisper's 100 —
+empty = auto-detect, one = forced, several = per-segment code-switching.
+Settings are read on the next take, no daemon restart.
 """
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QLabel,
@@ -19,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from tuparles import settings
+from tuparles.audio import list_input_devices
 from tuparles.languages import LANGUAGES
 
 
@@ -29,6 +32,30 @@ class SettingsDialog(QDialog):
         self.setMinimumSize(380, 480)
 
         layout = QVBoxLayout(self)
+
+        layout.addWidget(QLabel("<b>Microphone</b>"))
+        mic_hint = QLabel(
+            "Le micro de la dictée. « Système » suit le réglage par défaut "
+            "du bureau. Un casque branché après le lancement apparaît à "
+            "l'ouverture de cette fenêtre."
+        )
+        mic_hint.setWordWrap(True)
+        layout.addWidget(mic_hint)
+        self._mic = QComboBox()
+        self._mic.addItem("Système (par défaut)", None)
+        current_mic = settings.get("input_device")
+        for dev in list_input_devices(refresh=True):
+            label = dev["name"] + ("  ·  défaut système" if dev["default"] else "")
+            self._mic.addItem(label, dev["name"])
+        if current_mic:
+            i = self._mic.findData(current_mic)
+            if i >= 0:
+                self._mic.setCurrentIndex(i)
+            else:  # configured mic not currently present
+                self._mic.addItem(f"{current_mic}  ·  déconnecté", current_mic)
+                self._mic.setCurrentIndex(self._mic.count() - 1)
+        layout.addWidget(self._mic)
+
         layout.addWidget(QLabel("<b>Langues de dictée</b>"))
         hint = QLabel(
             "Aucune = détection automatique. Une seule = forcée. "
@@ -86,4 +113,5 @@ class SettingsDialog(QDialog):
             if self._list.item(i).checkState() == Qt.Checked
         ]
         settings.put("languages", codes)
+        settings.put("input_device", self._mic.currentData())
         self.accept()
