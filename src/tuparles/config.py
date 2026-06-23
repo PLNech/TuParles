@@ -23,6 +23,12 @@ HOTKEY_HOLD_S = 0.5
 # Personal glossary fed to Whisper as initial_prompt (names, jargon).
 VOCAB_FILE = REPO_ROOT / "vocab.txt"
 
+# Audio normalization (see preprocess.py): bring quiet takes up toward full
+# scale before STT. No-op on loud audio, never clips.
+NORMALIZE_TARGET_PEAK = 0.95  # a hair of headroom below 1.0
+NORMALIZE_MAX_GAIN = 12.0  # ~+21 dB ceiling; beyond this we'd amplify hiss
+NORMALIZE_SILENCE_FLOOR = 0.005  # peak below this = silence, leave it alone
+
 # Live partials: decode only the last N seconds (the bubble elides left,
 # only the tail is visible — bounding the window bounds the latency).
 PARTIAL_WINDOW_S = 20

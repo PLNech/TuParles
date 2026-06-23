@@ -24,6 +24,7 @@ from tuparles.config import (
     VOCAB_FILE,
 )
 from tuparles.languages import snap_language
+from tuparles.preprocess import normalize_audio
 
 
 @dataclass
@@ -85,7 +86,7 @@ class GpuEngine:
         """int16 mono 16 kHz → full-quality beam decode, batched."""
         if audio.size == 0:
             return Transcription("")
-        pcm = audio.astype(np.float32) / 32768.0
+        pcm = normalize_audio(audio.astype(np.float32) / 32768.0)
         segments, info = self._batched.transcribe(
             pcm,
             batch_size=16,
@@ -134,7 +135,7 @@ class GpuEngine:
         """
         if audio.size == 0:
             return ""
-        pcm = audio.astype(np.float32) / 32768.0
+        pcm = normalize_audio(audio.astype(np.float32) / 32768.0)
         segments, _ = self._model.transcribe(
             pcm,
             beam_size=1,
