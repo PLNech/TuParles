@@ -115,6 +115,14 @@ class Bubble(QWidget):
         self._set(state="error", text=msg)
         self._hide_timer.start(2500)
 
+    def cancel(self) -> None:
+        """Aborted take: freeze the waveform, flash 'Annulé', fade out.
+        Forces dismissal from any state (unlike show_final/show_error, which
+        defer to an ongoing recording — here the recording IS what we kill)."""
+        self._timer.stop()
+        self._set(state="cancelled", text="Annulé")
+        self._hide_timer.start(800)
+
     def _set(self, state: str | None = None, text: str | None = None) -> None:
         if state is not None:
             self._state = state

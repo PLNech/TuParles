@@ -16,3 +16,6 @@ dist/
 
 # Personal glossary — yours, not the repo's (start from vocab.example.txt)
 vocab.txt
+
+# Local-only notes / idea scratchpads — never pushed
+*.local.md

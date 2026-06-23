@@ -25,9 +25,11 @@ class HotkeyListener:
         self,
         on_toggle: Callable[[], None],
         on_combo_release: Callable[[float], None] | None = None,
+        on_cancel: Callable[[], None] | None = None,
     ) -> None:
         self._on_toggle = on_toggle
         self._on_combo_release = on_combo_release
+        self._on_cancel = on_cancel
         self._pressed: set = set()
         self._last_fire = 0.0
         self._combo_since: float | None = None  # set while both keys are down
@@ -45,6 +47,11 @@ class HotkeyListener:
         self._listener.stop()
 
     def _on_press(self, key) -> None:
+        # Esc aborts an in-flight take. We only *observe* it (pynput doesn't
+        # suppress), so Esc still reaches the focused app — the controller
+        # no-ops unless we're recording, making this a free global cancel.
+        if key == keyboard.Key.esc and self._on_cancel is not None:
+            self._on_cancel()
         self._pressed.add(key)
         has_ctrl = bool(self._pressed & _RIGHT_CTRL)
         has_alt = bool(self._pressed & _RIGHT_ALT)

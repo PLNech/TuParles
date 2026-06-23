@@ -38,6 +38,7 @@ class Bridge(QObject):
 
     toggled = Signal()
     combo_released = Signal(float)  # hotkey combo let go after N seconds
+    cancelled = Signal()  # Esc — abort an in-flight take
     partial = Signal(str)
     final = Signal(str)
     error = Signal(str)
@@ -82,6 +83,20 @@ class Controller(QObject):
             if getattr(self._engine, "supports_partials", False):
                 self._stop_partials.clear()
                 threading.Thread(target=self._partials_loop, daemon=True).start()
+
+    @Slot()
+    def cancel(self) -> None:
+        """Esc: abort the current take. Stop the recorder and DISCARD its
+        audio — no decode, no delivery, nothing recorded. No-op when idle so
+        a global Esc never does anything except dismiss a live take."""
+        if not self._recorder.recording:
+            return
+        self._press_started_take = False
+        self._stop_partials.set()
+        self._recorder.stop()  # return value dropped on purpose
+        self._bubble.cancel()
+        self._bridge.state.emit("idle")
+        print("take cancelled (Esc)")
 
     @Slot(float)
     def on_combo_release(self, held_s: float) -> None:
@@ -211,6 +226,7 @@ def run() -> None:
 
     bridge.toggled.connect(controller.toggle)
     bridge.combo_released.connect(controller.on_combo_release)
+    bridge.cancelled.connect(controller.cancel)
     bridge.partial.connect(bubble.set_partial)
     bridge.final.connect(bubble.show_final)
     bridge.error.connect(bubble.show_error)
@@ -236,6 +252,7 @@ def run() -> None:
     listener = HotkeyListener(
         on_toggle=bridge.toggled.emit,
         on_combo_release=bridge.combo_released.emit,
+        on_cancel=bridge.cancelled.emit,
     )
     listener.start()
     app.aboutToQuit.connect(listener.stop)
