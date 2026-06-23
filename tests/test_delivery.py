@@ -2,10 +2,13 @@ import subprocess
 
 from tuparles import delivery
 from tuparles.delivery import (
+    MAX_CHUNK_CHARS,
     PASTE_THRESHOLD_CHARS,
+    _chunk_for_paste,
     _focus_is_terminal,
     _focus_wm_class,
     _is_terminal,
+    _should_chunk,
     _should_paste,
     _type_into_focus,
     _wayland_paste,
@@ -48,6 +51,71 @@ class TestShouldPaste:
 
     def test_newlines_are_typable(self):
         assert not _should_paste("line one\nline two")
+
+
+class TestShouldChunk:
+    def test_short_single_line_is_not_chunked(self):
+        # The common case: a sentence pastes in one shot, unchanged.
+        assert not _should_chunk("juste une phrase courte, rien de spécial")
+
+    def test_long_text_is_chunked(self):
+        assert _should_chunk("x" * (MAX_CHUNK_CHARS + 1))
+
+    def test_multiline_is_chunked_even_when_short(self):
+        # An editor collapses ANY multi-line paste into "[Pasted text]",
+        # length aside — so two short lines still paste progressively.
+        assert _should_chunk("ligne une\nligne deux")
+
+
+class TestChunkForPaste:
+    """Progressive-paste splitter: paragraph-first, rejoins byte-for-byte,
+    no text piece carries a newline, each piece within the cap."""
+
+    SAMPLES = [
+        "",
+        "one short line",
+        "a\nb\nc",
+        "para one.\n\npara two, a bit longer but still small.",
+        "word " * 200,                      # long, spaces to break on
+        "x" * (MAX_CHUNK_CHARS * 3 + 7),    # long, NO break → hard cuts
+        "Phrase une. Phrase deux! Phrase trois? Et fin." * 20,
+        "trailing newline\n",
+        "\nleading newline",
+        "é" * (MAX_CHUNK_CHARS + 50),       # non-ASCII, still split by length
+    ]
+
+    def test_rejoins_to_the_original_exactly(self):
+        for s in self.SAMPLES:
+            assert "".join(_chunk_for_paste(s)) == s, repr(s)
+
+    def test_no_text_piece_contains_a_newline(self):
+        # Newlines are emitted as their own one-char pieces; a text piece with
+        # an embedded newline would itself trip the multi-line collapse.
+        for s in self.SAMPLES:
+            for piece in _chunk_for_paste(s):
+                assert piece == "\n" or "\n" not in piece, repr(piece)
+
+    def test_pieces_within_the_cap(self):
+        for s in self.SAMPLES:
+            for piece in _chunk_for_paste(s):
+                assert len(piece) <= MAX_CHUNK_CHARS, repr(piece)
+
+    def test_short_text_is_one_piece(self):
+        assert _chunk_for_paste("a single short line") == ["a single short line"]
+
+    def test_newline_becomes_its_own_piece(self):
+        assert _chunk_for_paste("a\nb") == ["a", "\n", "b"]
+
+    def test_blank_line_preserved_as_two_newline_pieces(self):
+        assert _chunk_for_paste("a\n\nb") == ["a", "\n", "\n", "b"]
+
+    def test_long_paragraph_breaks_after_a_sentence_end(self):
+        # Two sentences just over the cap should split at the sentence
+        # boundary, not mid-word.
+        first = "Première phrase qui occupe de la place. "
+        second = "x" * MAX_CHUNK_CHARS
+        chunks = _chunk_for_paste(first + second)
+        assert chunks[0] == first  # broke right after ". "
 
 
 class TestNoTypeFallback:
@@ -290,3 +358,60 @@ class TestBeforePasteHook:
 
         delivery.deliver("hi", "Alacritty|Alacritty", before_paste=hook)
         assert seen == {"focus": "Alacritty|Alacritty", "hook": hook}
+
+
+class TestChunkedDelivery:
+    """Long/multi-line text is pasted in pieces so an editor can't fold it into
+    "[Pasted text]" before you reread it — still paste-only, full text left on
+    the clipboard as the manual-paste backup."""
+
+    def _no_sleep(self, monkeypatch):
+        monkeypatch.setattr(delivery.time, "sleep", lambda _s: None)
+
+    def test_x11_long_text_pastes_in_pieces_never_types(self, monkeypatch):
+        self._no_sleep(monkeypatch)
+        monkeypatch.setattr(delivery, "_WAYLAND", False)
+        clips, keys, typed = [], [], []
+
+        def fake_run(argv, *a, **kw):
+            if argv[:1] == ["xsel"]:
+                clips.append(kw.get("input", b"").decode())
+            elif argv[:2] == ["xdotool", "key"]:
+                keys.append(argv[2])
+            elif argv[:2] == ["xdotool", "type"]:
+                typed.append(argv)
+            return subprocess.CompletedProcess(argv, 0, stdout="firefox\n")
+
+        monkeypatch.setattr(delivery.subprocess, "run", fake_run)
+
+        text = "Première phrase. " + "mot " * 200  # > cap, multi-piece
+        delivery.deliver(text, focus_class="firefox|Navigator")
+
+        assert not typed                      # never typed, even chunked
+        assert len(keys) >= 2                 # several paste keystrokes
+        assert set(keys) == {"ctrl+v"}        # firefox → plain Ctrl+V
+        assert clips[-1] == text              # full text restored last
+
+    def test_wayland_chunked_hides_bubble_once_then_pastes_pieces(self, monkeypatch):
+        self._no_sleep(monkeypatch)
+        monkeypatch.setattr(delivery, "_WAYLAND", True)
+        monkeypatch.setattr(delivery.shutil, "which", lambda _: "/usr/bin/ydotool")
+        hides, keys = [], []
+
+        def fake_run(argv, *a, **kw):
+            if argv[:2] == ["ydotool", "key"]:
+                keys.append(argv[-1])
+            return subprocess.CompletedProcess(argv, 0)
+
+        monkeypatch.setattr(delivery.subprocess, "run", fake_run)
+        monkeypatch.setattr(delivery, "to_clipboard", lambda _t: None)
+
+        text = "ligne une\n" + "x" * (MAX_CHUNK_CHARS + 5)  # multi-line + long
+        delivery.deliver(
+            text, focus_class="firefox|Navigator",
+            before_paste=lambda: hides.append(1),
+        )
+
+        assert hides == [1]                   # bubble hidden exactly once
+        assert len(keys) >= 2                 # several paste keystrokes
+        assert set(keys) == {"ctrl+v"}        # firefox → plain Ctrl+V
