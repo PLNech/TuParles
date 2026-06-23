@@ -32,13 +32,15 @@ _META_COLUMNS = [
 ]
 
 
-def _db_path() -> Path:
+def db_path() -> Path:
+    """The local tuparles data store. Shared with telemetry's `events` table —
+    one file, one place that stays on the machine (utterances + usage)."""
     base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
     return base / "tuparles" / "history.db"
 
 
 def _conn() -> sqlite3.Connection:
-    path = _db_path()
+    path = db_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path)
     conn.execute(_SCHEMA)
