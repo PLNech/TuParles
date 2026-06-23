@@ -101,20 +101,32 @@ def feature_enabled(name: str, default: bool) -> bool:
     return default if val is None else bool(val)
 
 
-def apply_syntax(text: str, ctx: SyntaxContext | None = None) -> str:
+def apply_syntax(
+    text: str,
+    ctx: SyntaxContext | None = None,
+    on_fire: Callable[[str], None] | None = None,
+) -> str:
     """Run every enabled feature, in order, threading `ctx`.
 
     Best-effort per feature: one that raises is logged and skipped, never
     taking down the take (same contract as delivery). An empty registry is the
     identity, so this is safe to call before any family exists.
+
+    `on_fire(name)` is an optional side-effect hook, called when a feature
+    actually changed the text. The daemon injects telemetry through it; the
+    eval harness passes nothing, so this function stays pure for measurement.
     """
     if ctx is None:
         ctx = SyntaxContext()
     for feature in _ordered():
         if not feature_enabled(feature.name, feature.default_enabled):
             continue
+        before = text
         try:
             text = feature.apply(text, ctx)
         except Exception as exc:
             print(f"syntax feature {feature.name!r} failed: {str(exc)[:120]}")
+            continue
+        if on_fire is not None and text != before:
+            on_fire(feature.name)
     return text

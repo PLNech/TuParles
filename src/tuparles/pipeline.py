@@ -12,6 +12,8 @@ Whatever the daemon does to `Transcription.text` to get user-facing text, it
 does by calling this. Keep it that way.
 """
 
+from collections.abc import Callable
+
 from tuparles import syntax_features  # noqa: F401  (import = register families)
 from tuparles.lexicon import apply_lexicon
 from tuparles.punctuation import apply_spoken_punctuation
@@ -19,14 +21,21 @@ from tuparles.repeats import collapse_repeats
 from tuparles.syntax import SyntaxContext, apply_syntax
 
 
-def postprocess(text: str, ctx: SyntaxContext | None = None) -> str:
+def postprocess(
+    text: str,
+    ctx: SyntaxContext | None = None,
+    on_syntax_fire: Callable[[str], None] | None = None,
+) -> str:
     """Raw ASR text → the exact string the user gets pasted/typed.
 
     Spoken punctuation maps the dictated words first; the lexicon fixes known
     mishears; the spoken-syntax families (#53 — quotes, caps, lists, code) then
     rewrite their triggers; repeat-collapse last, on the near-final text. `ctx`
     carries the output-format target (#58); None → plain, the safe default.
+
+    `on_syntax_fire` is forwarded to the syntax stage as a pure side-effect
+    hook (the daemon records telemetry; the eval harness omits it).
     """
     text = apply_lexicon(apply_spoken_punctuation(text))
-    text = apply_syntax(text, ctx)
+    text = apply_syntax(text, ctx, on_fire=on_syntax_fire)
     return collapse_repeats(text)
