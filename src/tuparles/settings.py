@@ -8,6 +8,7 @@ _DEFAULTS: dict[str, object] = {
     "view": "minimal",  # minimal = one-line pill | full = whole wrapped text
     "languages": [],  # ISO codes; empty = auto-detect among all 100
     "input_device": None,  # mic name; None/empty = system default
+    "telemetry_enabled": True,  # LOCAL usage introspection; opt-out, never leaves the box
 }
 
 
