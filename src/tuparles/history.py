@@ -110,6 +110,17 @@ def last() -> str | None:
     return rows[0][1] if rows else None
 
 
+def texts(limit: int | None = None) -> list[str]:
+    """Just the transcript strings, newest first — for local nlp analysis."""
+    sql = "SELECT text FROM dictations ORDER BY id DESC"
+    params: list = []
+    if limit is not None:
+        sql += " LIMIT ?"
+        params.append(limit)
+    with closing(_conn()) as conn:
+        return [row[0] for row in conn.execute(sql, params).fetchall()]
+
+
 def summarize() -> dict:
     """Aggregates for `tuparles stats` — everything stays on this machine."""
     with closing(_conn()) as conn:
