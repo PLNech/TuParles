@@ -24,6 +24,14 @@ ruff = "^0.9"
 [tool.poetry.scripts]
 tuparles = "tuparles.cli:main"
 
+[tool.pytest.ini_options]
+# `gpu` tests need a live CUDA device + generated WAVs; deselected by default
+# so the pure-python suite stays CI-portable. Run them with `pytest -m gpu`.
+addopts = "-m 'not gpu'"
+markers = [
+    "gpu: requires a CUDA device and generated fixtures (the code-switch eval)",
+]
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

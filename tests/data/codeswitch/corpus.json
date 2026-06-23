@@ -1,0 +1,168 @@
+{
+  "version": 1,
+  "description": "Adversarial FR-EN code-switch corpus for TuParles. Each case is a sentence a French-speaking developer would actually dictate, chosen because an English token sits exactly where French phonetics wants to swallow it. `must_contain` = the token that MUST survive (the gate); `must_not_contain` = the plausible misfire it collapses into. The reference `text` doubles as the WER reference. Seeded from real misfires — grow it every time the decoder embarrasses itself.",
+  "cases": [
+    {
+      "id": "fanout-not-fais-un-air",
+      "text": "On disait fan out les agents, c'est un bon exemple de parallélisme.",
+      "difficulty": "hard",
+      "category": "en-verb-borrow",
+      "must_contain": ["fan out"],
+      "must_not_contain": ["fais un air", "fais un fan", "faire un air"],
+      "note": "REAL MISFIRE 2026-06-23. Dictating 'fan out les agents' produced 'tu fais un air de jamais les agents'. The English particle verb collapses into French 'fais un air'. The bug that started this suite."
+    },
+    {
+      "id": "spin-up-workers",
+      "text": "Je vais spin up trois workers pour absorber la charge.",
+      "difficulty": "hard",
+      "category": "en-verb-borrow",
+      "must_contain": ["spin up", "workers"],
+      "must_not_contain": ["speed up", "épingle", "spinup trois"],
+      "note": "'spin up' has no French anchor; easily heard as 'speed up' or frenchified."
+    },
+    {
+      "id": "roll-out-progressif",
+      "text": "On fait un roll out progressif sur dix pour cent du trafic.",
+      "difficulty": "medium",
+      "category": "en-verb-borrow",
+      "must_contain": ["roll out"],
+      "must_not_contain": ["roule out", "roule tout", "roll tout"],
+      "note": "'roll' maps cleanly to French 'roule'; the particle 'out' then drifts to 'tout'."
+    },
+    {
+      "id": "ship-not-chip",
+      "text": "Il faut ship cette feature avant vendredi.",
+      "difficulty": "hard",
+      "category": "homophone",
+      "must_contain": ["ship", "feature"],
+      "must_not_contain": ["chip", "fissure", "shippe cette"],
+      "note": "The #31 case: ship/chip are a minimal pair Whisper routinely confuses; 'feature' drifts to 'fissure'."
+    },
+    {
+      "id": "ship-it-staging",
+      "text": "Le code est clean, on peut ship it maintenant.",
+      "difficulty": "hard",
+      "category": "homophone",
+      "must_contain": ["ship it", "clean"],
+      "must_not_contain": ["chip it", "ship hit", "cline"],
+      "note": "'ship it' run together; also a clean/cline trap."
+    },
+    {
+      "id": "cache-not-cash",
+      "text": "Le cache Redis a expiré, il faut invalider la clé.",
+      "difficulty": "medium",
+      "category": "homophone",
+      "must_contain": ["cache"],
+      "must_not_contain": ["cash", "caché", "cache redis a caché"],
+      "note": "cache (storage) vs cash (money) vs caché (hidden) — three-way French homophone."
+    },
+    {
+      "id": "thread-slack",
+      "text": "Réponds dans le thread Slack, pas en DM.",
+      "difficulty": "medium",
+      "category": "homophone",
+      "must_contain": ["thread", "Slack"],
+      "must_not_contain": ["trède", "trade", "tread", "slaque"],
+      "note": "'thread' (the 'th' is the hardest English phoneme for a French speaker) drifts to trade/tread."
+    },
+    {
+      "id": "review-pull-request-standup",
+      "text": "Tu peux review ma pull request avant le standup ?",
+      "difficulty": "hard",
+      "category": "mid-sentence-switch",
+      "must_contain": ["review", "pull request", "standup"],
+      "must_not_contain": ["boule request", "poule request", "stand up de", "ma revue"],
+      "note": "Dense switch; 'pull request' is already a known mishear (boule/poule request, see lexicon.py)."
+    },
+    {
+      "id": "deploy-rollback-prod",
+      "text": "Le deploy en prod a pété, il faut rollback tout de suite.",
+      "difficulty": "hard",
+      "category": "en-verb-borrow",
+      "must_contain": ["deploy", "rollback", "prod"],
+      "must_not_contain": ["des ploies", "deux ploys", "roule back"],
+      "note": "'deploy' shatters into 'des ploies'; 'rollback' into 'roule back'."
+    },
+    {
+      "id": "meeting-not-mythique",
+      "text": "Le meeting de ce matin a duré une heure de trop.",
+      "difficulty": "medium",
+      "category": "en-noun-sounds-fr",
+      "must_contain": ["meeting"],
+      "must_not_contain": ["mythique", "mi-temps", "mi-thing"],
+      "note": "'meeting' lands near French 'mythique'."
+    },
+    {
+      "id": "scale-five-nines",
+      "text": "On doit scale le service pour tenir les five nines.",
+      "difficulty": "hard",
+      "category": "numbers-switch",
+      "must_contain": ["scale", "five nines"],
+      "must_not_contain": ["squelette", "scaler le", "faille naïne", "5 9"],
+      "note": "'scale' (verb borrow) + 'five nines' (English number-as-jargon, not to be digitised)."
+    },
+    {
+      "id": "latency-two-hundred-p99",
+      "text": "La latency est montée à two hundred milliseconds sur le p99.",
+      "difficulty": "hard",
+      "category": "numbers-switch",
+      "must_contain": ["latency", "two hundred", "p99"],
+      "must_not_contain": ["la tension", "la latence est", "tou hundred", "p 99"],
+      "note": "English number words mid-French; 'latency' drifts to 'la tension' / gets translated to 'latence'."
+    },
+    {
+      "id": "commit-not-comite",
+      "text": "Fais un commit atomique et push sur la branche feature.",
+      "difficulty": "medium",
+      "category": "homophone",
+      "must_contain": ["commit", "push", "feature"],
+      "must_not_contain": ["comité", "comme it", "pouche", "pousse sur"],
+      "note": "commit/comité; push/pousse — both translate-or-mishear traps."
+    },
+    {
+      "id": "ci-api-llm-gpu",
+      "text": "La CI tourne l'API et le LLM en local sur le GPU.",
+      "difficulty": "hard",
+      "category": "acronyms",
+      "must_contain": ["CI", "API", "LLM", "GPU"],
+      "must_not_contain": ["ci-elle", "a pi ail", "elle elle aime", "gpu en local"],
+      "note": "Spoken acronyms in a French frame; each can be spelled out phonetically."
+    },
+    {
+      "id": "backend-frontend-react",
+      "text": "Le bug est côté backend, pas dans le frontend React.",
+      "difficulty": "medium",
+      "category": "compound-borrow",
+      "must_contain": ["backend", "frontend", "React"],
+      "must_not_contain": ["back and", "front and", "riacte", "riac"],
+      "note": "Compound English nouns split at the seam (back and / front and)."
+    },
+    {
+      "id": "release-candidate-freeze",
+      "text": "On tag la release candidate et on freeze le code.",
+      "difficulty": "medium",
+      "category": "en-verb-borrow",
+      "must_contain": ["release", "freeze", "tag"],
+      "must_not_contain": ["relâche", "frise", "tague la", "freez"],
+      "note": "'release' near 'relâche'; 'freeze' near 'frise'."
+    },
+    {
+      "id": "quick-fix-green-rollout",
+      "text": "Bref, je fais le quick fix, je ship en staging, et si c'est green on roll out en prod.",
+      "difficulty": "hard",
+      "category": "mid-sentence-switch",
+      "must_contain": ["quick fix", "ship", "staging", "green", "roll out"],
+      "must_not_contain": ["chip", "stagiaire", "graine", "roule out", "kik fix"],
+      "note": "Five switches in one sentence — the stress test. 'staging' near 'stagiaire', 'green' near 'graine'."
+    },
+    {
+      "id": "merge-conflict-rebase",
+      "text": "J'ai un merge conflict, je vais rebase sur main.",
+      "difficulty": "medium",
+      "category": "compound-borrow",
+      "must_contain": ["merge conflict", "rebase", "main"],
+      "must_not_contain": ["merge conflit", "rebète", "rebasse", "sur maine"],
+      "note": "'conflict' vs French 'conflit'; 'rebase' has no anchor."
+    }
+  ]
+}

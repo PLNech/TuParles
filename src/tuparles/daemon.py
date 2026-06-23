@@ -30,9 +30,7 @@ from tuparles.config import (
 from tuparles.commands import Command, parse as parse_command
 from tuparles.delivery import capture_focus_class, deliver, execute_command
 from tuparles.engine import load_engine
-from tuparles.lexicon import apply_lexicon
-from tuparles.punctuation import apply_spoken_punctuation
-from tuparles.repeats import collapse_repeats
+from tuparles.pipeline import postprocess
 
 
 class Bridge(QObject):
@@ -170,9 +168,7 @@ class Controller(QObject):
                 result = self._engine.transcribe(audio)
                 decode_s = time.monotonic() - t_decode
             t_post = time.monotonic()
-            text = collapse_repeats(
-                apply_lexicon(apply_spoken_punctuation(result.text))
-            )
+            text = postprocess(result.text)
             post_s = time.monotonic() - t_post
             # Command layer: a take is EITHER an edit command or text, never
             # both. A literal-escape ('dis "efface"') unwraps back to text.

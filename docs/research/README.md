@@ -46,6 +46,11 @@ listens → you get notes). Five orthogonal dimensions:
   mode" foil, the command-vs-dictation problem, why the safety is *structural*
   (doubled trigger, length guard, conditional literal-escape) rather than a
   confidence threshold, the v1 grammar, and what was deliberately left out.
+- [A measurement substrate for code-switching](2026-06-23-codeswitch-eval.md) —
+  the adversarial eval suite (#51): why a real misfire (*fan out* → *fais un
+  air*) drove building a yardstick before the #49 fine-tune, the corpus of
+  homophone/borrow traps, multi-engine TTS with cross-lingual voicing, and the
+  slots-gate + WER-trend scoring. The measurement the moat (#34, #49) needs.
 
 ## The story so far (one paragraph, for the eventual post)
 
