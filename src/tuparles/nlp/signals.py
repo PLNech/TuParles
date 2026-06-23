@@ -46,7 +46,9 @@ class EmbeddingBackend:
 class FastEmbedBackend(EmbeddingBackend):
     """ONNX, CPU-native, no torch -- the lean backend we'd actually ship."""
 
-    def __init__(self, model: str = "intfloat/multilingual-e5-small") -> None:
+    def __init__(
+        self, model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    ) -> None:
         from fastembed import TextEmbedding
 
         self.name = f"fastembed:{model.split('/')[-1]}"

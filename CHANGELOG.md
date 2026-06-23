@@ -1,5 +1,43 @@
 # Changelog
 
+## Sprint 6 — 2026-06-24 · Le moteur qui lit ton code
+
+### Added
+- **Corpus-analysis engine** (`src/tuparles/nlp/`, #64–#67) — the foundation of
+  codebase-aware dict-seeding (#54). A source-agnostic pipeline: `sources`
+  (code / text / chat-history adapters → a typed-term `Document`), `parse`
+  (Python + Markdown ASTs with a hierarchical weight table — dep 10, def 6, H1
+  5, ident 3, comment 1; manifests yield dep names; other languages a coarse
+  sweep), `features` (per-term counts/salience/flags + peak TF-IDF), `signals`
+  + `fuse` (symbol / TF-IDF / embedding rankers combined by RRF).
+- **Three analysis engines** on that core (`nlp/engines/`): **dictseed** (#54 —
+  `whisper_risk` × RRF prominence → STT seed candidates), **keywords** (YAKE +
+  KeyBERT-method-on-fastembed + corpus tag clouds), **cluster** (KMeans themes).
+- **First real EDA** on TuParles + AlgoliaSaaS (51,652 terms, 39,342
+  candidates): `scripts/nlp_eda.py`, `notebooks/dictseed_eda.ipynb`, and a build
+  note (`docs/research/2026-06-24-codebase-aware-dict-seeding-eda.md`) seeding
+  the blog (#42).
+
+### Infra
+- **Quality tooling** brought to the 2026 baseline: **mypy** (CI gate, Qt
+  frontend grandfathered), **pytest-cov**, **pre-commit** (ruff + mypy +
+  hygiene), stricter **ruff** (I/B/UP/SIM/C4/RUF). Whole tree mypy/ruff-clean.
+- **Dependency groups**: light, portable NLP deps (markdown-it / scikit-learn /
+  yake) in a CI-installed `nlp` group; heavy embedding backends (fastembed,
+  sentence-transformers/torch) quarantined in an optional `embed` group, their
+  tests behind an `embed` marker so the cross-OS matrix never touches torch.
+
+### Doctrine
+- **Own the spine, rent the algorithms** — no library models code symbols *and*
+  their structural provenance, so we keep the thin typed-term/AST spine ours and
+  rent TF-IDF/clustering/keyphrases from scikit-learn / YAKE / fastembed.
+- **The corpus had opinions, measured before tuned:** raw symbol-salience is
+  volume-biased (surfaces `const`/`std`/`the` on a big C++ repo); TF-IDF rescues
+  it (0/15 top-list overlap); the three signals are near-independent (|corr|
+  ≤0.15, Spearman vs embed ≤0.08) — which is exactly why RRF fusion pays. And
+  the embedding **clusters the noise for free** (test/assert macros collapse
+  into their own cluster), pointing at cluster-based denoising over a stoplist.
+
 ## Sprint 5 — 2026-06-24 · Mesurer le code-switch, et poser la grammaire parlée
 
 ### Added

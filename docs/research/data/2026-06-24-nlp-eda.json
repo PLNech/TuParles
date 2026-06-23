@@ -1,0 +1,384 @@
+{
+  "repos": [
+    "TuParles",
+    "AlgoliaSaaS"
+  ],
+  "discovery": {
+    "TuParles": {
+      "n_files": 96,
+      "mineable": 79,
+      "by_kind": {
+        "markdown": 16,
+        "code": 4,
+        "manifest": 1,
+        "python": 58
+      },
+      "skipped": {
+        "noise": 10,
+        "data": 7
+      }
+    },
+    "AlgoliaSaaS": {
+      "n_files": 8169,
+      "mineable": 2756,
+      "by_kind": {
+        "code": 2468,
+        "markdown": 132,
+        "python": 155,
+        "manifest": 1
+      },
+      "skipped": {
+        "noise": 4470,
+        "data": 943
+      }
+    }
+  },
+  "n_terms": 51652,
+  "n_candidates": 39342,
+  "salience_by_srctype": {
+    "md_h1": 2215.0,
+    "md_code_inline": 19947.0,
+    "comment": 467249.0,
+    "code_ident": 1959632.0,
+    "md_h2": 4844.0,
+    "md_prose": 92357.0,
+    "md_h3": 3681.0,
+    "docstring": 19843.5,
+    "ident": 93639.0,
+    "md_hx": 1790.0,
+    "md_code_fence": 10324.0,
+    "def_name": 9768.0,
+    "import": 3680.0,
+    "dep": 400.0
+  },
+  "top_seeds": [
+    {
+      "surface": "GeoRecord",
+      "seed_score": 0.017725409836065575,
+      "risk": 0.6000000000000001,
+      "salience": 6596.0,
+      "tfidf": 65.07355309637852,
+      "signals": {
+        "symbol": 0.008928571428571428,
+        "tfidf": 0.01639344262295082
+      }
+    },
+    {
+      "surface": "fromUTF8",
+      "seed_score": 0.016299283154121866,
+      "risk": 0.8,
+      "salience": 5606.0,
+      "tfidf": 47.71094834994215,
+      "signals": {
+        "symbol": 0.008064516129032258,
+        "tfidf": 0.011111111111111112
+      }
+    },
+    {
+      "surface": "LOAD_INVALID_JSON_CHECK_UNDEFINED",
+      "seed_score": 0.016268972562755397,
+      "risk": 0.9499999999999998,
+      "salience": 665.0,
+      "tfidf": 56.181159139220185,
+      "signals": {
+        "symbol": 0.0017513134851138354,
+        "tfidf": 0.015151515151515152
+      }
+    },
+    {
+      "surface": "LOAD_JSON_SETTINGS",
+      "seed_score": 0.015535329985652796,
+      "risk": 0.9499999999999998,
+      "salience": 533.0,
+      "tfidf": 54.35833132338894,
+      "signals": {
+        "symbol": 0.0014347202295552368,
+        "tfidf": 0.014705882352941176
+      }
+    },
+    {
+      "surface": "COMMON_PREFIX",
+      "seed_score": 0.015155109489051093,
+      "risk": 0.9499999999999998,
+      "salience": 543.0,
+      "tfidf": 51.94756357405361,
+      "signals": {
+        "symbol": 0.00145985401459854,
+        "tfidf": 0.014285714285714285
+      }
+    },
+    {
+      "surface": "COMMON_SUFFIX",
+      "seed_score": 0.014957356951021997,
+      "risk": 0.9499999999999998,
+      "salience": 542.0,
+      "tfidf": 51.94756357405361,
+      "signals": {
+        "symbol": 0.001455604075691412,
+        "tfidf": 0.014084507042253521
+      }
+    },
+    {
+      "surface": "CPPUNIT_ASSERT_EQUAL",
+      "seed_score": 0.014476510112299033,
+      "risk": 0.9499999999999998,
+      "salience": 19031.0,
+      "tfidf": 31.618417484937126,
+      "signals": {
+        "symbol": 0.014084507042253521,
+        "tfidf": 0.0009560229445506692
+      }
+    },
+    {
+      "surface": "idxCompiler",
+      "seed_score": 0.014293915040183697,
+      "risk": 0.6000000000000001,
+      "salience": 2874.0,
+      "tfidf": 55.59959227604238,
+      "signals": {
+        "symbol": 0.005494505494505495,
+        "tfidf": 0.014925373134328358
+      }
+    },
+    {
+      "surface": "CPPUNIT_ASSERT",
+      "seed_score": 0.013932571684587813,
+      "risk": 0.9499999999999998,
+      "salience": 18585.0,
+      "tfidf": 29.205019633352947,
+      "signals": {
+        "symbol": 0.013888888888888888,
+        "tfidf": 0.0005865102639296188
+      }
+    },
+    {
+      "surface": "readBinKeys",
+      "seed_score": 0.013450816407805656,
+      "risk": 0.6000000000000001,
+      "salience": 1480.0,
+      "tfidf": 59.633059073027525,
+      "signals": {
+        "symbol": 0.0030864197530864196,
+        "tfidf": 0.016129032258064516
+      }
+    },
+    {
+      "surface": "scheduledJobs",
+      "seed_score": 0.013287513542795235,
+      "risk": 0.7000000000000001,
+      "salience": 672.0,
+      "tfidf": 56.255169087794286,
+      "signals": {
+        "symbol": 0.0017605633802816902,
+        "tfidf": 0.015384615384615385
+      }
+    },
+    {
+      "surface": "LOAD_JSON_SETTINGS_RT",
+      "seed_score": 0.013083918485275485,
+      "risk": 0.9499999999999998,
+      "salience": 303.0,
+      "tfidf": 49.70938705753871,
+      "signals": {
+        "symbol": 0.0009354536950420954,
+        "tfidf": 0.012658227848101266
+      }
+    },
+    {
+      "surface": "SETTING_NAME",
+      "seed_score": 0.013018867924528301,
+      "risk": 0.9499999999999998,
+      "salience": 157.0,
+      "tfidf": 49.81725857989553,
+      "signals": {
+        "symbol": 0.0005390835579514825,
+        "tfidf": 0.012987012987012988
+      }
+    },
+    {
+      "surface": "currentUserKey",
+      "seed_score": 0.012556306306306308,
+      "risk": 0.7000000000000001,
+      "salience": 1199.0,
+      "tfidf": 50.51717610837806,
+      "signals": {
+        "symbol": 0.002688172043010753,
+        "tfidf": 0.013513513513513514
+      }
+    },
+    {
+      "surface": "CHECK_NEXT",
+      "seed_score": 0.01251174812030075,
+      "risk": 0.8499999999999999,
+      "salience": 305.0,
+      "tfidf": 49.81725857989553,
+      "signals": {
+        "symbol": 0.0009398496240601503,
+        "tfidf": 0.013157894736842105
+      }
+    },
+    {
+      "surface": "partialUpdateOk",
+      "seed_score": 0.011107559107559109,
+      "risk": 0.7000000000000001,
+      "salience": 328.0,
+      "tfidf": 50.336426861500996,
+      "signals": {
+        "symbol": 0.000999000999000999,
+        "tfidf": 0.013333333333333334
+      }
+    },
+    {
+      "surface": "content_type",
+      "seed_score": 0.011076980148748665,
+      "risk": 0.65,
+      "salience": 485.0,
+      "tfidf": 50.91602636981484,
+      "signals": {
+        "symbol": 0.001321003963011889,
+        "tfidf": 0.0136986301369863
+      }
+    },
+    {
+      "surface": "IndexSetting",
+      "seed_score": 0.011062683367185737,
+      "risk": 0.7000000000000001,
+      "salience": 1000.0,
+      "tfidf": 48.84083165160904,
+      "signals": {
+        "symbol": 0.002369668246445498,
+        "tfidf": 0.011904761904761904
+      }
+    },
+    {
+      "surface": "J_SEQ",
+      "seed_score": 0.010933410151359962,
+      "risk": 0.8499999999999999,
+      "salience": 259.0,
+      "tfidf": 48.41921084951452,
+      "signals": {
+        "symbol": 0.0008250825082508251,
+        "tfidf": 0.011494252873563218
+      }
+    },
+    {
+      "surface": "FACE",
+      "seed_score": 0.01084368530020704,
+      "risk": 0.5,
+      "salience": 1318.5,
+      "tfidf": 53.06992411994395,
+      "signals": {
+        "symbol": 0.002857142857142857,
+        "tfidf": 0.014492753623188406
+      }
+    },
+    {
+      "surface": "STRING_COMPARE",
+      "seed_score": 0.01069170298214133,
+      "risk": 0.9499999999999998,
+      "salience": 2017.0,
+      "tfidf": 43.72534678575982,
+      "signals": {
+        "symbol": 0.004016064257028112,
+        "tfidf": 0.0070921985815602835
+      }
+    },
+    {
+      "surface": "LOAD_INVALID_JSON_CHECK_SET",
+      "seed_score": 0.010494976507047884,
+      "risk": 0.9499999999999998,
+      "salience": 215.0,
+      "tfidf": 46.88925344773671,
+      "signals": {
+        "symbol": 0.0006997900629811056,
+        "tfidf": 0.01020408163265306
+      }
+    },
+    {
+      "surface": "PARSE_ARGUMENTS",
+      "seed_score": 0.0101791631592309,
+      "risk": 0.9499999999999998,
+      "salience": 207.0,
+      "tfidf": 46.57781822506163,
+      "signals": {
+        "symbol": 0.0006747638326585695,
+        "tfidf": 0.009900990099009901
+      }
+    },
+    {
+      "surface": "compiledData",
+      "seed_score": 0.009936820589055095,
+      "risk": 0.7000000000000001,
+      "salience": 898.0,
+      "tfidf": 47.385989830965656,
+      "signals": {
+        "symbol": 0.002183406113537118,
+        "tfidf": 0.010638297872340425
+      }
+    },
+    {
+      "surface": "size_t",
+      "seed_score": 0.00990796954371643,
+      "risk": 0.55,
+      "salience": 24922.0,
+      "tfidf": 12.33039536333962,
+      "signals": {
+        "symbol": 0.014925373134328358,
+        "tfidf": 3.005259203606311e-05
+      }
+    }
+  ],
+  "disagreement": {
+    "symbol_top15": [
+      "const",
+      "algolia",
+      "std",
+      "if",
+      "the",
+      "return",
+      "size_t",
+      "include",
+      "auto",
+      "void",
+      "cppunit_assert_equal",
+      "cppunit_assert",
+      "string",
+      "of",
+      "size"
+    ],
+    "tfidf_top15": [
+      "georecord",
+      "readbinkeys",
+      "airport",
+      "intl",
+      "scheduledjobs",
+      "load_invalid_json_check_undefined",
+      "idxcompiler",
+      "load_json_settings",
+      "face",
+      "common_prefix",
+      "common_suffix",
+      "do_curl",
+      "content_type",
+      "currentuserkey",
+      "partialupdateok"
+    ]
+  },
+  "risk": {
+    "n_candidates": 39342,
+    "buckets": {
+      "0.0-0.2": 4125,
+      "0.2-0.4": 5220,
+      "0.4-0.6": 5026,
+      "0.6-0.8": 19099,
+      "0.8-1.0": 5872
+    },
+    "mean_risk_identifier": 0.6259058658646969,
+    "mean_risk_prose": 0.09924406047516199
+  },
+  "correlations": {
+    "salience~tfidf": 0.02767271340070483,
+    "salience~risk": -0.061077047214250814,
+    "tfidf~risk": 0.1525994868366427
+  }
+}
