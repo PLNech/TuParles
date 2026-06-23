@@ -1,5 +1,69 @@
 # Changelog
 
+## Sprint 2 — 2026-06-23 · Le grand débogage: code-switching réel, gel terrassé, voix sous contrôle
+
+### Added
+- Notification-area tray: Dicter, Copier la dernière, Historique submenu,
+  Réglages…, Affichage complet toggle, À propos, Redémarrer, Quitter (#12)
+- Settings dialog: searchable checklist of Whisper's 100 languages,
+  selected-first, hot-reloaded per decode (#20)
+- Local telemetry + `tuparles stats`: per-take audio/decode/deliver times,
+  WPM, chars, detected language; schema migrates old DBs in place (#27)
+- Vocab tooling — `tuparles vocab suggest|review|add`: mines your own
+  history for tech tokens + proper nouns, suggestions-only, hot-reloaded (#22)
+- Hold-to-talk: hold the combo past 0.5 s = PTT (release stops), tap still
+  toggles; a hold never kills a take it didn't start (#23)
+- Audio normalization before STT: peak-normalize + DC-offset removal so
+  quiet takes decode better (no-op on loud audio, never clips)
+- **Esc cancels an in-flight take**: discard audio, no decode/delivery;
+  Ctrl+C intentionally left ungrabbed
+- View toggle: minimal pill ↔ full wrapped text (#14)
+- README refresh (GPU-first architecture, features, settings screenshot, CLI)
+
+### Changed
+- **Code-switching is real now**: multi-language selection →
+  `multilingual=True` (per-segment language detection). Was forcing one
+  language for the whole take, frenchifying the other ("can I switch to
+  English" → "peux-je changer en anglais"). 1 selected = forced, 0 = auto,
+  2+ = code-switch. Removed the detect-then-snap path (#20)
+- Final decode runs through `BatchedInferencePipeline` (VAD-chunked,
+  parallel) — long takes land in ~1 s instead of freezing for a minute (#26)
+- Delivery: paste is unconditional for paste-destined text (long OR
+  non-ASCII), never re-typed; clipboard is the guarantee
+- Bubble follows the cursor's screen, sticky across all virtual desktops (#25)
+
+### Fixed
+- **The freeze saga** (#26, #29): paint-loop trim was O(n)·30fps →
+  memoized bisect; partials capped at 800 chars; glossary prompt echo in
+  the live preview dropped (#28); **paste-then-type-during-freeze** — a
+  paste-destined text whose `xdotool key ctrl+v` timed out on a saturated
+  X server fell back to re-typing 1127 accented chars → corruption + a
+  3-min MappingNotify keymap storm; **non-ASCII typing** on a us-layout
+  remapped the keymap per char, freezing the whole desktop
+- Whisper repetition loops collapsed deterministically (#24)
+- Historique submenu flash-and-close: never rebuild a DBus-exported menu
+  while shown — eager, change-aware rebuild (#12)
+- Keyboard lock during typing: explicit modifier keyup, dropped
+  `--clearmodifiers` (xdotool#43) (#13)
+
+### Infra
+- Single-instance flock; in-place `execv` restart (take-safe); launch via
+  `systemd-run --user` so stdout reaches journald; line-buffered stdout;
+  GUI-stall watchdog prints `GUI stall: blocked ~Xs`
+- Open-sourced: identity scrub (filter-repo mailmap), repo flipped PUBLIC,
+  MIT, v0.1.0 release + `curl | bash` installer, GitHub Actions CI (#16-#19)
+
+### Doctrine
+- **No denoising**: Whisper is noise-robust by design; over-cleaning adds
+  artifacts and hurts the decode. Quiet speech needs *level*, not cleaning.
+- **No type-fallback for paste-destined text**: typing long/accented text
+  on a mismatched layout corrupts it AND triggers the keymap-remap freeze.
+- **`multilingual=True` is the code-switch switch**, not language-forcing.
+- **Forensics before theory**: read the journal `take:` breakdown + history
+  DB telemetry first; three freezes were misattributed before the journal
+  named the real cause. faster-whisper exposes `avg_logprob`+word probs
+  natively (no spaCy ever installed) — perplexity is one field away.
+
 ## Sprint 1 — 2026-06-11 · Première dictée: from empty dir to GPU-powered dictation
 
 ### Added

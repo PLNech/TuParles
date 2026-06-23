@@ -34,5 +34,143 @@
     "subject": "Build text delivery (xdotool type into focus + clipboard backup)",
     "completedAt": "2026-06-11",
     "learnings": "xdotool type at 12ms/key reads as a UI freeze on long transcripts; also never self-test type-into-focus from a background agent — it lands in whatever window the user has open."
+  },
+  {
+    "id": "5",
+    "subject": "Build streaming transcription engine with partial results",
+    "completedAt": "2026-06-23",
+    "learnings": "Greedy beam=1 partials, condition_on_previous_text=False so a mishear can't snowball across calls; final re-decodes with full beam."
+  },
+  {
+    "id": "6",
+    "subject": "Build global hotkey daemon (RCtrl+RAlt)",
+    "completedAt": "2026-06-23",
+    "learnings": "pynput observes without suppressing — global keys still reach focused apps; toggle+hold-PTT+Esc all ride one passive listener."
+  },
+  {
+    "id": "7",
+    "subject": "Build floating bubble UI (waveform + live transcript)",
+    "completedAt": "2026-06-23",
+    "learnings": "Frameless translucent always-on-top + WA_ShowWithoutActivating so it never steals focus from the dictation target."
+  },
+  {
+    "id": "10",
+    "subject": "Build transcript history (local store + search CLI)",
+    "completedAt": "2026-06-23",
+    "learnings": "SQLite in XDG data home survives repo moves; every call opens a fresh connection (the cross-restart story)."
+  },
+  {
+    "id": "12",
+    "subject": "Build notification-area tray menu",
+    "completedAt": "2026-06-23",
+    "learnings": "DBus/AppIndicator: aboutToShow is unreliable AND rebuilding a shown menu invalidates its layout (flash-close). Build eager, refresh change-aware."
+  },
+  {
+    "id": "13",
+    "subject": "Fix keyboard lock during post-recording typing",
+    "completedAt": "2026-06-23",
+    "learnings": "xdotool --clearmodifiers re-presses modifiers after typing (xdotool#43) → stuck AltGr feels like a locked keyboard; explicit keyup instead."
+  },
+  {
+    "id": "14",
+    "subject": "Add view setting: minimal vs full",
+    "completedAt": "2026-06-23",
+    "learnings": "Full view grows to MAX_HEIGHT then head-ellipsis trims the oldest words (later memoized + bisected for the paint loop)."
+  },
+  {
+    "id": "15",
+    "subject": "Generate README screenshots from code",
+    "completedAt": "2026-06-23",
+    "learnings": "QT_QPA_PLATFORM=offscreen renders the real widgets — no doctored mockups, regenerable after any UI change."
+  },
+  {
+    "id": "16",
+    "subject": "Open-source pre-flight: license, scrub, public",
+    "completedAt": "2026-06-23",
+    "learnings": "filter-repo mailmap scrubs identity, but repo-local user.email MUST be the noreply or every new commit re-leaks the work email."
+  },
+  {
+    "id": "17",
+    "subject": "Desktop integration: .desktop entry + icon",
+    "completedAt": "2026-06-23",
+    "learnings": "Desktop entry needs the resolved venv path; gtk-launch from a shell loses stdout — launch via systemd-run for journald."
+  },
+  {
+    "id": "18",
+    "subject": "GitHub Actions CI: lint + tests",
+    "completedAt": "2026-06-23",
+    "learnings": "CI runs pure layers only (no GPU/Qt) — 'CI can't hear you scream'; the daemon/ui/hotkey are validated by hand."
+  },
+  {
+    "id": "19",
+    "subject": "Releases: tagged versions + curl install.sh",
+    "completedAt": "2026-06-23",
+    "learnings": "Tag-triggered gh release with install.sh as the downloadable asset; force-pushing a rewritten tag needs explicit refs/tags/ target."
+  },
+  {
+    "id": "20",
+    "subject": "Language settings: searchable multi-toggle list",
+    "completedAt": "2026-06-23",
+    "learnings": "detect-then-snap forced ONE language per take — which BREAKS code-switching; superseded by multilingual=True (#33-era insight)."
+  },
+  {
+    "id": "21",
+    "subject": "CONTRIBUTING.md + dev tooling formalized",
+    "completedAt": "2026-06-23",
+    "learnings": "Two-tier testing doctrine: pure layers in CI, human-in-the-loop for audio/Qt/X."
+  },
+  {
+    "id": "22",
+    "subject": "Vocab tooling: suggest/review/add from history",
+    "completedAt": "2026-06-23",
+    "learnings": "Glossary stays suggestions-only (auto-grow = autocorrect); initial_prompt hot-reloaded per decode; greedy partials echo the prompt so it's dropped there."
+  },
+  {
+    "id": "23",
+    "subject": "Hold-to-talk mode",
+    "completedAt": "2026-06-23",
+    "learnings": "A hold must never stop a take it didn't start — press_started_take guards against a stray combo-release ending an ongoing toggled take."
+  },
+  {
+    "id": "24",
+    "subject": "Collapse Whisper repetition loops",
+    "completedAt": "2026-06-23",
+    "learnings": "Collapse on sentence units, preserving separators + newlines, casefold compare; runs of >=3 identical → one."
+  },
+  {
+    "id": "25",
+    "subject": "Bubble placement: cursor screen, sticky desktops",
+    "completedAt": "2026-06-23",
+    "learnings": "xprop _NET_WM_DESKTOP 0xFFFFFFFF = sticky on all virtual desktops; QApplication.screenAt(QCursor.pos()) picks the cursor's screen."
+  },
+  {
+    "id": "26",
+    "subject": "Fix post-stop freeze: batched decode + paste",
+    "completedAt": "2026-06-23",
+    "learnings": "BatchedInferencePipeline VAD-parallel: 66s→1.3s; paste over 200 chars. But the real minute-long freeze was downstream delivery (see #29)."
+  },
+  {
+    "id": "27",
+    "subject": "Local telemetry: per-take metadata + stats",
+    "completedAt": "2026-06-23",
+    "learnings": "Schema migrates via PRAGMA table_info + ALTER; faster-whisper exposes avg_logprob + word probs natively (perplexity is one field away)."
+  },
+  {
+    "id": "28",
+    "subject": "Hide glossary prompt-echo from live preview",
+    "completedAt": "2026-06-23",
+    "learnings": "Greedy partial decode echoes initial_prompt verbatim ('Glossaire:…') on short audio → drop the prompt on partials, keep it on the final."
+  },
+  {
+    "id": "29",
+    "subject": "Investigate post-stop freeze (Sicily take 2)",
+    "completedAt": "2026-06-23",
+    "learnings": "Three misattributions (GPU recompute, paint loop, busy receiving app) — each a real smaller bug. Root cause: non-ASCII xdotool keymap-remap MappingNotify storm + paste-then-type fallback. Read journal + history DB before theorizing."
+  },
+  {
+    "id": "30",
+    "subject": "Profile stop→paste pipeline per step",
+    "completedAt": "2026-06-23",
+    "learnings": "Per-step journal breakdown proved decode ~1s and deliver was the cost; the killer was xdotool ctrl+v timing out → re-typing. Instrument every step, don't guess."
   }
 ]
