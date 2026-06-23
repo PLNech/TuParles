@@ -1,40 +1,71 @@
 # Changelog
 
-## Sprint 3 — 2026-06-23 · Wayland sans X11: le focus volé, le collage rendu
+## Sprint 3 — 2026-06-23 · Cap sur les réunions, et Wayland sans X11
 
 ### Added
-- **Native Wayland (GNOME) support**: evdev hotkey backend (reads
+- **Microphone selection** in *Réglages* — pick your input device instead of
+  PortAudio's default ("the first mic isn't always the right one"). Stored by
+  name (indices shuffle on Bluetooth/USB hotplug, names don't), re-resolved per
+  take, falls back to the default if it vanished mid-session (#40)
+- **Native Wayland (GNOME) support** (#1): evdev hotkey backend (reads
   `/dev/input` — Wayland never forwards global keys to clients; needs the
   `input` group), ydotool + wl-copy delivery (never types — ydotool assumes
-  a US keymap and garbles azerty).
-- **GNOME focus-window extension** (`packaging/gnome-extension/`): publishes
-  the focused window's class on the session bus — the only way a Wayland
-  client can read it — so paste picks Ctrl+Shift+V in terminals, Ctrl+V in
-  apps. Graceful Ctrl+V fallback when absent.
-- `scripts/setup_wayland.sh`: one-time privileged setup (input group, uinput
-  rule, wl-clipboard/ydotool, GNOME extension), idempotent, refuses sudo.
-- evdev per-device modifier tracking: Ctrl on one keyboard never combines
-  with Alt on another into a phantom combo; live device hotplug rescan.
+  a US keymap and garbles azerty). Per-device modifier tracking: Ctrl on one
+  keyboard never combines with Alt on another into a phantom combo; live device
+  hotplug rescan.
+- **GNOME focus-window extension** (`packaging/gnome-extension/`, #1): publishes
+  the focused window's class on the session bus — the only way a Wayland client
+  can read it — so paste picks Ctrl+Shift+V in terminals, Ctrl+V in apps.
+  Graceful Ctrl+V fallback when absent. `scripts/setup_wayland.sh` does the
+  one-time privileged setup (input group, uinput rule, wl-clipboard/ydotool,
+  extension install), idempotent, refuses sudo.
+- **Meeting note-taking research**: six verbatim SOTA briefs in
+  `docs/research/` — commercial landscape (Granola/Otter/…), a close-range
+  Granola deep-dive, speaker diarization (WhisperX + pyannote), local LLM
+  summarization (Ollama, augment-my-notes), Linux dual-side capture (mic +
+  monitor = free diarization), voice command-and-control (Dragon/Talon) — plus
+  `SOURCES`. Opens the Sprint 3 backlog (#35-#42)
 
 ### Changed
-- `delivery`/`hotkey` choose their backend from one `IS_WAYLAND` probe so
-  they can't disagree. X11 path unchanged. `_TERMINALS` now also matches
-  `gnome-terminal`/`org.gnome.console` (incidentally fixes X11 detection).
+- `delivery`/`hotkey` choose their backend from one `IS_WAYLAND` probe so they
+  can't disagree. **X11 path unchanged** (byte-equivalent). `_TERMINALS` now
+  also matches `gnome-terminal`/`org.gnome.console` (incidentally fixes X11
+  detection) (#1)
+- **README** told the truth again: code-switching is per-segment detection,
+  not the removed detect-then-snap; documented the self-healing GPU
 
 ### Fixed
-- **Wayland auto-paste landed nowhere.** Root cause, proven after three wrong
-  guesses (ydotool syntax, paste combo, device delay): the Qt bubble STEALS
-  keyboard focus on Wayland — Mutter ignores the no-focus hints X11 honours —
-  so the ydotool paste fired into the bubble, not the user's window (measured
-  0/8 with the bubble up → 8/8 hidden). Fix: capture the focus class at
-  take-START, and hide the bubble on the GUI thread right before the
+- **Wayland auto-paste landed nowhere** (#1). Root cause, proven after three
+  wrong guesses (ydotool syntax, paste combo, device delay): the Qt bubble
+  STEALS keyboard focus on Wayland — Mutter ignores the no-focus hints X11
+  honours — so the ydotool paste fired into the bubble, not the user's window
+  (measured 0/8 with the bubble up → 8/8 hidden). Fix: capture the focus class
+  at take-START, and hide the bubble on the GUI thread right before the
   keystroke so focus returns to the target.
+- **Self-healing CUDA**: a laptop suspend/resume invalidates the long-lived
+  CUDA context — `nvidia-smi` stays happy but context creation throws
+  `unknown error`, and the old design only fell back to CPU at *load* time, so
+  every post-resume take silently yielded nothing. The engine now rebuilds the
+  context on a decode failure (fresh context in-process) and only drops to
+  qwen-CPU if that also fails (`ResilientEngine`)
+- **CI was red** for four runs: the suite grew numpy-importing tests but CI
+  installed only pytest+ruff → collection error. Now installs numpy
+
+### Infra
+- **CI is a cross-OS matrix**: ubuntu/macos/windows × py3.11/3.12 — proves the
+  pure-python layer is portable. CUDA and the Qt/audio frontends can't run on
+  hosted runners (no GPU, no display); they're validated locally
 
 ### Doctrine
+- **Store hardware identities by stable name, not enumeration index** — indices
+  shuffle on hotplug, names survive.
+- **A long-lived GPU context is fragile across power events.** Resilience is
+  rebuild-then-fallback, not load-time fallback alone. Forensic tell: a journal
+  suspend/resume pair + a GUI stall at the resume timestamp names the cause.
 - **Forensics before theory, again**: an evdev monitor and a focused-QLineEdit
-  harness disproved the syntax and device-delay theories and pinned the
-  focus-theft. The memory note that *named* the wrong cause was corrected,
-  not trusted.
+  harness disproved the ydotool-syntax and device-delay theories and pinned the
+  focus-theft. The memory note that *named* the wrong cause was corrected, not
+  trusted.
 
 ## Sprint 2 — 2026-06-23 · Le grand débogage: code-switching réel, gel terrassé, voix sous contrôle
 

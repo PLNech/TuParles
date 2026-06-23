@@ -7,14 +7,24 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # The pure-python layers (punctuation, lexicon, history, settings,
+    # preprocess, repeats, vocab, engine recovery) carry the suite — no GPU,
+    # no Qt, no audio stack. They need only numpy, so they run cross-OS.
+    # CUDA and the Qt/audio frontends can't run on hosted runners (no GPU,
+    # no display); they're validated locally on the dev machine.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.11", "3.12"]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
-      # The test suite covers the pure-python layers (punctuation, lexicon,
-      # history, settings) — no GPU, no Qt, no audio stack needed in CI.
-      - run: pip install pytest ruff
+          python-version: ${{ matrix.python-version }}
+      - run: pip install pytest ruff numpy
       - run: ruff check src tests scripts
-      - run: PYTHONPATH=src pytest -q
+      - run: pytest -q
+        env:
+          PYTHONPATH: src

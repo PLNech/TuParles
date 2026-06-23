@@ -30,12 +30,15 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
   parallel on GPU): a 3-minute monologue lands in about a second.
 - **Code-switching first-class** — by default the model auto-detects among
   100 languages per take. In *Réglages* you can confine detection to your
-  own set: one language forces it, several means TuParles detects, then
-  snaps to the most probable of your selection — no more random Cyrillic
-  cameos when you mumble.
-- **Fast delivery, X11 and Wayland** — short takes typed into focus
-  (xdotool, modifier-safe), long ones pasted (Ctrl+V, or Ctrl+Shift+V in
-  terminals); Wayland (GNOME) pastes everything via ydotool. Clipboard
+  own set: one language forces it; several turns on **per-segment**
+  detection, so the language is re-detected segment by segment and a
+  mid-sentence switch from français to English survives intact ("can I
+  switch to English" stays English, instead of becoming "peux-je changer en
+  anglais"). No more random Cyrillic cameos when you mumble, either.
+- **Fast delivery, X11 and Wayland** — short takes are typed into the focused
+  window (X11 xdotool, modifier-safe); long ones are pasted (Ctrl+V, or
+  Ctrl+Shift+V in terminals). On Wayland (GNOME) everything is pasted via
+  ydotool (never typed — ydotool assumes a US keymap). The clipboard is
   always set as backup.
 - **Cleanup that knows its place** — spoken punctuation ("virgule",
   "point", "new line") in both languages, a personal lexicon for your
@@ -71,6 +74,11 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
   via [antirez/qwen-asr](https://github.com/antirez/qwen-asr), a pure-C
   inference engine (OpenBLAS) — used automatically when no GPU answers
   (waveform-only bubble, no live partials).
+- **Self-healing GPU**: if the CUDA context dies mid-session — a laptop
+  suspend/resume is the classic culprit, leaving `nvidia-smi` happy but
+  CUDA unusable — the engine rebuilds the context on the next take, and
+  only drops to the CPU fallback if that also fails. A take never silently
+  yields nothing.
 
 ## Install
 

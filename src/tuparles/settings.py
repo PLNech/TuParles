@@ -7,6 +7,7 @@ from pathlib import Path
 _DEFAULTS = {
     "view": "minimal",  # minimal = one-line pill | full = whole wrapped text
     "languages": [],  # ISO codes; empty = auto-detect among all 100
+    "input_device": None,  # mic name; None/empty = system default
 }
 
 
