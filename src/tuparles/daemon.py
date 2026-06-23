@@ -27,7 +27,8 @@ from tuparles.config import (
     PARTIAL_WINDOW_S,
     SAMPLE_RATE,
 )
-from tuparles.delivery import capture_focus_class, deliver
+from tuparles.commands import Command, parse as parse_command
+from tuparles.delivery import capture_focus_class, deliver, execute_command
 from tuparles.engine import load_engine
 from tuparles.lexicon import apply_lexicon
 from tuparles.punctuation import apply_spoken_punctuation
@@ -42,6 +43,7 @@ class Bridge(QObject):
     cancelled = Signal()  # Esc — abort an in-flight take
     partial = Signal(str)
     final = Signal(str)
+    command = Signal(str)  # a voice edit ran — short label for the toast
     error = Signal(str)
     state = Signal(str)  # idle | recording | processing — tray glyph follows
 
@@ -61,6 +63,7 @@ class Controller(QObject):
         # a recording the same press started, never an ongoing toggled take
         self._target_focus = ""  # window class captured when a take starts;
         # delivery pastes Ctrl+Shift+V vs Ctrl+V from this (see capture below)
+        self._last_edit: Command | None = None  # last delete, for "un peu plus"
 
     @Slot()
     def toggle(self) -> None:
@@ -171,6 +174,14 @@ class Controller(QObject):
                 apply_lexicon(apply_spoken_punctuation(result.text))
             )
             post_s = time.monotonic() - t_post
+            # Command layer: a take is EITHER an edit command or text, never
+            # both. A literal-escape ('dis "efface"') unwraps back to text.
+            cmd = parse_command(text)
+            if cmd is not None and cmd.action == "literal":
+                text, cmd = cmd.text, None
+            if cmd is not None:
+                self._run_command(cmd)
+                return  # an edit is not a transcript — no delivery, no history
             if text:
                 t1 = time.monotonic()
                 deliver(
@@ -210,6 +221,34 @@ class Controller(QObject):
             self._bridge.error.emit(str(exc)[:120])
         finally:
             self._bridge.state.emit("idle")
+
+    def _resolve_nudge(self, cmd: Command) -> Command | None:
+        """'un peu plus' = one more unit of the last edit; 'un peu moins' = undo
+        one step. No prior edit → None (nothing to nudge)."""
+        if self._last_edit is None:
+            return None
+        if cmd.direction == "more":
+            return Command("delete", unit=self._last_edit.unit, count=1)
+        return Command("undo")
+
+    def _run_command(self, cmd: Command) -> None:
+        """Execute a voice edit on the focused window. Runs on the decode
+        worker thread (like deliver), so the Wayland bubble-hide is marshalled
+        to the GUI thread first — otherwise the keystroke lands in the focus-
+        stealing bubble, not the user's window (see _hide_bubble_for_paste)."""
+        if cmd.action == "nudge":
+            resolved = self._resolve_nudge(cmd)
+            if resolved is None:
+                self._bridge.command.emit("rien à ajuster")
+                return
+            cmd = resolved
+        if IS_WAYLAND:
+            self._hide_bubble_for_paste()
+        label = execute_command(cmd)
+        # Remember the last destructive edit so a later "un peu plus" can chain;
+        # an undo clears it (there's nothing left to extend).
+        self._last_edit = cmd if cmd.action == "delete" else None
+        self._bridge.command.emit(label)
 
 
 def run() -> None:
@@ -256,6 +295,7 @@ def run() -> None:
     bridge.cancelled.connect(controller.cancel)
     bridge.partial.connect(bubble.set_partial)
     bridge.final.connect(bubble.show_final)
+    bridge.command.connect(bubble.show_final)  # edit confirmation toast
     bridge.error.connect(bubble.show_error)
 
     tray = Tray()

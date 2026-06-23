@@ -415,3 +415,85 @@ class TestChunkedDelivery:
         assert hides == [1]                   # bubble hidden exactly once
         assert len(keys) >= 2                 # several paste keystrokes
         assert set(keys) == {"ctrl+v"}        # firefox → plain Ctrl+V
+
+
+class TestExecuteCommand:
+    """Voice edits send the right keystrokes and NEVER type text. Backend is
+    X11 here (dev machine); _send_key dispatches to xdotool, captured below."""
+
+    def _record(self, monkeypatch):
+        monkeypatch.setattr(delivery, "_WAYLAND", False)
+        keys = []
+        monkeypatch.setattr(delivery, "_send_key", keys.append)
+        return keys
+
+    def test_delete_word_count(self, monkeypatch):
+        from tuparles.commands import Command
+
+        keys = self._record(monkeypatch)
+        label = delivery.execute_command(Command("delete", "word", 3))
+        assert keys == ["ctrl+BackSpace"] * 3
+        assert "3 mots" in label
+
+    def test_delete_one_word_singular_label(self, monkeypatch):
+        from tuparles.commands import Command
+
+        keys = self._record(monkeypatch)
+        label = delivery.execute_command(Command("delete", "word", 1))
+        assert keys == ["ctrl+BackSpace"]
+        assert label == "1 mot effacé"
+
+    def test_delete_chars(self, monkeypatch):
+        from tuparles.commands import Command
+
+        keys = self._record(monkeypatch)
+        delivery.execute_command(Command("delete", "char", 4))
+        assert keys == ["BackSpace"] * 4
+
+    def test_delete_all(self, monkeypatch):
+        from tuparles.commands import Command
+
+        keys = self._record(monkeypatch)
+        label = delivery.execute_command(Command("delete", "all", 1))
+        assert keys == ["ctrl+a", "BackSpace"]
+        assert label == "tout effacé"
+
+    def test_delete_line(self, monkeypatch):
+        from tuparles.commands import Command
+
+        keys = self._record(monkeypatch)
+        delivery.execute_command(Command("delete", "line", 1))
+        assert keys == ["shift+Home", "BackSpace"]
+
+    def test_undo(self, monkeypatch):
+        from tuparles.commands import Command
+
+        keys = self._record(monkeypatch)
+        label = delivery.execute_command(Command("undo"))
+        assert keys == ["ctrl+z"]
+        assert label == "annulé"
+
+    def test_open_terminal_spawns_first_available(self, monkeypatch):
+        from tuparles.commands import Command
+
+        self._record(monkeypatch)
+        monkeypatch.setattr(
+            delivery.shutil, "which",
+            lambda name: "/usr/bin/kgx" if name == "kgx" else None,
+        )
+        spawned = []
+        monkeypatch.setattr(
+            delivery.subprocess, "Popen",
+            lambda argv, **kw: spawned.append(argv) or None,
+        )
+        label = delivery.execute_command(Command("open_terminal"))
+        assert spawned == [["kgx"]]
+        assert label == "terminal ouvert"
+
+    def test_open_terminal_none_available(self, monkeypatch):
+        from tuparles.commands import Command
+
+        self._record(monkeypatch)
+        monkeypatch.setattr(delivery.shutil, "which", lambda _name: None)
+        label = delivery.execute_command(Command("open_terminal"))
+        assert label == "terminal indisponible"

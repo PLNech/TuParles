@@ -385,6 +385,91 @@ def _type_into_focus(text: str, focus_class: str = "", before_paste=None) -> Non
     )
 
 
+# --- Voice command execution -------------------------------------------------
+# Editing commands (see commands.py) act on the focused window with the SAME
+# backends as paste — xdotool on X11, ydotool on Wayland — and the same
+# best-effort contract (a failed keystroke is logged, never raised; the worst
+# case is the user redoes it). Key NAMES (BackSpace, ctrl+z) are used on both;
+# the Wayland/ydotool path mirrors the shipped paste path and still wants live
+# validation on a real Wayland session (dev machine is X11).
+
+# Universal editing keystrokes. ctrl+BackSpace deletes a word backward in
+# essentially every text widget; shift+Home selects to line start so the
+# follow-up BackSpace clears the line.
+_DELETE_KEYS = {
+    "word": "ctrl+BackSpace",
+    "char": "BackSpace",
+}
+
+
+def _send_key(combo: str) -> None:
+    (_wayland_paste_key if _WAYLAND else _x11_paste_key)(combo)
+
+
+def _send_key_n(combo: str, n: int) -> None:
+    for _ in range(max(1, n)):
+        _send_key(combo)
+
+
+def _execute_delete(cmd) -> str:
+    if cmd.unit == "all":
+        _send_key("ctrl+a")
+        _send_key("BackSpace")
+        return "tout effacé"
+    if cmd.unit == "line":
+        # Select to line start and delete; the extra BackSpace between lines
+        # eats the joining newline so successive lines actually collapse.
+        for i in range(max(1, cmd.count)):
+            if i:
+                _send_key("BackSpace")
+            _send_key("shift+Home")
+            _send_key("BackSpace")
+        n = max(1, cmd.count)
+        return f"{n} ligne{'s' if n > 1 else ''} effacée{'s' if n > 1 else ''}"
+    combo = _DELETE_KEYS.get(cmd.unit, "ctrl+BackSpace")
+    _send_key_n(combo, cmd.count)
+    noun = "caractère" if cmd.unit == "char" else "mot"
+    s = "s" if cmd.count > 1 else ""
+    return f"{cmd.count} {noun}{s} effacé{s}"
+
+
+def _open_terminal() -> str:
+    for term in (
+        "gnome-terminal", "kgx", "org.gnome.Console",
+        "konsole", "alacritty", "kitty", "xterm",
+    ):
+        if shutil.which(term):
+            try:
+                subprocess.Popen(
+                    [term],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
+                return "terminal ouvert"
+            except OSError:
+                continue
+    return "terminal indisponible"
+
+
+def execute_command(cmd) -> str:
+    """Run a parsed voice Command against the focused window. Returns a short
+    French label for the confirmation toast. Never raises — like delivery, a
+    command that misfires at the OS layer is logged, not crashed (a failed
+    edit just means the user retries; a crash loses the daemon)."""
+    if cmd.action == "delete":
+        label = _execute_delete(cmd)
+    elif cmd.action == "undo":
+        _send_key("ctrl+z")
+        label = "annulé"
+    elif cmd.action == "open_terminal":
+        label = _open_terminal()
+    else:
+        label = cmd.action
+    print(f"command: {cmd.action} → {label}")
+    return label
+
+
 def to_clipboard(text: str) -> None:
     # On Wayland only wl-copy reaches the clipboard ydotool pastes from; xsel
     # writes the XWayland clipboard, which GNOME doesn't sync back, so the
