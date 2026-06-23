@@ -3,10 +3,10 @@ and the readout answers the discovery question."""
 
 import pytest
 
-from tuparles import syntax, telemetry
+from tuparles import history, syntax, telemetry
 from tuparles.pipeline import postprocess
 from tuparles.syntax import SyntaxFeature, apply_syntax
-from tuparles.telemetry import readout, sink
+from tuparles.telemetry import introspect, readout, sink
 
 
 def _isolate(tmp_path, monkeypatch):
@@ -146,3 +146,39 @@ class TestSyntaxInstrumentation:
         rows = sink.read(name="syntax.used")
         assert len(rows) == 1
         assert rows[0][2] == {"name": "bullets"}
+
+
+class TestIntrospect:
+    """The nlp-over-introspection bridge: utterances through the nlp engine,
+    events through the readout — both local, both degrading gracefully."""
+
+    def test_usage_summary_is_pure_stdlib(self, tmp_path, monkeypatch):
+        _isolate(tmp_path, monkeypatch)
+        telemetry.event("entry.dictation", source="hotkey")
+        telemetry.event("entry.dictation", source="tray")
+        telemetry.event("entry.dictation", source="hotkey")
+        telemetry.event("command.fired", name="undo")
+        telemetry.event("syntax.used", name="bullets")
+        summary = introspect.usage_summary()
+        assert summary["total"] == 5
+        assert summary["entry_split"] == {"hotkey": 2, "tray": 1}
+        assert summary["commands"] == {"command.fired": 1}
+        assert summary["syntax"] == {"syntax.used": 1}
+
+    def test_utterance_tags_over_history(self, tmp_path, monkeypatch):
+        if not introspect.nlp_available():
+            pytest.skip("nlp extras not installed")
+        _isolate(tmp_path, monkeypatch)
+        history.record("parlons de RequestOptions et de faceting")
+        history.record("encore RequestOptions dans le code")
+        tags = introspect.utterance_tags(top=10)
+        assert isinstance(tags, list) and tags
+        surfaces = {surface.lower() for surface, _w in tags}
+        assert "requestoptions" in surfaces
+        assert all(0.0 <= w <= 1.0 for _s, w in tags)
+
+    def test_empty_history_is_empty_not_a_crash(self, tmp_path, monkeypatch):
+        _isolate(tmp_path, monkeypatch)
+        assert introspect.utterance_tags() == []
+        assert introspect.utterance_keyphrases() == []
+        assert introspect.usage_summary()["total"] == 0
