@@ -25,3 +25,7 @@ vocab.txt
 
 # Local-only notes / idea scratchpads — never pushed
 *.local.md
+
+# Coverage artefacts
+.coverage
+htmlcov/

@@ -69,9 +69,7 @@ def test_auto_close_disabled(monkeypatch):
 def test_guillemets_narrow_spacing(monkeypatch):
     _cfg(monkeypatch, {"fr": "guillemets-narrow"})
     # « + U+202F + bonjour + U+202F + »
-    assert quotes.apply("guillemets bonjour guillemets", CTX) == (
-        "« bonjour »"
-    )
+    assert quotes.apply("guillemets bonjour guillemets", CTX) == ("« bonjour »")
 
 
 def test_guillemets_none_spacing(monkeypatch):
@@ -81,9 +79,7 @@ def test_guillemets_none_spacing(monkeypatch):
 
 def test_guillemets_full_spacing(monkeypatch):
     _cfg(monkeypatch, {"fr": "guillemets-full"})
-    assert quotes.apply("guillemets bonjour guillemets", CTX) == (
-        "« bonjour »"
-    )
+    assert quotes.apply("guillemets bonjour guillemets", CTX) == ("« bonjour »")
 
 
 def test_en_curly(monkeypatch):
@@ -93,9 +89,7 @@ def test_en_curly(monkeypatch):
 
 def test_en_context_prose_is_curly(monkeypatch):
     _cfg(monkeypatch, {"en": "context"})
-    assert quotes.apply("open quote hi close quote", SyntaxContext()) == (
-        "“hi”"
-    )
+    assert quotes.apply("open quote hi close quote", SyntaxContext()) == ("“hi”")
 
 
 def test_en_context_in_terminal_is_straight(monkeypatch):

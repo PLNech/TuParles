@@ -132,6 +132,4 @@ class Tray(QObject):
             self._hist_menu.addAction("(vide)").setEnabled(False)
         for _ts, text in entries:
             label = text if len(text) <= _LABEL_CHARS else text[:_LABEL_CHARS] + "…"
-            self._hist_menu.addAction(
-                label, lambda t=text: to_clipboard(t)
-            )
+            self._hist_menu.addAction(label, lambda t=text: to_clipboard(t))

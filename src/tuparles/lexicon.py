@@ -19,12 +19,11 @@ LEXICON: dict[str, str] = {
 
 def apply_lexicon(text: str) -> str:
     for pattern, replacement in LEXICON.items():
-        text = re.sub(
-            pattern,
-            lambda m, rep=replacement: _match_case(rep, m.group(0)),
-            text,
-            flags=re.IGNORECASE,
-        )
+
+        def _sub(m: re.Match[str], rep: str = replacement) -> str:
+            return _match_case(rep, m.group(0))
+
+        text = re.sub(pattern, _sub, text, flags=re.IGNORECASE)
     return text
 
 

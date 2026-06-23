@@ -50,9 +50,7 @@ def _load_manifest() -> list[dict]:
     return json.loads(MANIFEST.read_text()).get("files", [])
 
 
-CASES_BY_ID = {
-    c["id"]: c for c in json.loads(CORPUS.read_text())["cases"]
-}
+CASES_BY_ID = {c["id"]: c for c in json.loads(CORPUS.read_text())["cases"]}
 ENTRIES = _load_manifest()
 
 requires_gpu = pytest.mark.skipif(
@@ -81,9 +79,7 @@ def engine():
 
 @requires_gpu
 @requires_wavs
-@pytest.mark.parametrize(
-    "entry", ENTRIES, ids=[e["file"] for e in ENTRIES]
-)
+@pytest.mark.parametrize("entry", ENTRIES, ids=[e["file"] for e in ENTRIES])
 def test_codeswitch_case(engine, entry, record_property):
     case = CASES_BY_ID[entry["case_id"]]
     audio = _read_wav_int16(WAV_DIR / entry["file"])

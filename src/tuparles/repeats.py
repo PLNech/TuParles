@@ -23,7 +23,7 @@ def collapse_repeats(text: str) -> str:
 
     # Group consecutive identical sentences (whitespace/case-insensitive).
     groups: list[list] = []  # [first_sentence, first_sep, count, last_sep]
-    for sentence, sep in zip(sentences, seps):
+    for sentence, sep in zip(sentences, seps, strict=False):
         key = sentence.strip().casefold()
         if groups and key and groups[-1][0].strip().casefold() == key:
             groups[-1][2] += 1

@@ -47,8 +47,6 @@ class TestNormalize:
         assert applied <= NORMALIZE_MAX_GAIN + 0.1  # float32 slack
 
     def test_dc_offset_removed(self):
-        biased = (np.sin(np.linspace(0, 50, 16000)) * 0.3 + 0.4).astype(
-            np.float32
-        )
+        biased = (np.sin(np.linspace(0, 50, 16000)) * 0.3 + 0.4).astype(np.float32)
         out = normalize_audio(biased)
         assert abs(float(out.mean())) < 1e-3

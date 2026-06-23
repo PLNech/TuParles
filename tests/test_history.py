@@ -48,8 +48,11 @@ class TestTelemetry:
         _isolate(tmp_path, monkeypatch)
         history.record(
             "dix mots exactement pour faire un test de débit propre",
-            audio_s=30.0, decode_s=1.5, deliver_s=0.1,
-            lang="fr", lang_prob=0.97,
+            audio_s=30.0,
+            decode_s=1.5,
+            deliver_s=0.1,
+            lang="fr",
+            lang_prob=0.97,
         )
         s = history.summarize()
         assert s["takes"] == 1

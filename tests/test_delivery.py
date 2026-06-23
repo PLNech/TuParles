@@ -1,4 +1,5 @@
 import subprocess
+from typing import ClassVar
 
 from tuparles import delivery
 from tuparles.delivery import (
@@ -71,17 +72,17 @@ class TestChunkForPaste:
     """Progressive-paste splitter: paragraph-first, rejoins byte-for-byte,
     no text piece carries a newline, each piece within the cap."""
 
-    SAMPLES = [
+    SAMPLES: ClassVar[list[str]] = [
         "",
         "one short line",
         "a\nb\nc",
         "para one.\n\npara two, a bit longer but still small.",
-        "word " * 200,                      # long, spaces to break on
-        "x" * (MAX_CHUNK_CHARS * 3 + 7),    # long, NO break → hard cuts
+        "word " * 200,  # long, spaces to break on
+        "x" * (MAX_CHUNK_CHARS * 3 + 7),  # long, NO break → hard cuts
         "Phrase une. Phrase deux! Phrase trois? Et fin." * 20,
         "trailing newline\n",
         "\nleading newline",
-        "é" * (MAX_CHUNK_CHARS + 50),       # non-ASCII, still split by length
+        "é" * (MAX_CHUNK_CHARS + 50),  # non-ASCII, still split by length
     ]
 
     def test_rejoins_to_the_original_exactly(self):
@@ -209,7 +210,8 @@ class TestWaylandPasteCombo:
         monkeypatch.setattr(delivery.shutil, "which", lambda _: "/usr/bin/ydotool")
         monkeypatch.setattr(delivery, "_focus_is_terminal", lambda: is_terminal)
         monkeypatch.setattr(
-            delivery.subprocess, "run",
+            delivery.subprocess,
+            "run",
             lambda argv, *a, **kw: calls.append(argv)
             or subprocess.CompletedProcess(argv, 0),
         )
@@ -229,7 +231,8 @@ class TestWaylandPasteCombo:
         calls = []
         monkeypatch.setattr(delivery.shutil, "which", lambda _: None)
         monkeypatch.setattr(
-            delivery.subprocess, "run",
+            delivery.subprocess,
+            "run",
             lambda *a, **kw: calls.append(a) or subprocess.CompletedProcess([], 0),
         )
         _wayland_paste()
@@ -254,7 +257,8 @@ class TestWaylandClipboard:
         monkeypatch.setattr(delivery, "_WAYLAND", True)
         monkeypatch.setattr(delivery.shutil, "which", lambda _: None)
         monkeypatch.setattr(
-            delivery.subprocess, "run",
+            delivery.subprocess,
+            "run",
             lambda argv, *a, **kw: calls.append(argv)
             or subprocess.CompletedProcess(argv, 0),
         )
@@ -267,7 +271,8 @@ class TestWaylandClipboard:
         monkeypatch.setattr(delivery, "_WAYLAND", True)
         monkeypatch.setattr(delivery.shutil, "which", lambda _: "/usr/bin/wl-copy")
         monkeypatch.setattr(
-            delivery.subprocess, "run",
+            delivery.subprocess,
+            "run",
             lambda argv, *a, **kw: calls.append(argv)
             or subprocess.CompletedProcess(argv, 0),
         )
@@ -283,26 +288,27 @@ class TestCapturedFocus:
         # Wayland-only and capped short — it runs on the GUI thread at start.
         seen = {}
         monkeypatch.setattr(
-            delivery, "_focus_wm_class",
+            delivery,
+            "_focus_wm_class",
             lambda timeout=2.0: seen.update(timeout=timeout)
             or "Gnome-terminal|gnome-terminal-server",
         )
         assert capture_focus_class() == "Gnome-terminal|gnome-terminal-server"
         assert seen["timeout"] <= 1.0  # must not block the GUI thread for 2 s
 
-    def test_captured_terminal_picks_shift_combo_without_live_read(
-        self, monkeypatch
-    ):
+    def test_captured_terminal_picks_shift_combo_without_live_read(self, monkeypatch):
         # A captured terminal class must drive the combo on its own; a live
         # _focus_is_terminal() call here would mean the race wasn't bypassed.
         calls = []
         monkeypatch.setattr(delivery.shutil, "which", lambda _: "/usr/bin/ydotool")
         monkeypatch.setattr(
-            delivery, "_focus_is_terminal",
+            delivery,
+            "_focus_is_terminal",
             lambda: (_ for _ in ()).throw(AssertionError("live read not bypassed")),
         )
         monkeypatch.setattr(
-            delivery.subprocess, "run",
+            delivery.subprocess,
+            "run",
             lambda argv, *a, **kw: calls.append(argv)
             or subprocess.CompletedProcess(argv, 0),
         )
@@ -314,7 +320,8 @@ class TestCapturedFocus:
         monkeypatch.setattr(delivery.shutil, "which", lambda _: "/usr/bin/ydotool")
         monkeypatch.setattr(delivery, "_focus_is_terminal", lambda: True)
         monkeypatch.setattr(
-            delivery.subprocess, "run",
+            delivery.subprocess,
+            "run",
             lambda argv, *a, **kw: calls.append(argv)
             or subprocess.CompletedProcess(argv, 0),
         )
@@ -331,7 +338,8 @@ class TestBeforePasteHook:
         monkeypatch.setattr(delivery.shutil, "which", lambda _: "/usr/bin/ydotool")
         monkeypatch.setattr(delivery, "_focus_is_terminal", lambda: True)
         monkeypatch.setattr(
-            delivery.subprocess, "run",
+            delivery.subprocess,
+            "run",
             lambda argv, *a, **kw: events.append(("ydotool", argv[-1]))
             or subprocess.CompletedProcess(argv, 0),
         )
@@ -350,9 +358,11 @@ class TestBeforePasteHook:
         monkeypatch.setattr(delivery, "_WAYLAND", True)
         monkeypatch.setattr(delivery, "to_clipboard", lambda t: None)
         monkeypatch.setattr(
-            delivery, "_wayland_paste",
+            delivery,
+            "_wayland_paste",
             lambda fc="", bp=None: seen.update(focus=fc, hook=bp),
         )
+
         def hook():
             pass
 
@@ -387,10 +397,10 @@ class TestChunkedDelivery:
         text = "Première phrase. " + "mot " * 200  # > cap, multi-piece
         delivery.deliver(text, focus_class="firefox|Navigator")
 
-        assert not typed                      # never typed, even chunked
-        assert len(keys) >= 2                 # several paste keystrokes
-        assert set(keys) == {"ctrl+v"}        # firefox → plain Ctrl+V
-        assert clips[-1] == text              # full text restored last
+        assert not typed  # never typed, even chunked
+        assert len(keys) >= 2  # several paste keystrokes
+        assert set(keys) == {"ctrl+v"}  # firefox → plain Ctrl+V
+        assert clips[-1] == text  # full text restored last
 
     def test_wayland_chunked_hides_bubble_once_then_pastes_pieces(self, monkeypatch):
         self._no_sleep(monkeypatch)
@@ -408,13 +418,14 @@ class TestChunkedDelivery:
 
         text = "ligne une\n" + "x" * (MAX_CHUNK_CHARS + 5)  # multi-line + long
         delivery.deliver(
-            text, focus_class="firefox|Navigator",
+            text,
+            focus_class="firefox|Navigator",
             before_paste=lambda: hides.append(1),
         )
 
-        assert hides == [1]                   # bubble hidden exactly once
-        assert len(keys) >= 2                 # several paste keystrokes
-        assert set(keys) == {"ctrl+v"}        # firefox → plain Ctrl+V
+        assert hides == [1]  # bubble hidden exactly once
+        assert len(keys) >= 2  # several paste keystrokes
+        assert set(keys) == {"ctrl+v"}  # firefox → plain Ctrl+V
 
 
 class TestExecuteCommand:
@@ -478,12 +489,14 @@ class TestExecuteCommand:
 
         self._record(monkeypatch)
         monkeypatch.setattr(
-            delivery.shutil, "which",
+            delivery.shutil,
+            "which",
             lambda name: "/usr/bin/kgx" if name == "kgx" else None,
         )
         spawned = []
         monkeypatch.setattr(
-            delivery.subprocess, "Popen",
+            delivery.subprocess,
+            "Popen",
             lambda argv, **kw: spawned.append(argv) or None,
         )
         label = delivery.execute_command(Command("open_terminal"))

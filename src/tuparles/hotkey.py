@@ -192,7 +192,7 @@ class _EvdevListener:
                             warned.add(path)
                             print(f"hotkey: {path} illisible ({e}) — ignoré")
             for key, _ in sel.select(timeout=1.0):
-                dev = key.fileobj
+                dev = key.fileobj  # type: ignore[assignment]  # selector holds our InputDevice
                 try:
                     events = list(dev.read())
                 except OSError:  # unplugged mid-read

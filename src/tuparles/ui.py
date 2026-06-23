@@ -13,18 +13,18 @@ queued signal connections, see daemon.py).
 import math
 import subprocess
 from collections import deque
-from typing import Callable
+from collections.abc import Callable
 
 from PySide6.QtCore import (
     QEasingCurve,
     QParallelAnimationGroup,
     QPoint,
     QPropertyAnimation,
+    QRect,
     QRectF,
     Qt,
     QTimer,
 )
-from PySide6.QtCore import QRect
 from PySide6.QtGui import QColor, QCursor, QFontMetrics, QPainter
 from PySide6.QtWidgets import QApplication, QWidget
 
@@ -152,11 +152,15 @@ class Bubble(QWidget):
     def _desired_height(self) -> int:
         if self._view != "full" or not self._text:
             return HEIGHT
-        needed = QFontMetrics(self.font()).boundingRect(
-            QRect(0, 0, self._text_width(), 10_000),
-            Qt.TextWordWrap,
-            self._text,
-        ).height()
+        needed = (
+            QFontMetrics(self.font())
+            .boundingRect(
+                QRect(0, 0, self._text_width(), 10_000),
+                Qt.TextWordWrap,
+                self._text,
+            )
+            .height()
+        )
         return max(HEIGHT, min(MAX_HEIGHT, needed + 2 * V_PAD))
 
     def _apply_size(self) -> None:
@@ -198,9 +202,15 @@ class Bubble(QWidget):
         strand the bubble. Fire-and-forget — cosmetic, never blocks."""
         subprocess.Popen(
             [
-                "xprop", "-id", str(int(self.winId())),
-                "-f", "_NET_WM_DESKTOP", "32c",
-                "-set", "_NET_WM_DESKTOP", "0xFFFFFFFF",
+                "xprop",
+                "-id",
+                str(int(self.winId())),
+                "-f",
+                "_NET_WM_DESKTOP",
+                "32c",
+                "-set",
+                "_NET_WM_DESKTOP",
+                "0xFFFFFFFF",
             ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -314,10 +324,7 @@ class Bubble(QWidget):
         fm = QFontMetrics(self.font())
 
         def fits(t: str) -> bool:
-            return (
-                fm.boundingRect(rect, Qt.TextWordWrap, t).height()
-                <= rect.height()
-            )
+            return fm.boundingRect(rect, Qt.TextWordWrap, t).height() <= rect.height()
 
         if fits(text):
             return text

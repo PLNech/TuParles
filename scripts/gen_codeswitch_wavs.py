@@ -63,9 +63,23 @@ def log(msg: str) -> None:
 def _ffmpeg_normalise(src: Path, dst: Path) -> bool:
     """src (any WAV) → dst (16 kHz mono s16le). True on success."""
     proc = subprocess.run(
-        ["ffmpeg", "-y", "-loglevel", "error", "-i", str(src),
-         "-ar", str(TARGET_RATE), "-ac", "1", "-c:a", "pcm_s16le", str(dst)],
-        capture_output=True, text=True,
+        [
+            "ffmpeg",
+            "-y",
+            "-loglevel",
+            "error",
+            "-i",
+            str(src),
+            "-ar",
+            str(TARGET_RATE),
+            "-ac",
+            "1",
+            "-c:a",
+            "pcm_s16le",
+            str(dst),
+        ],
+        capture_output=True,
+        text=True,
     )
     if proc.returncode != 0:
         log(f"    ffmpeg failed: {proc.stderr.strip()[:200]}")
@@ -74,6 +88,7 @@ def _ffmpeg_normalise(src: Path, dst: Path) -> bool:
 
 
 # --- piper ------------------------------------------------------------------
+
 
 def _piper_available() -> bool:
     return shutil.which("piper") is not None
@@ -88,14 +103,16 @@ def _ensure_piper_voice(voice: str, voices_dir: Path) -> Path | None:
         log(f"    unknown piper voice {voice}")
         return None
     voices_dir.mkdir(parents=True, exist_ok=True)
-    for path, url in ((onnx, PIPER_HF_BASE + stem + ".onnx"),
-                      (cfg, PIPER_HF_BASE + stem + ".onnx.json")):
+    for path, url in (
+        (onnx, PIPER_HF_BASE + stem + ".onnx"),
+        (cfg, PIPER_HF_BASE + stem + ".onnx.json"),
+    ):
         if path.exists() and path.stat().st_size > 0:
             continue
         log(f"    downloading {path.name} …")
         try:
             urllib.request.urlretrieve(url, path)
-        except Exception as exc:  # noqa: BLE001 - any net error → skip voice
+        except Exception as exc:
             log(f"    download failed ({str(exc)[:120]}); skipping voice")
             return None
     return onnx
@@ -104,7 +121,9 @@ def _ensure_piper_voice(voice: str, voices_dir: Path) -> Path | None:
 def _piper_synth(text: str, onnx: Path, dst: Path) -> bool:
     proc = subprocess.run(
         ["piper", "--model", str(onnx), "--output_file", str(dst)],
-        input=text, capture_output=True, text=True,
+        input=text,
+        capture_output=True,
+        text=True,
     )
     if proc.returncode != 0:
         log(f"    piper failed: {proc.stderr.strip()[:200]}")
@@ -114,6 +133,7 @@ def _piper_synth(text: str, onnx: Path, dst: Path) -> bool:
 
 # --- espeak -----------------------------------------------------------------
 
+
 def _espeak_bin() -> str | None:
     return shutil.which("espeak-ng") or shutil.which("espeak")
 
@@ -121,7 +141,8 @@ def _espeak_bin() -> str | None:
 def _espeak_synth(text: str, voice: str, dst: Path, espeak: str) -> bool:
     proc = subprocess.run(
         [espeak, "-v", voice, "-s", "160", "-w", str(dst), text],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
     if proc.returncode != 0:
         log(f"    espeak failed: {proc.stderr.strip()[:200]}")
@@ -130,6 +151,7 @@ def _espeak_synth(text: str, voice: str, dst: Path, espeak: str) -> bool:
 
 
 # --- driver -----------------------------------------------------------------
+
 
 def resolve_voices(engines: set[str], voices_dir: Path) -> dict:
     """Build {voice_label: synth_callable(text, dst)->bool} for what's available."""
@@ -142,17 +164,23 @@ def resolve_voices(engines: set[str], voices_dir: Path) -> dict:
                 if onnx is not None:
                     voices[label] = lambda text, dst, o=onnx: _piper_synth(text, o, dst)
         else:
-            log("piper not found — `poetry run pip install piper-tts` to enable it. "
-                "Skipping piper voices.")
+            log(
+                "piper not found — `poetry run pip install piper-tts` to enable it. "
+                "Skipping piper voices."
+            )
 
     if "espeak" in engines:
         espeak = _espeak_bin()
         if espeak:
             for label, voice in ESPEAK_VOICES.items():
-                voices[label] = lambda text, dst, v=voice: _espeak_synth(text, v, dst, espeak)
+                voices[label] = lambda text, dst, v=voice: _espeak_synth(
+                    text, v, dst, espeak
+                )
         else:
-            log("espeak not found — `sudo apt-get install -y espeak-ng` to enable it. "
-                "Skipping espeak voices.")
+            log(
+                "espeak not found — `sudo apt-get install -y espeak-ng` to enable it. "
+                "Skipping espeak voices."
+            )
 
     return voices
 
@@ -162,10 +190,12 @@ def main() -> int:
     ap.add_argument("--corpus", type=Path, default=DEFAULT_CORPUS)
     ap.add_argument("--out", type=Path, default=DEFAULT_OUT)
     ap.add_argument("--voices-dir", type=Path, default=DEFAULT_VOICES)
-    ap.add_argument("--engines", default="piper,espeak",
-                    help="comma list: piper,espeak")
-    ap.add_argument("--force", action="store_true",
-                    help="regenerate WAVs that already exist")
+    ap.add_argument(
+        "--engines", default="piper,espeak", help="comma list: piper,espeak"
+    )
+    ap.add_argument(
+        "--force", action="store_true", help="regenerate WAVs that already exist"
+    )
     args = ap.parse_args()
 
     engines = {e.strip() for e in args.engines.split(",") if e.strip()}
@@ -189,7 +219,9 @@ def main() -> int:
                 skipped += 1
                 continue
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as tmp:
-                if synth(text, Path(tmp.name)) and _ffmpeg_normalise(Path(tmp.name), dst):
+                if synth(text, Path(tmp.name)) and _ffmpeg_normalise(
+                    Path(tmp.name), dst
+                ):
                     made += 1
                     log(f"  ✓ {dst.name}")
                 else:
@@ -200,11 +232,17 @@ def main() -> int:
     # voices — so regenerating one engine never silently drops another's WAVs.
     manifest = scan_manifest(args.out, {c["id"] for c in cases})
     manifest_path = args.out / "manifest.json"
-    manifest_path.write_text(json.dumps(
-        {"corpus_version": corpus.get("version"), "files": manifest}, indent=2,
-    ) + "\n")
-    log(f"\nmade={made} skipped={skipped} failed={failed} "
-        f"→ {len(manifest)} WAVs in manifest ({manifest_path})")
+    manifest_path.write_text(
+        json.dumps(
+            {"corpus_version": corpus.get("version"), "files": manifest},
+            indent=2,
+        )
+        + "\n"
+    )
+    log(
+        f"\nmade={made} skipped={skipped} failed={failed} "
+        f"→ {len(manifest)} WAVs in manifest ({manifest_path})"
+    )
     return 0 if manifest else 1
 
 
@@ -220,10 +258,14 @@ def scan_manifest(out_dir: Path, known_ids: set[str]) -> list[dict]:
         cid, _, label = wav.stem.rpartition("__")
         if cid not in known_ids:
             continue
-        files.append({
-            "file": wav.name, "case_id": cid,
-            "voice": label, "engine": label.split("-")[0],
-        })
+        files.append(
+            {
+                "file": wav.name,
+                "case_id": cid,
+                "voice": label,
+                "engine": label.split("-")[0],
+            }
+        )
     return files
 
 

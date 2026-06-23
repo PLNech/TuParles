@@ -19,9 +19,11 @@ def _clean_registry():
 
 def _recorder(name, log, mark=None, order=100, default=True):
     """A feature that appends its name to `log` and optionally tags the text."""
+
     def fn(text, ctx):
         log.append(name)
         return f"{text}|{mark}" if mark else text
+
     return SyntaxFeature(name=name, apply=fn, default_enabled=default, order=order)
 
 
@@ -93,10 +95,12 @@ def test_malformed_settings_falls_back_to_default(monkeypatch):
 
 def test_context_is_threaded_to_features():
     seen = {}
-    syntax.register(SyntaxFeature(
-        name="peek",
-        apply=lambda text, ctx: seen.update(fmt=ctx.fmt) or text,
-    ))
+    syntax.register(
+        SyntaxFeature(
+            name="peek",
+            apply=lambda text, ctx: seen.update(fmt=ctx.fmt) or text,
+        )
+    )
     apply_syntax("x", SyntaxContext(fmt="markdown"))
     assert seen["fmt"] == "markdown"
 

@@ -23,8 +23,15 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - run: pip install pytest ruff numpy
+      # Light, portable deps only: the corpus-analysis core (nlp/) needs
+      # markdown-it-py / scikit-learn / yake; the heavy embedding backends
+      # (fastembed, torch) live in the optional `embed` group and their tests
+      # are deselected by default (`-m 'not gpu and not embed'`), so the matrix
+      # never touches them.
+      - run: pip install pytest pytest-cov ruff mypy numpy markdown-it-py scikit-learn yake
       - run: ruff check src tests scripts
+      - run: ruff format --check src tests scripts
+      - run: mypy
       - run: pytest -q
         env:
           PYTHONPATH: src

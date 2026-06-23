@@ -19,6 +19,8 @@ from PySide6.QtWidgets import QApplication
 
 from tuparles import history, settings
 from tuparles.audio import Recorder
+from tuparles.commands import Command
+from tuparles.commands import parse as parse_command
 from tuparles.config import (
     HOTKEY_HOLD_S,
     IS_WAYLAND,
@@ -27,7 +29,6 @@ from tuparles.config import (
     PARTIAL_WINDOW_S,
     SAMPLE_RATE,
 )
-from tuparles.commands import Command, parse as parse_command
 from tuparles.delivery import capture_focus_class, deliver, execute_command
 from tuparles.engine import load_engine
 from tuparles.pipeline import postprocess
@@ -259,12 +260,14 @@ def run() -> None:
     # GNOME launches us with stdout piped to journald, which Python block-
     # buffers: the forensic prints below never flushed during the freeze
     # hunts. Line-buffer explicitly so the journal sees them as they happen.
-    sys.stdout.reconfigure(line_buffering=True)
+    sys.stdout.reconfigure(line_buffering=True)  # type: ignore[union-attr]  # always a TextIO here
 
     # Single instance: two daemons mean two hotkey listeners — every take
     # double-toggles and double-delivers. The flock dies with the process,
     # so a crashed daemon never wedges the next launch.
-    lock_file = open(
+    # Held open for the whole process lifetime on purpose: closing it releases
+    # the flock and defeats the single-instance guard. Not a leak.
+    lock_file = open(  # noqa: SIM115
         Path(os.environ.get("XDG_RUNTIME_DIR", "/tmp")) / "tuparles.lock", "w"
     )
     try:
@@ -281,9 +284,7 @@ def run() -> None:
 
     recorder = Recorder()
     bridge = Bridge()
-    bubble = Bubble(
-        level_source=lambda: recorder.level, view=settings.get("view")
-    )
+    bubble = Bubble(level_source=lambda: recorder.level, view=settings.get("view"))
     controller = Controller(engine, recorder, bubble, bridge)
 
     bridge.toggled.connect(controller.toggle)

@@ -54,7 +54,9 @@ def _vocab(args) -> None:
         return
     if args.action == "list":
         words = vocab.load()
-        print("\n".join(words) if words else "Glossaire vide — `tuparles vocab suggest`.")
+        print(
+            "\n".join(words) if words else "Glossaire vide — `tuparles vocab suggest`."
+        )
         return
 
     # suggest / review share the mining pass over the whole local history.
@@ -105,9 +107,7 @@ def _print_stats() -> None:
     if s["decode_x_realtime"]:
         print(f"Décodage     {s['decode_x_realtime']:.0f}x temps réel")
     if s["langs"]:
-        mix = ", ".join(
-            f"{LANGUAGES.get(code, code)} ×{n}" for code, n in s["langs"]
-        )
+        mix = ", ".join(f"{LANGUAGES.get(code, code)} ×{n}" for code, n in s["langs"])
         print(f"Langues      {mix}")
 
 

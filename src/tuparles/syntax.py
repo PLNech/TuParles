@@ -115,6 +115,6 @@ def apply_syntax(text: str, ctx: SyntaxContext | None = None) -> str:
             continue
         try:
             text = feature.apply(text, ctx)
-        except Exception as exc:  # noqa: BLE001 — a syntax slip must not kill a take
+        except Exception as exc:
             print(f"syntax feature {feature.name!r} failed: {str(exc)[:120]}")
     return text

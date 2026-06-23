@@ -68,8 +68,19 @@ def record(
             "INSERT INTO dictations (ts, text, engine, audio_s, decode_s,"
             " deliver_s, chars, words, wpm, lang, lang_prob)"
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (ts, text, engine, audio_s, decode_s, deliver_s,
-             len(text), words, wpm, lang, lang_prob),
+            (
+                ts,
+                text,
+                engine,
+                audio_s,
+                decode_s,
+                deliver_s,
+                len(text),
+                words,
+                wpm,
+                lang,
+                lang_prob,
+            ),
         )
 
 

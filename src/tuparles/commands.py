@@ -36,21 +36,40 @@ MAX_COMMAND_TOKENS = 7
 # Delete needs a DOUBLED trigger. The surface forms a French/English speaker
 # actually reaches for; imperative and infinitive both ("efface"/"effacer").
 _DELETE_TRIGGERS = {
-    "efface", "effacer", "effaces",
-    "supprime", "supprimer", "supprimes",
-    "delete", "remove", "erase",
+    "efface",
+    "effacer",
+    "effaces",
+    "supprime",
+    "supprimer",
+    "supprimes",
+    "delete",
+    "remove",
+    "erase",
 }
 
 # Units of deletion, mapped to the canonical name the executor understands.
 _UNITS = {
-    "mot": "word", "mots": "word", "word": "word", "words": "word",
-    "caractère": "char", "caractères": "char",
-    "caractere": "char", "caracteres": "char",
-    "lettre": "char", "lettres": "char",
-    "char": "char", "chars": "char",
-    "character": "char", "characters": "char",
-    "ligne": "line", "lignes": "line", "line": "line", "lines": "line",
-    "tout": "all", "everything": "all", "all": "all",
+    "mot": "word",
+    "mots": "word",
+    "word": "word",
+    "words": "word",
+    "caractère": "char",
+    "caractères": "char",
+    "caractere": "char",
+    "caracteres": "char",
+    "lettre": "char",
+    "lettres": "char",
+    "char": "char",
+    "chars": "char",
+    "character": "char",
+    "characters": "char",
+    "ligne": "line",
+    "lignes": "line",
+    "line": "line",
+    "lines": "line",
+    "tout": "all",
+    "everything": "all",
+    "all": "all",
 }
 
 # Whole-take phrases (after normalization) that map to a single safe action.
@@ -61,30 +80,66 @@ _UNDO_PHRASES = {"annule", "annuler", "annulation", "undo"}
 # bare "plus"/"more", which collides with prose. "encore" is deliberately
 # excluded (too polysemous).
 _NUDGE_MORE = {
-    "un peu plus", "encore un peu", "a bit more", "a little more", "un cran plus",
+    "un peu plus",
+    "encore un peu",
+    "a bit more",
+    "a little more",
+    "un cran plus",
 }
 _NUDGE_LESS = {
-    "un peu moins", "a bit less", "a little less", "un cran moins",
+    "un peu moins",
+    "a bit less",
+    "a little less",
+    "un cran moins",
 }
 
 _OPEN_TERMINAL = {
-    "ouvre un terminal", "ouvre le terminal", "ouvre-moi un terminal",
-    "ouvre moi un terminal", "nouveau terminal",
-    "open a terminal", "open terminal", "new terminal",
+    "ouvre un terminal",
+    "ouvre le terminal",
+    "ouvre-moi un terminal",
+    "ouvre moi un terminal",
+    "nouveau terminal",
+    "open a terminal",
+    "open terminal",
+    "new terminal",
 }
 
 # Literal-escape prefixes: "dictate the next words, don't interpret them".
 _LITERAL_PREFIXES = (
-    "dis", "écris", "ecris", "tape",
-    "say", "type", "write", "verbatim",
-    "littéralement", "litteralement",
+    "dis",
+    "écris",
+    "ecris",
+    "tape",
+    "say",
+    "type",
+    "write",
+    "verbatim",
+    "littéralement",
+    "litteralement",
 )
 
 _NUMBER_WORDS = {
-    "un": 1, "une": 1, "deux": 2, "trois": 3, "quatre": 4, "cinq": 5,
-    "six": 6, "sept": 7, "huit": 8, "neuf": 9, "dix": 10,
-    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
-    "six_en": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+    "un": 1,
+    "une": 1,
+    "deux": 2,
+    "trois": 3,
+    "quatre": 4,
+    "cinq": 5,
+    "six": 6,
+    "sept": 7,
+    "huit": 8,
+    "neuf": 9,
+    "dix": 10,
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six_en": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
 }
 # "six" collides FR/EN — same value, so one entry is enough; the _en marker
 # above is never matched (kept only so the EN list reads complete).

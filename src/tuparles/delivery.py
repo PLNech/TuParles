@@ -26,10 +26,15 @@ from tuparles.config import IS_WAYLAND as _WAYLAND
 # leaving phantom stuck Ctrl/Alt/AltGr — the "keyboard locked" bug. A keyup
 # on an already-released key is a no-op, so this list errs generous.
 _MODIFIERS = [
-    "Control_L", "Control_R",
-    "Alt_L", "Alt_R", "ISO_Level3_Shift",
-    "Shift_L", "Shift_R",
-    "Super_L", "Super_R",
+    "Control_L",
+    "Control_R",
+    "Alt_L",
+    "Alt_R",
+    "ISO_Level3_Shift",
+    "Shift_L",
+    "Shift_R",
+    "Super_L",
+    "Super_R",
 ]
 
 
@@ -81,9 +86,7 @@ _KEYMAP_SAFE = set(string.printable)
 
 
 def _should_paste(text: str) -> bool:
-    return len(text) > PASTE_THRESHOLD_CHARS or any(
-        c not in _KEYMAP_SAFE for c in text
-    )
+    return len(text) > PASTE_THRESHOLD_CHARS or any(c not in _KEYMAP_SAFE for c in text)
 
 
 def _should_chunk(text: str) -> bool:
@@ -153,10 +156,21 @@ def _chunk_for_paste(text: str, max_chars: int = MAX_CHUNK_CHARS) -> list[str]:
 # "gnome-terminal" covers the res_class form ("Gnome-terminal"); the
 # -server form is the instance — Wayland reports whichever, so list both.
 _TERMINALS = {
-    "gnome-terminal-server", "gnome-terminal", "org.gnome.terminal",
-    "kgx", "org.gnome.console",
-    "alacritty", "kitty", "konsole", "xterm", "terminator", "tilix",
-    "st", "urxvt", "wezterm", "ghostty",
+    "gnome-terminal-server",
+    "gnome-terminal",
+    "org.gnome.terminal",
+    "kgx",
+    "org.gnome.console",
+    "alacritty",
+    "kitty",
+    "konsole",
+    "xterm",
+    "terminator",
+    "tilix",
+    "st",
+    "urxvt",
+    "wezterm",
+    "ghostty",
 }
 
 
@@ -182,11 +196,21 @@ def _focus_wm_class(timeout: float = 2.0) -> str:
     fast: a short cap so a missing or busy service never stalls delivery."""
     try:
         proc = subprocess.run(
-            ["gdbus", "call", "--session",
-             "--dest", _FOCUS_DEST,
-             "--object-path", _FOCUS_PATH,
-             "--method", f"{_FOCUS_DEST}.GetClass"],
-            capture_output=True, text=True, check=False, timeout=timeout,
+            [
+                "gdbus",
+                "call",
+                "--session",
+                "--dest",
+                _FOCUS_DEST,
+                "--object-path",
+                _FOCUS_PATH,
+                "--method",
+                f"{_FOCUS_DEST}.GetClass",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=timeout,
         )
     except (subprocess.SubprocessError, OSError):
         return ""
@@ -342,8 +366,7 @@ def _type_into_focus(text: str, focus_class: str = "", before_paste=None) -> Non
         if _should_chunk(text):
             if shutil.which("ydotool") is None:
                 print(
-                    "ydotool absent — transcript au presse-papiers, "
-                    "colle avec Ctrl+V"
+                    "ydotool absent — transcript au presse-papiers, colle avec Ctrl+V"
                 )
                 return
             if before_paste is not None:
@@ -352,15 +375,15 @@ def _type_into_focus(text: str, focus_class: str = "", before_paste=None) -> Non
                 except Exception:
                     pass
             _paste_chunks(
-                text, _wayland_combo(focus_class), _wayland_paste_key,
+                text,
+                _wayland_combo(focus_class),
+                _wayland_paste_key,
                 label="(wayland)",
             )
         else:
             _wayland_paste(focus_class, before_paste)
         return
-    subprocess.run(
-        ["xdotool", "keyup", *_MODIFIERS], check=False, timeout=5
-    )
+    subprocess.run(["xdotool", "keyup", *_MODIFIERS], check=False, timeout=5)
     if _should_paste(text):
         # Paste UNCONDITIONALLY — the clipboard holds the exact text, paste is
         # the guarantee, never re-type (see _paste_into_focus). Long/multi-line
@@ -368,7 +391,9 @@ def _type_into_focus(text: str, focus_class: str = "", before_paste=None) -> Non
         if _should_chunk(text):
             wm_class, combo = _x11_focus_combo(focus_class)
             _paste_chunks(
-                text, combo, _x11_paste_key,
+                text,
+                combo,
+                _x11_paste_key,
                 label=f"into '{wm_class.strip() or '?'}'",
             )
         else:
@@ -435,8 +460,13 @@ def _execute_delete(cmd) -> str:
 
 def _open_terminal() -> str:
     for term in (
-        "gnome-terminal", "kgx", "org.gnome.Console",
-        "konsole", "alacritty", "kitty", "xterm",
+        "gnome-terminal",
+        "kgx",
+        "org.gnome.Console",
+        "konsole",
+        "alacritty",
+        "kitty",
+        "xterm",
     ):
         if shutil.which(term):
             try:
@@ -479,9 +509,7 @@ def to_clipboard(text: str) -> None:
         if shutil.which("wl-copy") is None:
             print("wl-copy absent — installe wl-clipboard, sinon le collage échoue")
             return
-        subprocess.run(
-            ["wl-copy"], input=text.encode(), check=True, timeout=10
-        )
+        subprocess.run(["wl-copy"], input=text.encode(), check=True, timeout=10)
         return
     subprocess.run(
         ["xsel", "--clipboard", "--input"],

@@ -17,9 +17,7 @@ from PySide6.QtWidgets import QApplication
 
 OUT = Path(__file__).resolve().parents[1] / ".github"
 
-RECORDING_TEXT = (
-    "…on ship le feature d'abord, then we iterate sur les retours, virgule"
-)
+RECORDING_TEXT = "…on ship le feature d'abord, then we iterate sur les retours, virgule"
 FULL_TEXT = (
     "Alors l'idée c'est simple : on garde le daemon local, the GPU does the "
     "heavy lifting en moins d'une seconde, et le texte arrive direct dans la "
@@ -91,9 +89,7 @@ def main() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         cfg = Path(tmp) / "tuparles"
         cfg.mkdir()
-        (cfg / "settings.json").write_text(
-            json.dumps({"languages": ["fr", "en"]})
-        )
+        (cfg / "settings.json").write_text(json.dumps({"languages": ["fr", "en"]}))
         os.environ["XDG_CONFIG_HOME"] = tmp
         from tuparles.settings_ui import SettingsDialog
 

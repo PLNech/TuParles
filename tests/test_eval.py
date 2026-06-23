@@ -46,24 +46,36 @@ def test_wer_basic():
 
 
 def test_score_case_pass():
-    case = {"id": "ok", "text": "il faut ship la feature",
-            "must_contain": ["ship", "feature"], "must_not_contain": ["chip"]}
+    case = {
+        "id": "ok",
+        "text": "il faut ship la feature",
+        "must_contain": ["ship", "feature"],
+        "must_not_contain": ["chip"],
+    }
     r = score_case(case, "Il faut ship la feature.")
     assert r.passed and not r.missing and not r.leaked
     assert r.wer == 0.0
 
 
 def test_score_case_missing_slot_fails():
-    case = {"id": "miss", "text": "ship it",
-            "must_contain": ["ship it"], "must_not_contain": []}
+    case = {
+        "id": "miss",
+        "text": "ship it",
+        "must_contain": ["ship it"],
+        "must_not_contain": [],
+    }
     r = score_case(case, "chip it maintenant")
     assert not r.passed
     assert r.missing == ["ship it"]
 
 
 def test_score_case_leaked_misfire_fails():
-    case = {"id": "leak", "text": "fan out les agents",
-            "must_contain": ["fan out"], "must_not_contain": ["fais un air"]}
+    case = {
+        "id": "leak",
+        "text": "fan out les agents",
+        "must_contain": ["fan out"],
+        "must_not_contain": ["fais un air"],
+    }
     r = score_case(case, "tu fais un air de jamais les agents")
     assert not r.passed
     assert "fan out" in r.missing
@@ -77,6 +89,7 @@ def test_summary_is_readable():
 
 # --- corpus integrity (the dataset itself is an artifact under test) --------
 
+
 def test_corpus_loads_and_is_well_formed():
     corpus = json.loads(CORPUS.read_text())
     ids = [c["id"] for c in corpus["cases"]]
@@ -89,8 +102,9 @@ def test_corpus_loads_and_is_well_formed():
         # reference text — else the case can never pass even on a perfect decode
         hay = tokens(c["text"])
         for phrase in c["must_contain"]:
-            assert contains_phrase(hay, tokens(phrase)), \
+            assert contains_phrase(hay, tokens(phrase)), (
                 f"{c['id']}: must_contain '{phrase}' absent from reference text"
+            )
 
 
 def test_corpus_misfires_are_absent_from_reference():
@@ -99,5 +113,6 @@ def test_corpus_misfires_are_absent_from_reference():
     for c in corpus["cases"]:
         hay = tokens(c["text"])
         for phrase in c.get("must_not_contain", []):
-            assert not contains_phrase(hay, tokens(phrase)), \
+            assert not contains_phrase(hay, tokens(phrase)), (
                 f"{c['id']}: must_not_contain '{phrase}' is in the reference text"
+            )

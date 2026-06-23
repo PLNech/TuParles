@@ -20,17 +20,88 @@ evdev = "^1.9.3"
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0"
 ruff = "^0.9"
+mypy = "^2.1.0"
+pytest-cov = "^7.1.0"
+pre-commit = "^4.6.0"
+
+# Light, portable NLP deps — pure-python / cross-OS wheels, safe in the CI
+# matrix. The corpus-analysis core (nlp/) needs these.
+[tool.poetry.group.nlp.dependencies]
+markdown-it-py = "^4.2.0"
+scikit-learn = "^1.9.0"
+yake = "^0.7.3"
+
+# Heavy / platform-fragile embedding backends (onnxruntime, torch). NOT
+# installed in CI — they'd blow up the cross-OS matrix and aren't needed for
+# the portable suite. Opt in locally with `poetry install --with embed`.
+[tool.poetry.group.embed]
+optional = true
+
+[tool.poetry.group.embed.dependencies]
+fastembed = "^0.8.0"
+sentence-transformers = "^5.6.0"
 
 [tool.poetry.scripts]
 tuparles = "tuparles.cli:main"
 
 [tool.pytest.ini_options]
-# `gpu` tests need a live CUDA device + generated WAVs; deselected by default
-# so the pure-python suite stays CI-portable. Run them with `pytest -m gpu`.
-addopts = "-m 'not gpu'"
+# `gpu` needs a CUDA device + WAVs; `embed` needs the optional embed group.
+# Both deselected by default so the pure-python suite stays CI-portable.
+# Run them with `pytest -m gpu` / `pytest -m embed`.
+addopts = "-m 'not gpu and not embed' --cov=tuparles --cov-report=term-missing"
 markers = [
     "gpu: requires a CUDA device and generated fixtures (the code-switch eval)",
+    "embed: requires the optional 'embed' group (fastembed / sentence-transformers)",
 ]
+
+[tool.coverage.run]
+source = ["tuparles"]
+omit = ["*/tests/*"]
+
+[tool.coverage.report]
+show_missing = true
+# Soft for now — visibility before a hard floor. Raise `fail_under` once the
+# new nlp/ engines settle and we know the honest baseline.
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+# Beyond the default E/F/W: import-sorting (I), bugbear (B), pyupgrade (UP),
+# simplify (SIM), comprehensions (C4), Ruff's own (RUF).
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "C4", "RUF"]
+ignore = [
+    "E501",  # line length is the formatter's job (long comments/URLs/strings)
+    # Ambiguous-unicode warnings are false friends here: this is a bilingual,
+    # French-typography project that *deliberately* uses « », ×, ’, narrow
+    # no-break spaces. Flagging them every time costs more than it catches.
+    "RUF001", "RUF002", "RUF003",
+    # try/except/pass is a deliberate, commented fire-and-forget pattern in the
+    # daemon/delivery cosmetics; contextlib.suppress wouldn't read clearer.
+    "SIM105",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E402"]  # tests sometimes import after sys.path / marker setup
+
+[tool.mypy]
+python_version = "3.11"
+files = ["src/tuparles"]
+check_untyped_defs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+no_implicit_optional = true
+# Third-party libs ship without stubs (fastembed, yake, sklearn, markdown_it,
+# faster_whisper, sounddevice, pynput, evdev, PySide6...). Don't fail on them.
+ignore_missing_imports = true
+
+# Grandfather the Qt frontend: PySide6's unscoped-enum access (Qt.AlignLeft,
+# QPainter.Antialiasing...) is correct at runtime but mypy can't resolve it.
+# Type-cleaning the UI layer is its own task; don't block CI on known noise.
+[[tool.mypy.overrides]]
+module = ["tuparles.tray", "tuparles.ui", "tuparles.settings_ui"]
+disable_error_code = ["attr-defined"]
 
 [build-system]
 requires = ["poetry-core"]

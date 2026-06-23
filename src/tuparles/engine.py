@@ -75,7 +75,7 @@ def _preload_cuda_libs() -> None:
     import nvidia.cudnn.lib
 
     for mod in (nvidia.cublas.lib, nvidia.cudnn.lib):
-        libdir = Path(list(mod.__path__)[0])
+        libdir = Path(next(iter(mod.__path__)))
         for so in sorted(libdir.glob("*.so*")):
             try:
                 ctypes.CDLL(str(so), mode=ctypes.RTLD_GLOBAL)
@@ -172,9 +172,12 @@ class QwenCpuEngine:
             result = subprocess.run(
                 [
                     str(QWEN_BINARY),
-                    "-d", str(QWEN_MODEL_DIR),
-                    "-i", tmp.name,
-                    "-t", str(QWEN_THREADS),
+                    "-d",
+                    str(QWEN_MODEL_DIR),
+                    "-i",
+                    tmp.name,
+                    "-t",
+                    str(QWEN_THREADS),
                     "--silent",
                 ],
                 capture_output=True,

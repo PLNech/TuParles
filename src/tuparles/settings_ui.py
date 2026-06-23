@@ -79,9 +79,7 @@ class SettingsDialog(QDialog):
             item = QListWidgetItem(f"{name}  ({code})")
             item.setData(Qt.UserRole, code)
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-            item.setCheckState(
-                Qt.Checked if code in selected else Qt.Unchecked
-            )
+            item.setCheckState(Qt.Checked if code in selected else Qt.Unchecked)
             self._list.addItem(item)
         layout.addWidget(self._list)
 
@@ -89,9 +87,7 @@ class SettingsDialog(QDialog):
         clear.clicked.connect(self._clear_all)
         layout.addWidget(clear)
 
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel
-        )
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
