@@ -167,7 +167,9 @@ class Controller(QObject):
                 try:
                     history.record(
                         text,
-                        engine=type(self._engine).__name__,
+                        engine=getattr(
+                            self._engine, "engine_name", type(self._engine).__name__
+                        ),
                         audio_s=audio_s,
                         decode_s=decode_s,
                         deliver_s=deliver_s,

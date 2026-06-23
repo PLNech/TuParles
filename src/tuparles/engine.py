@@ -186,10 +186,85 @@ class QwenCpuEngine:
         return Transcription(result.stdout.strip())
 
 
+class ResilientEngine:
+    """GPU engine with mid-session recovery.
+
+    A laptop suspend/resume invalidates the CUDA context: the model loads
+    fine at startup and decodes for hours, then every decode throws after a
+    sleep (the daemon holds a stale context even though `nvidia-smi` and
+    fresh processes are fine). The old design only fell back to CPU at *load*
+    time, so a post-resume context death meant every take silently yielded
+    nothing.
+
+    On a decode failure we rebuild the GPU engine once — a fresh CUDA context
+    in the same process (~1.6 s), which is exactly what recovers from
+    suspend/resume — and retry. Only if that also fails is the GPU genuinely
+    gone, so we drop to qwen-CPU for the rest of the session. Either way a
+    take never silently produces nothing.
+
+    Factories are injectable so the recovery logic is testable without a GPU.
+    """
+
+    def __init__(self, gpu_factory=GpuEngine, cpu_factory=QwenCpuEngine) -> None:
+        self._gpu_factory = gpu_factory
+        self._cpu_factory = cpu_factory
+        self._gpu = gpu_factory()  # may raise — load_engine() handles it
+        self._cpu = None  # built lazily, only if the GPU truly dies
+        self._on_cpu = False
+
+    @property
+    def engine_name(self) -> str:
+        """Backend that actually served the last decode (for telemetry)."""
+        return "QwenCpuEngine" if self._on_cpu else "GpuEngine"
+
+    @property
+    def supports_partials(self) -> bool:
+        return not self._on_cpu and self._gpu is not None
+
+    def transcribe(self, audio: np.ndarray) -> Transcription:
+        if self._on_cpu:
+            return self._cpu_engine().transcribe(audio)
+        try:
+            return self._gpu.transcribe(audio)
+        except Exception as exc:
+            print(f"GPU decode failed ({str(exc)[:120]}); rebuilding CUDA context")
+            if self._rebuild_gpu():
+                try:
+                    return self._gpu.transcribe(audio)
+                except Exception as exc2:
+                    print(f"GPU still failing ({str(exc2)[:120]}); CPU fallback")
+            self._on_cpu = True
+            return self._cpu_engine().transcribe(audio)
+
+    def transcribe_partial(self, audio: np.ndarray) -> str:
+        # Partials are frequent and best-effort: never rebuild on one (it would
+        # thrash), never fall back — let the final transcribe() drive recovery.
+        if self._on_cpu or self._gpu is None:
+            return ""
+        try:
+            return self._gpu.transcribe_partial(audio)
+        except Exception:
+            return ""
+
+    def _rebuild_gpu(self) -> bool:
+        try:
+            self._gpu = self._gpu_factory()
+            return True
+        except Exception:
+            self._gpu = None
+            return False
+
+    def _cpu_engine(self):
+        if self._cpu is None:
+            self._cpu = self._cpu_factory()
+        return self._cpu
+
+
 def load_engine():
-    """GPU if it answers, CPU fallback otherwise. Never crash at startup."""
+    """GPU (self-healing) if it answers, CPU fallback otherwise. Never crash
+    at startup, and never get stuck with no STT after a suspend/resume."""
     try:
-        return GpuEngine()
+        return ResilientEngine()
     except Exception as exc:
         print(f"GPU engine unavailable ({exc}); falling back to qwen-asr CPU")
         return QwenCpuEngine()
