@@ -125,8 +125,10 @@ def section_signal_disagreement(report: dict, corpus: Corpus) -> None:
         b = surf.get(tfidf[i], "") if i < len(tfidf) else ""
         print(f"| {i + 1} | `{a}` | `{b}` |")
     overlap = len(set(sym) & set(tfidf))
-    print(f"\n*Top-15 overlap: {overlap}/15 — "
-          f"{'signals largely agree' if overlap > 9 else 'signals see different vocab'}.*")
+    print(
+        f"\n*Top-15 overlap: {overlap}/15 — "
+        f"{'signals largely agree' if overlap > 9 else 'signals see different vocab'}.*"
+    )
 
 
 def section_risk_and_corr(report: dict, corpus: Corpus) -> None:
@@ -148,8 +150,10 @@ def section_risk_and_corr(report: dict, corpus: Corpus) -> None:
         "mean_risk_identifier": float(risk[ident].mean()) if ident.any() else 0.0,
         "mean_risk_prose": float(risk[~ident].mean()) if (~ident).any() else 0.0,
     }
-    print(f"\nmean risk — identifiers {report['risk']['mean_risk_identifier']:.2f} "
-          f"vs prose {report['risk']['mean_risk_prose']:.2f}")
+    print(
+        f"\nmean risk — identifiers {report['risk']['mean_risk_identifier']:.2f} "
+        f"vs prose {report['risk']['mean_risk_prose']:.2f}"
+    )
     # metafeature correlations
     corr = {
         "salience~tfidf": _corr(sal, tf),
@@ -199,9 +203,7 @@ def section_embed(report: dict, corpus: Corpus, backend) -> None:
     print(f"- Spearman(embed, tfidf)  = {rho_et:+.2f}")
     print("  *(low |ρ| ⇒ the embedding adds an independent view, worth fusing)*")
     clusters = cluster.cluster_terms(corpus, backend, cands=cands, n_clusters=10)
-    report["clusters"] = [
-        {"size": c.size, "theme": c.label_terms} for c in clusters
-    ]
+    report["clusters"] = [{"size": c.size, "theme": c.label_terms} for c in clusters]
     print("\n## Semantic clusters / themes (KMeans on term embeddings)\n")
     print("| size | theme (top-salience members) |")
     print("|--:|---|")
@@ -244,8 +246,10 @@ def main() -> None:
     corpus, _ = build(repos)
     report["n_terms"] = len(corpus.stats)
     report["n_candidates"] = len(corpus.candidates())
-    print(f"\n**Corpus:** {len(corpus.stats):,} unique terms, "
-          f"{len(corpus.candidates()):,} candidates (count≥2), {corpus.n_docs} docs.\n")
+    print(
+        f"\n**Corpus:** {len(corpus.stats):,} unique terms, "
+        f"{len(corpus.candidates()):,} candidates (count≥2), {corpus.n_docs} docs.\n"
+    )
 
     section_salience_sources(report, corpus)
     section_seed(report, corpus, backend)
