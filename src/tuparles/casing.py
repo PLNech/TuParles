@@ -3,10 +3,15 @@
 This is *descriptive* casing: take the near-final text and re-case it to the
 style the user actually writes in (all-lowercase "lowkey", Sentence case, …).
 That is the opposite of the prescriptive voice-caps syntax family (#59), which
-*adds* capitals on a spoken command. The two compose: explicit voice-caps win
-because they register as protected spans here (see the `protect` hook), NOT
-because of stage order — running casing last would otherwise down-case exactly
-the word #59 just capitalized. When #59 lands, wire it #59→`protect`.
+*adds* capitals on a spoken command. They will eventually need to compose:
+running casing last would down-case exactly the word #59 just capitalized under
+a `lower` style. That conflict is **latent, not live** — no UI writes
+`casing_style`, so non-`preserve` styles are unreachable today, and #59 ships
+standalone. The fix is deferred to #121 (the style-inference work that first
+makes a non-preserve style reachable): the per-token `protect` predicate can't
+carry the *positional* fact "this particular capital was explicit", so #121
+will pick the right channel then (a deliver-verbatim sentinel, a stage reorder,
+or a per-feature case-stability flag) rather than guess now.
 
 DOCTRINE (inherited from #41, #53): a wrong autocorrect is worse than a visible
 mishear. So:

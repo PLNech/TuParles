@@ -40,6 +40,15 @@ now, say so in the PR/commit rather than letting them drift.
   DB — before theory.
 - **The differentiator is where your voice lives afterward.** Local, on your
   box. Build for the silicon and the privacy story writes itself.
+- **Every feature degrades gracefully — GPU-or-CPU, never GPU-or-nothing.** The
+  engine has always been turbo-GPU primary, qwen-CPU fallback; that is the
+  *house style*, not an engine quirk. So a feature that wants a GPU model ships
+  a CPU path too (a smaller offline model, a deterministic approximation, or a
+  documented reduced mode) and chooses at runtime by what is actually available
+  — no card, on battery, CUDA wedged, all the same: it still works, just maybe
+  slower or coarser. Heavy/optional deps stay quarantined in an optional group
+  behind a marker so the lean install never pays for them. "It still works on
+  my laptop on the train" is the bar.
 - **French-snappy where it reads well** (`dicte`, `Réglages`) — this is a
   bilingual tool; the surface should feel it.
 

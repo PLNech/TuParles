@@ -3,6 +3,21 @@
 ## Sprint 10 — 2026-06-24 · Ton style (personalized casing) + le GPU qui revient
 
 ### Added
+- **Voice-caps — region all-caps** (`syntax_features/caps.py`, #59, EPIC #53) —
+  the second spoken-syntax family after quotes. Wrap a passage to SHOUT between
+  a paired open/close, bilingual: "tout en majuscules … fin des majuscules" /
+  "all caps … end caps"; the span is upper-cased and the trigger words removed.
+  Safety is structural — **require-close**: a region fires only as a complete
+  open…close pair, so a lone "tout en majuscules" stays literal text
+  (deliberately more conservative than quotes' auto-close — an unclosed caps
+  region would shout the rest of the take). A mode-switch close synonym
+  ("en minuscules" / "minuscule" / "lowercase") ends the shout, safe because
+  require-close ignores it without a preceding open. The misfire corpus
+  ("je l'ai écrit en majuscule", …) is the load-bearing test. Composes with the
+  #120 `lower` style for free — an all-caps run reads as an acronym to the
+  guard. Deferred to a follow-up: next-word capitalize + the general dual-mode
+  mode-switch engine (needs a mode register + the quasimode #62 for a safe
+  next-word trigger).
 - **Re-case engine — personalized-casing core** (`casing.py`, #120, EPIC #119)
   — *descriptive* casing: re-case the final text to the style you actually
   write in. `recase(text, style, *, protect=)` with styles `preserve` (default,
