@@ -162,8 +162,8 @@ class TestIntrospect:
         summary = introspect.usage_summary()
         assert summary["total"] == 5
         assert summary["entry_split"] == {"hotkey": 2, "tray": 1}
-        assert summary["commands"] == {"command.fired": 1}
-        assert summary["syntax"] == {"syntax.used": 1}
+        assert summary["commands"] == {"undo": 1}  # by action name, not event name
+        assert summary["syntax_used"] == {"bullets": 1}
 
     def test_utterance_tags_over_history(self, tmp_path, monkeypatch):
         if not introspect.nlp_available():
@@ -182,3 +182,36 @@ class TestIntrospect:
         assert introspect.utterance_tags() == []
         assert introspect.utterance_keyphrases() == []
         assert introspect.usage_summary()["total"] == 0
+
+
+class TestDashboardHtml:
+    """The dialog's three views are built by pure HTML functions (no QWidget),
+    so we test the rendering logic without a QApplication — matching the
+    project's grandfathered UI-test boundary."""
+
+    def test_usage_html_shows_counts_and_discovery_gap(
+        self, _clean_registry, tmp_path, monkeypatch
+    ):
+        from tuparles.telemetry import dashboard
+
+        _isolate(tmp_path, monkeypatch)
+        syntax.register(_feature("bullets", mark="•"))  # registered, never fired
+        telemetry.event("command.fired", name="undo")
+        telemetry.event("entry.dictation", source="hotkey")
+        html = dashboard._usage_html()
+        assert "undo" in html and "hotkey" in html
+        assert "Jamais utilisé" in html and "bullets" in html  # the discovery gap
+
+    def test_usage_html_empty_state(self, tmp_path, monkeypatch):
+        from tuparles.telemetry import dashboard
+
+        _isolate(tmp_path, monkeypatch)
+        assert "Aucune donnée" in dashboard._usage_html()
+
+    def test_code_html_renders_or_prompts(self, tmp_path, monkeypatch):
+        from tuparles.telemetry import dashboard
+
+        # cached EDA JSON lives in the repo, so this renders the real analysis;
+        # either way it must be a non-crashing string under the right heading.
+        html = dashboard._code_html()
+        assert "Ton code" in html or "Aucune analyse" in html

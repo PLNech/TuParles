@@ -48,6 +48,13 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
   its telemetry (duration, decode time, words/min, detected language).
   `tuparles history "query"` searches it; `tuparles stats` shows your
   dictation profile (débit, decode speed, language mix).
+- **Analytics dashboard, all on your box** — a tray *Analytics…* window
+  with three views: *Ton usage* (which voice commands and syntax features
+  you actually use, and which you've never discovered), *Ta voix* (a tag
+  cloud + keyphrases over your dictation history), and *Ton code* (the
+  cached codebase analysis that seeds the decoder). Feature usage is
+  tracked **locally and opt-out** — nothing leaves the machine; toggle it
+  off or wipe it in *Réglages › Confidentialité*.
 
 ## Architecture
 
@@ -63,7 +70,7 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
  waveform              │      │                            └─────────────────────┘
   bubble UI ◄──────────┘      ├─► punctuation → lexicon → repeat-collapse
   (live transcript)           ├─► type/paste into focus (X11 xdotool · Wayland ydotool) + clipboard
-                              └─► history + telemetry (SQLite)
+                              └─► history + telemetry + usage events (SQLite)
 ```
 
 - **Primary engine**: [faster-whisper](https://github.com/SYSTRAN/faster-whisper)

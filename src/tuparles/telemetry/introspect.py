@@ -70,13 +70,38 @@ def utterance_keyphrases(
 
 
 def usage_summary() -> dict:
-    """The telemetry view: counts, the discovery gap, and the entry-path split.
+    """The telemetry view: per-feature counts and the entry-path split.
 
-    Pure stdlib + sqlite, so it works with or without the nlp extras.
+    Counts are by the feature's own name (the `name`/`source` attr), not the
+    coarse event name — "undo fired 4×", not "command.fired fired 4×". Pure
+    stdlib + sqlite, so it works with or without the nlp extras.
     """
     return {
         "total": sum(readout.usage_counts().values()),
-        "commands": dict(readout.usage_counts(prefix="command.")),
-        "syntax": dict(readout.usage_counts(prefix="syntax.")),
+        "commands": dict(readout.attr_split("command.fired", "name")),
+        "syntax_used": dict(readout.attr_split("syntax.used", "name")),
         "entry_split": dict(readout.attr_split("entry.dictation", "source")),
     }
+
+
+def corpus_analysis() -> dict | None:
+    """The last cached codebase EDA — instant and freeze-free.
+
+    Computing a corpus live on dialog-open would do a multi-second discovery +
+    TF-IDF build on the GUI thread (the stall watchdog would scream), and
+    "which project?" needs active-project detect (#70, unbuilt). So the corpus
+    view renders the JSON `scripts/nlp_eda.py` already writes, labelled with
+    its date + repos. A worker-thread refresh is a clean fast-follow. None when
+    no analysis has been run yet.
+    """
+    import json
+    from pathlib import Path
+
+    data_dir = Path(__file__).resolve().parents[3] / "docs" / "research" / "data"
+    cached = sorted(data_dir.glob("*-nlp-eda.json")) if data_dir.is_dir() else []
+    if not cached:
+        return None
+    try:
+        return json.loads(cached[-1].read_text())
+    except (OSError, ValueError):
+        return None
