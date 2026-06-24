@@ -12,9 +12,27 @@ from tuparles import cheatsheet, commands, punctuation, syntax
 
 
 class TestEntries:
-    def test_has_all_three_categories(self):
+    def test_has_the_core_categories(self):
+        # Quick-chat is environment-dependent (a user pack may or may not exist),
+        # so assert the three derived-from-code categories are always present.
         cats = {e.category for e in cheatsheet.entries()}
-        assert cats == {"Commandes", "Ponctuation", "Syntaxe"}
+        assert {"Commandes", "Ponctuation", "Syntaxe"} <= cats
+
+    def test_quickchat_macros_surface_when_a_pack_exists(self, monkeypatch):
+        from tuparles.quickchat import Phrase
+
+        monkeypatch.setattr(cheatsheet.settings, "get", lambda key: True)
+        monkeypatch.setattr(
+            cheatsheet.quickchat, "load", lambda: [Phrase("lgtm", "Looks good to me")]
+        )
+        macros = [e for e in cheatsheet.entries() if e.category == "Quick-chat"]
+        assert macros and macros[0].title == "lgtm"
+        assert "Looks good to me" in macros[0].note
+
+    def test_no_quickchat_section_when_disabled(self, monkeypatch):
+        monkeypatch.setattr(cheatsheet.settings, "get", lambda key: False)
+        cats = {e.category for e in cheatsheet.entries()}
+        assert "Quick-chat" not in cats
 
     def test_delete_triggers_are_derived_live(self):
         """Every command-grammar delete trigger appears in the sheet — so adding
@@ -41,15 +59,22 @@ class TestPunctuation:
 
     def test_comma_lists_both_languages(self):
         comma = next(
-            e for e in cheatsheet.entries() if e.category == "Ponctuation" and e.title == ","
+            e
+            for e in cheatsheet.entries()
+            if e.category == "Ponctuation" and e.title == ","
         )
         assert "virgule" in comma.triggers and "comma" in comma.triggers
 
     def test_humanize_known_constructs(self):
-        assert cheatsheet.humanize("exclamation (?:mark|point)") == "exclamation mark/point"
+        assert (
+            cheatsheet.humanize("exclamation (?:mark|point)")
+            == "exclamation mark/point"
+        )
         assert cheatsheet.humanize("point[- ]virgule") == "point-virgule"
         assert cheatsheet.humanize("points? de suspension") == "points de suspension"
-        assert cheatsheet.humanize("point d['’]interrogation") == "point d'interrogation"
+        assert (
+            cheatsheet.humanize("point d['’]interrogation") == "point d'interrogation"
+        )
 
     def test_no_pattern_leaves_regex_metachars(self):
         """The drift guard: if a SPOKEN_TO_SYMBOL pattern grows a construct
@@ -58,7 +83,9 @@ class TestPunctuation:
         forbidden = re.compile(r"[\[\]()?|\\]")
         for pattern, _symbol in punctuation.SPOKEN_TO_SYMBOL:
             human = cheatsheet.humanize(pattern)
-            assert not forbidden.search(human), f"{pattern!r} -> {human!r} (regex leaked)"
+            assert not forbidden.search(human), (
+                f"{pattern!r} -> {human!r} (regex leaked)"
+            )
 
 
 class TestSearch:

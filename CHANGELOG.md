@@ -75,7 +75,9 @@
   drift. Search is accent- and case-insensitive. A `humanize()` turns the
   punctuation regexes into readable phrases, guarded by a test that fails if a
   pattern grows a construct it can't render. Pure core; the tray/settings panel
-  is a thin render over `entries()` (onboarding epic #55, blocks #85).
+  is a thin render over `entries()` (onboarding epic #55, blocks #85). The sheet
+  also surfaces your own quick-chat macros (#89) once you have a pack, so a
+  macro you defined is discoverable, not a secret you must remember.
 - **Quick-chat / voice macros — engine + pack format** (`quickchat.py`, #89) —
   a SHORT spoken trigger expands to a curated text (CS-radio "enemy spotted"
   meets Dragon auto-texts). Pure anchored engine: a trigger fires only on a
