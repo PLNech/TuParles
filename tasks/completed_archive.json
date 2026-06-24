@@ -232,5 +232,41 @@
     "subject": "Dict-seed: RRF fusion ranker",
     "completedAt": "2026-06-24",
     "learnings": "RRF is the boring/calibration-free choice, and it's empirically justified: the 3 signals are near-independent (|Pearson|<=0.15, Spearman embed<->others <=0.08), which is exactly when fusion adds value. dictseed combines them as seed_score = RRF(symbol,tfidf[,embed]) * (0.25 + 0.75*whisper_risk) -- prominence GATED by how hard the token is for Whisper, so a salient common French word (risk~0) doesn't get seeded."
+  },
+  {
+    "id": "96",
+    "subject": "EPIC: Local analytics & introspection — telemetry + feature-discovery + Analytics dashboard",
+    "completedAt": "2026-06-24",
+    "learnings": "Telemetry framed as introspection, NOT analytics: single-user + local-only dissolves the whole consent/transport layer that makes telemetry fraught. The question that keeps it 'light' and honest is 'which features earn their place / never get discovered?' -- feeds deletion-beats-addition."
+  },
+  {
+    "id": "97",
+    "subject": "Telemetry: telemetry/ package -- primitives + local sink",
+    "completedAt": "2026-06-24",
+    "learnings": "event(name, /, **attrs) -- the event-name MUST be positional-only or a name= attr collides (TypeError). Sibling events table added to the existing history.db via CREATE IF NOT EXISTS (additive, history rows untouched); exposed history.db_path() as single source of truth so telemetry reuses the store without coupling on a private."
+  },
+  {
+    "id": "98",
+    "subject": "Telemetry: instrument commands / syntax / entry-path",
+    "completedAt": "2026-06-24",
+    "learnings": "syntax.used flows through a pure on_fire hook threaded daemon -> postprocess -> apply_syntax, so the SHARED eval path never gains a side effect. The entry-path indirection (toggle_from_hotkey/_tray) was invisible to the green suite -- needed an offscreen-Qt stubbed-Controller test to verify the source attr. command.fired can't be unit-tested (executor fires real keystrokes)."
+  },
+  {
+    "id": "99",
+    "subject": "Telemetry: Réglages kill-switch (local-only opt-out)",
+    "completedAt": "2026-06-24",
+    "learnings": "Local-only telemetry => default-ON opt-out is honest (nothing is ever transmitted). The 'effacer mes statistiques' wipe gets a confirmation (data deletion always double-checks)."
+  },
+  {
+    "id": "100",
+    "subject": "Telemetry: nlp-over-introspection adapter",
+    "completedAt": "2026-06-24",
+    "learnings": "Reused the nlp message_documents path over history.texts(); guarded every nlp-backed call behind nlp_available() so --without-nlp degrades to [] not a crash. usage_summary counts by the feature's own name attr (attr_split), not the coarse event name."
+  },
+  {
+    "id": "101",
+    "subject": "Telemetry: Analytics dashboard (tray -> corpus + utterances + telemetry)",
+    "completedAt": "2026-06-24",
+    "learnings": "The corpus view RENDERS cached EDA JSON from disk -- never builds a 50k-term corpus on the GUI thread (the stall watchdog would scream) and sidesteps #70 entirely. Cheap views stay synchronous, no worker thread in v1. HTML builders are pure functions -> testable without a QApplication (matches the grandfathered-UI test boundary). The advisor caught that the green suite hid the untested entry-path wiring."
   }
 ]

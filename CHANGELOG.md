@@ -1,5 +1,32 @@
 # Changelog
 
+## Sprint 8 — 2026-06-24 · Cartographier les prochains fronts (research + roadmap)
+
+### Research
+- **Local PII firewall** (`docs/research/2026-06-24-local-pii-firewall.md`,
+  #102) — three parallel research angles synthesized: rent detection
+  (`python-stdnum` + ONNX GLiNER, no torch) + Presidio operators; own the spine
+  (policy router, in-RAM map that never hits disk, fail-closed interlock,
+  code-symbol allowlist from the dict-seed AST). Three layers / three safety
+  semantics; sanitize-before-LLM as the new edge.
+- **Roundtable speaker ID** (`docs/research/2026-06-24-roundtable-*.md`, #108) —
+  diarization (pyannote community-1 + sherpa-onnx no-torch fallback),
+  enrollment+ID (CAM++ + τ/δ abstain interlocks), name-from-ASR binding,
+  DER/cpWER eval, GDPR Art.9 + EU AI Act "not remote" escape. A sherpa-onnx
+  addendum folded into the diarization SOTA note (escapes the WhisperX torch-pin).
+
+### Added
+- **Roadmap**: two epics + 13 children (#102–#114), dependency-wired, phased
+  MVPs and standalone entry points (#103 / #104 / #39 / #113). #39 refreshed to
+  the diarization SOTA verdict.
+
+### Doctrine
+- **Cross-epic leverage**: build the PII firewall's erasure path first → the
+  roundtable's biometric-delete (#112) is nearly free. The dict-seed AST (#54)
+  feeds both the PII code-allowlist (#106) and the roundtable name-lexicon (#110).
+- **Voiceprints are biometric PII** — the firewall's local-only / consent /
+  easy-delete doctrine carries straight into roundtable mode.
+
 ## Sprint 7 — 2026-06-24 · Le miroir local
 
 ### Added
