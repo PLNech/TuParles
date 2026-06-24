@@ -268,5 +268,11 @@
     "subject": "Telemetry: Analytics dashboard (tray -> corpus + utterances + telemetry)",
     "completedAt": "2026-06-24",
     "learnings": "The corpus view RENDERS cached EDA JSON from disk -- never builds a 50k-term corpus on the GUI thread (the stall watchdog would scream) and sidesteps #70 entirely. Cheap views stay synchronous, no worker thread in v1. HTML builders are pure functions -> testable without a QApplication (matches the grandfathered-UI test boundary). The advisor caught that the green suite hid the untested entry-path wiring."
+  },
+  {
+    "id": "103",
+    "subject": "PII P1: deterministic redaction core (secrets + denylist + frequency-floor)",
+    "completedAt": "2026-06-24",
+    "learnings": "Three detectors, ONE safety semantic split: checksum-validated structured PII (stdnum IBAN/NIR/Luhn) and known secret prefixes carry BLOCK authority; high-entropy tokens and topic hits are ALERT-only -- precision earns the right to redact. Denylist matching runs on a normalize() pass (NFKD accent-strip + casefold + leet-map) but only to DECIDE redaction, never on delivered text, so it can be lossy + Scunthorpe-safe (whole-token match). The _CANDIDATE regex must be contiguous (\\b[0-9A-Za-z]{10,34}\\b) -- an early version allowed spaces and gobbled across tokens. Core is standalone: NOT yet wired into the live utterance/analytics/dict paths (that integration is the next stroke)."
   }
 ]
