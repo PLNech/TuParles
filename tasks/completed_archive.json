@@ -334,5 +334,11 @@
     "subject": "Onboarding: cheat-sheet CORE + tuparles cheatsheet (panel deferred)",
     "completedAt": "2026-06-24",
     "learnings": "DERIVE-not-hardcode is the whole point: cheatsheet.entries() reads the live grammar -- commands.vocabulary() (new public view of the #41 meta-language), punctuation.SPOKEN_TO_SYMBOL, syntax.catalogue() (each family carries its own summary/triggers, co-located with its regex so help can't drift), and the user's quickchat pack (#89). A humanize() renders the punctuation regexes into readable phrases, GUARDED by a test that fails if a pattern grows a construct it can't render. search() is accent+case-insensitive (NFKD strip). #83 stays pending: only the Qt tray/settings PANEL remains (thin render over entries()/search())."
+  },
+  {
+    "id": "120",
+    "subject": "Casing: re-case engine (target styles, conservative preserve default)",
+    "completedAt": "2026-06-24",
+    "learnings": "DESCRIPTIVE casing (match the user's style) is the opposite of PRESCRIPTIVE voice-caps #59 (adds caps on command); they compose via the `protect` hook NOT stage order -- advisor caught that running recase last would DOWN-case exactly the word #59 just capitalized, so #59 must register explicit caps as protected spans. Wiring hinged on one fact: eval.py normalize() casefolds (line 38), so casing is invisible to the code-switch scorer -> postprocess is the safe home AND #123's casing eval needs its OWN case-sensitive scorer. Conservative guards are ORTHOGRAPHIC/model-free (URLs/identifiers/digit-bearing/camelCase/ALL-CAPS>=2) so they live in #120; proper-noun NER is #122 via the same `protect` predicate. Doctrine made structural: default `preserve` = pure identity (ships dark); sentence-case treats a terminator behind a closing quote as NOT a boundary (never capitalize on an ambiguous quote-internal period) -- missed cosmetic beats wrong rewrite. Honest gap until #122: `lower` lowercases proper nouns + plural acronyms (isupper() False on 'APIs'), documented as the lowkey aesthetic. Use unicode str.lower/upper/isupper, NEVER an a-z/a-ÿ regex range (drops oe/ae ligatures past U+00FF -- French-tool footgun)."
   }
 ]
