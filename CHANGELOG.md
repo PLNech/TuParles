@@ -1,5 +1,41 @@
 # Changelog
 
+## Sprint 7 — 2026-06-24 · Le miroir local
+
+### Added
+- **Telemetry primitives** (`src/tuparles/telemetry/`, #97) — a small modular
+  layer mirroring `nlp/`: `event()` / `timer()` gated by a local opt-out, a
+  sibling `events` table in the existing data store (additive migration,
+  history's rows untouched), and `readout` aggregations. Synchronous writes;
+  local-only by doctrine.
+- **Feature instrumentation** (#98) — three discovery surfaces emit events:
+  `command.fired`, `syntax.used` (only when a feature actually changed the
+  text, via a pure `on_fire` hook threaded daemon → `postprocess` →
+  `apply_syntax`, so the eval path stays side-effect-free), and
+  `entry.dictation` (hotkey vs tray). Mode-switch waits on #47's feature.
+- **nlp-over-introspection adapter** (#100) — utterances (`history.texts` →
+  `message_documents`) yield a tag cloud + YAKE keyphrases; the event log is
+  summarised by the readout. Degrades to empty (never crashes) without the
+  `nlp` extras.
+- **Analytics dashboard** (#101) — a tray *Analytics…* window, three views:
+  *Ton usage* (feature counts + the discovery gap), *Ta voix* (tag cloud +
+  keyphrases over your dictations), *Ton code* (the cached codebase EDA,
+  rendered from disk — never computed live, so the GUI never freezes and #70
+  isn't a blocker). Live re-analysis is a worker-thread fast-follow.
+
+### Changed
+- **Privacy is a setting** (#99) — a *Confidentialité* section in *Réglages*:
+  default-on local usage tracking, a master kill-switch, and an "effacer mes
+  statistiques" wipe behind a confirmation. Smart local default, total override.
+
+### Doctrine
+- **Telemetry is introspection, not analytics.** Single-user, local-only, no
+  consent or transport layer to get wrong. The question it answers — *which
+  features earn their place?* — feeds deletion-beats-addition.
+- **Never freeze the GUI for data.** The corpus view renders cached JSON
+  instead of building a 50k-term corpus on the GUI thread (the stall watchdog
+  would catch it); the cheap views (usage, voice) stay synchronous.
+
 ## Sprint 6 — 2026-06-24 · Le moteur qui lit ton code
 
 ### Added

@@ -73,6 +73,9 @@ class Tray(QObject):
         self._hist_shown: list[tuple[str, str]] = []
         self._rebuild_history()
 
+        self._analytics_act = self._menu.addAction("Analytics…")
+        self._analytics_act.triggered.connect(self._open_analytics)
+
         self._settings_act = self._menu.addAction("Réglages…")
         self._settings_act.triggered.connect(self._open_settings)
 
@@ -111,6 +114,13 @@ class Tray(QObject):
         self._settings_dialog = SettingsDialog()  # ref kept: GC-proof
         self._settings_dialog.show()
         self._settings_dialog.raise_()
+
+    def _open_analytics(self) -> None:
+        from tuparles.telemetry.dashboard import AnalyticsDialog
+
+        self._analytics_dialog = AnalyticsDialog()  # ref kept: GC-proof
+        self._analytics_dialog.show()
+        self._analytics_dialog.raise_()
 
     def _on_view_toggled(self, checked: bool) -> None:
         mode = "full" if checked else "minimal"
