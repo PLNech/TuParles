@@ -21,6 +21,12 @@
   be zero) and OVER-REDACTION (clean text wrongly masked — must be zero too,
   since the detectors are deterministic). Pure text, runs in the normal suite,
   so a privacy regression breaks CI. First run: **0% leakage, 0% over-redaction**.
+- **Réglages › Pare-feu PII — denylist editor** (`PrivacyDialog`, #107) — a
+  two-tier term editor (block = masked from the stored record, alert = surfaced
+  but never auto-redacted) plus the analytics anonymity-floor knob. Pure
+  `parse_terms` helper (one term per line, de-duped) is unit-tested; an
+  offscreen-Qt round-trip pins that the dialog writes exactly the keys the
+  engine reads. Operator profiles / faker / cloud-egress arrive with #105.
 
 ### Fixed
 - **Card detector demoted Luhn from sole authority** (#104) — bare Luhn passes

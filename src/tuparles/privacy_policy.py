@@ -41,6 +41,28 @@ def redact_for_storage(text: str) -> str:
     return privacy.redact(text, denylist=active_denylist())
 
 
+def parse_terms(text: str) -> list[str]:
+    """One denylist term per line → cleaned, de-duped, order-preserving.
+
+    The editable form for the Réglages denylist editor (#107): a plain textarea,
+    one term per line. Blank lines and duplicates are dropped so the stored list
+    stays tidy and `Denylist.from_terms` gets clean input.
+    """
+    seen: set[str] = set()
+    out: list[str] = []
+    for line in text.splitlines():
+        term = line.strip()
+        if term and term not in seen:
+            seen.add(term)
+            out.append(term)
+    return out
+
+
+def terms_to_text(terms: list[str] | None) -> str:
+    """Inverse of `parse_terms` for populating the editor."""
+    return "\n".join(terms or [])
+
+
 def analytics_min_count() -> int:
     """The k-floor applied to the utterance tag cloud (k-anonymity over names).
 
