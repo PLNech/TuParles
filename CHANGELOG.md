@@ -42,6 +42,13 @@
   opens it in the browser. No token, no API, no account data sent — a public repo
   can't ship a usable token, so the URL path is the honest answer (first piece of
   onboarding epic #55).
+- **`tuparles update` — update checker** (`update_check.py`, #86) — queries the
+  public GitHub Releases API (no token) and compares against the installed
+  version. **Opt-in** (`update_check_enabled`, default off — a network call
+  reveals you run the tool, so local-first means you choose); `tuparles update`
+  always works manually. Pure version compare + injectable fetch (tests never
+  touch the network); every failure path returns `None` so a dead check can't
+  cost a launch.
 
 ### Infra
 - **CI off Node 20** (#43) — `actions/checkout@v4→v5` and `setup-python@v5→v6`

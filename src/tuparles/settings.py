@@ -17,6 +17,9 @@ _DEFAULTS: dict[str, object] = {
     "pii_denylist_block": [],  # user terms always redacted from the stored record
     "pii_denylist_alert": [],  # user terms surfaced but never auto-redacted
     "pii_analytics_min_count": 1,  # k-floor for the tag cloud; raise for k-anonymity
+    # Update check (#86): opt-IN — a network call to GitHub reveals you run the
+    # tool, so default off (local-first). `tuparles update` always works manually.
+    "update_check_enabled": False,
 }
 
 
