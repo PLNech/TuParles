@@ -31,6 +31,7 @@ def main() -> None:
     )
     rep.add_argument("title", nargs="*", help="short summary of the issue")
     rep.add_argument("--no-open", action="store_true", help="just print the URL")
+    sub.add_parser("update", help="Check GitHub for a newer release (no token)")
     args = parser.parse_args()
 
     if args.cmd == "history":
@@ -45,6 +46,8 @@ def main() -> None:
         _vocab(args)
     elif args.cmd == "report":
         _report(args)
+    elif args.cmd == "update":
+        _update()
     else:
         from tuparles.daemon import run
 
@@ -109,6 +112,20 @@ def _report(args) -> None:
         import webbrowser
 
         webbrowser.open(url)
+
+
+def _update() -> None:
+    from tuparles.update_check import check
+
+    info = check()
+    if info is None:
+        print("Impossible de vérifier les mises à jour (hors-ligne ?).")
+        return
+    if info.available:
+        print(f"Nouvelle version : {info.latest} (tu as {info.current})")
+        print(info.url)
+    else:
+        print(f"À jour : {info.current} est la dernière version.")
 
 
 def _print_stats() -> None:
