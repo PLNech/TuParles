@@ -298,5 +298,23 @@
     "subject": "CI chore: bump actions off Node 20 -- became a full CI resurrection",
     "completedAt": "2026-06-24",
     "learnings": "main's CI had been RED for many commits before this session (the 'ruff/mypy clean' in memory was LOCAL-only -- always verify CI, not just local). What looked like a one-line Node bump uncovered SIX stacked root causes, each masking the next because a failing step aborts before later ones run: (1) unpinned ruff auto-bumped on the runner -> new UP rules failed untouched files [pin ruff==0.9.10 + mypy==2.1.0 to poetry.lock]; (2) python-stdnum missing from the runner pip line -> privacy tests couldn't collect; (3) ruff format --check is a SEPARATE gate from ruff check -- ran ruff format over the tree; (4) hotkey.py mypy union-attr because evdev (optional Linux dep) is absent on runners -> cast(Any, key.fileobj); (5) fcntl.flock flagged on Windows cells -> mypy platform='linux' (app is Unix-only, type-check the deploy target); (6) PySide6 absent on runners -> pytest.importorskip guards on Qt-touching tests; (7) numpy 3.12 stub uses PEP-695 'type' which a hardcoded python_version=3.11 rejects -> drop the pin, mypy matches each cell. KEY METHOD: reproduce CI locally (mypy --platform win32, version-matched interpreter, PySide6-absent path) instead of blind push-and-wait -- each CI round-trip is ~3min. Bump was checkout@v5 + setup-python@v6 (Node 24; Node 20 force-deprecated June 2026, removed 2026-09-16)."
+  },
+  {
+    "id": "87",
+    "subject": "Onboarding: voice/text bug-report -> prefilled GitHub issue URL",
+    "completedAt": "2026-06-24",
+    "learnings": "Tokenless by design: a public repo can't ship a usable token, so build issues/new?title=&body= and open it -- no API, no account data sent (the #87 decision). Auto-gather an environment block (version/python/OS/Wayland-vs-X11) so reports arrive actionable. Pure + offline (urlencode + injectable env), tested via parse_qs round-trip. First piece of onboarding epic #55."
+  },
+  {
+    "id": "86",
+    "subject": "Onboarding: update checker (GitHub Releases API)",
+    "completedAt": "2026-06-24",
+    "learnings": "Opt-IN (default off): a network call reveals you run the tool, so local-first means the user chooses; `tuparles update` always works manually. Tokenless public Releases endpoint. Version compare is pure (_version_tuple, v-prefix + short tags, weird tag sorts low, unknown current always offers); fetch is INJECTABLE so tests never socket; every failure path returns None so a dead check can't cost a launch. check_if_enabled() gates on the setting and short-circuits BEFORE fetch."
+  },
+  {
+    "id": "68",
+    "subject": "Dict-seed: feed mechanism -- bias half (initial_prompt) shipped; post-correct deferred to #69",
+    "completedAt": "2026-06-24",
+    "learnings": "Shipped the BIAS half only (initial_prompt enrichment from cached EDA top_seeds) -- advisory to Whisper, can't corrupt, so safe to ship on-by-default without GPU validation. KEY: Whisper keeps only the LAST ~224 tokens of initial_prompt, so the curated manual glossary must go at the TAIL (auto-seeds ahead of it) or your hand-picked words get truncated. seed_prompt.initial_prompt(manual, seeds, bias_enabled) is fully injectable -> pure tests, no vocab.txt/EDA touched; engine._vocab_prompt delegates. The POST-CORRECT (transcript rewrite) is deferred to #69's FP/FN harness and #69's description updated to own it -- a rewrite must be MEASURED before trusted. Effectiveness of the bias itself also awaits #69 (mechanism shipped, not yet proven to help). A bias-off-but-seeds-passed bug was caught by tests -> gate seeds unconditionally on bias_enabled."
   }
 ]
