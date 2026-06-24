@@ -257,3 +257,19 @@ def parse(text: str) -> Command | None:
             return Command("literal", text=inner)
 
     return _parse_core(norm)
+
+
+def vocabulary() -> dict[str, list[str]]:
+    """Public, sorted view of the command grammar — the source of truth for the
+    cheat-sheet (#83), so help enumerates the live triggers instead of
+    hard-coding (and drifting from) them. Group keys are stable; values are the
+    spoken surface forms a user can say."""
+    return {
+        "delete_triggers": sorted(_DELETE_TRIGGERS),
+        "units": sorted(set(_UNITS.values())),
+        "undo": sorted(_UNDO_PHRASES),
+        "nudge_more": sorted(_NUDGE_MORE),
+        "nudge_less": sorted(_NUDGE_LESS),
+        "open_terminal": sorted(_OPEN_TERMINAL),
+        "literal_prefixes": sorted(_LITERAL_PREFIXES),
+    }

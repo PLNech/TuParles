@@ -165,6 +165,8 @@ tuparles vocab review     # accept/reject them interactively
 tuparles report "bug…"    # open a prefilled GitHub issue (no account data sent)
 tuparles update           # check GitHub for a newer release (no token)
 tuparles whatsnew         # the latest changelog section
+tuparles cheatsheet       # every voice command & syntax phrase (searchable)
+tuparles cheatsheet quote # …filtered (accent/case-insensitive)
 ```
 
 Everything lives in `~/.local/share/tuparles/history.db` and

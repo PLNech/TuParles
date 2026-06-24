@@ -56,12 +56,18 @@ class SyntaxContext:
 @dataclass(frozen=True)
 class SyntaxFeature:
     """A registered transformation. `apply(text, ctx) -> text` must be pure and
-    total (handle any string); `order` sets run position (low runs first)."""
+    total (handle any string); `order` sets run position (low runs first).
+
+    `summary` and `triggers` are the feature's own help (the cheat-sheet, #83):
+    a one-line description and a few representative spoken forms. They live with
+    the feature — same place as its regex — so help can't drift from grammar."""
 
     name: str
     apply: Callable[[str, SyntaxContext], str]
     default_enabled: bool = True
     order: int = 100
+    summary: str = ""
+    triggers: tuple[str, ...] = ()
 
 
 _FEATURES: list[SyntaxFeature] = []
@@ -83,6 +89,13 @@ def clear() -> None:
 def registered() -> list[str]:
     """Names in run order — the source of truth for the cheat-sheet (#83)."""
     return [f.name for f in _ordered()]
+
+
+def catalogue() -> list[SyntaxFeature]:
+    """Registered features in run order — for the cheat-sheet (#83) to read each
+    family's `summary`/`triggers` help. A copy of the list so callers can't
+    mutate the registry."""
+    return list(_ordered())
 
 
 def _ordered() -> list[SyntaxFeature]:
