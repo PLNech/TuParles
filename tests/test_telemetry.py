@@ -136,7 +136,9 @@ class TestSyntaxInstrumentation:
         # the daemon's actual wiring: postprocess → telemetry.event("syntax.used")
         _isolate(tmp_path, monkeypatch)
         syntax.register(_feature("bullets", mark="•"))
-        postprocess("hi", on_syntax_fire=lambda n: telemetry.event("syntax.used", name=n))
+        postprocess(
+            "hi", on_syntax_fire=lambda n: telemetry.event("syntax.used", name=n)
+        )
         rows = sink.read(name="syntax.used")
         assert len(rows) == 1
         assert rows[0][2] == {"name": "bullets"}

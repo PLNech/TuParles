@@ -44,7 +44,9 @@ class TestRedactForStorage:
 
     def test_clean_prose_unchanged(self, monkeypatch):
         _stub_settings(monkeypatch, {"pii_redact_history": True})
-        assert privacy_policy.redact_for_storage("juste une phrase") == "juste une phrase"
+        assert (
+            privacy_policy.redact_for_storage("juste une phrase") == "juste une phrase"
+        )
 
 
 class TestActiveDenylist:

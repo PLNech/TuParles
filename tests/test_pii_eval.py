@@ -56,9 +56,7 @@ def _load_cases() -> list[dict]:
 _DATA = json.loads(CORPUS.read_text())
 CASES = _load_cases()
 _DL = _DATA.get("denylist", {})
-DENYLIST = Denylist.from_terms(
-    block=_DL.get("block", []), alert=_DL.get("alert", [])
-)
+DENYLIST = Denylist.from_terms(block=_DL.get("block", []), alert=_DL.get("alert", []))
 
 
 @pytest.mark.parametrize("case", CASES, ids=[c["id"] for c in CASES])

@@ -111,9 +111,7 @@ class Corpus:
         # across the corpus", not an artefact of a term being alone in a doc
         # (l2 would push any lone-term doc to 1.0).
         tfidf = (
-            TfidfTransformer(sublinear_tf=True, norm=None)
-            .fit_transform(counts)
-            .tocsc()
+            TfidfTransformer(sublinear_tf=True, norm=None).fit_transform(counts).tocsc()
         )
         names = dv.get_feature_names_out()
         for j, key in enumerate(names):

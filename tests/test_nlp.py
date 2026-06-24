@@ -166,7 +166,9 @@ def test_compute_metafeatures_tfidf_rewards_rarity():
 
 def test_candidates_min_count():
     c = Corpus()
-    c.ingest([_doc([("seen", SrcType.TEXT), ("seen", SrcType.TEXT), ("once", SrcType.TEXT)])])
+    c.ingest(
+        [_doc([("seen", SrcType.TEXT), ("seen", SrcType.TEXT), ("once", SrcType.TEXT)])]
+    )
     c.finalize()
     keys = {t.key for t in c.candidates(min_count=2)}
     assert keys == {"seen"}
@@ -190,7 +192,9 @@ def test_rrf_contributions():
 # engine: dict-seed                                                            #
 # --------------------------------------------------------------------------- #
 def test_whisper_risk_code_beats_prose():
-    code = TermStats(key="g", surface="getFacetValues", is_camel=True, is_identifier=True)
+    code = TermStats(
+        key="g", surface="getFacetValues", is_camel=True, is_identifier=True
+    )
     prose = TermStats(key="b", surface="bonjour")
     assert dictseed.whisper_risk(code) > dictseed.whisper_risk(prose)
 
@@ -223,7 +227,9 @@ def test_tag_cloud_normalised_to_one():
     c = Corpus()
     c.ingest(
         [
-            _doc([("alpha", SrcType.DEF_NAME)] * 3 + [("beta", SrcType.MD_PROSE)], "d1"),
+            _doc(
+                [("alpha", SrcType.DEF_NAME)] * 3 + [("beta", SrcType.MD_PROSE)], "d1"
+            ),
             _doc([("alpha", SrcType.IDENT)], "d2"),
         ]
     )

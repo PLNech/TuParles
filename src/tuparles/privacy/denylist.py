@@ -38,7 +38,11 @@ class Denylist:
         for m in _WORD.finditer(text):
             n = normalize(m.group())
             if n in self.block:
-                findings.append(Finding(m.start(), m.end(), "denylist", "block", m.group()))
+                findings.append(
+                    Finding(m.start(), m.end(), "denylist", "block", m.group())
+                )
             elif n in self.alert:
-                findings.append(Finding(m.start(), m.end(), "denylist", "alert", m.group()))
+                findings.append(
+                    Finding(m.start(), m.end(), "denylist", "alert", m.group())
+                )
         return findings

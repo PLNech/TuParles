@@ -22,7 +22,9 @@ class TestSecrets:
         assert "secret.aws_key" in kinds
         assert "secret.github_pat" in kinds
         assert all(
-            f.tier == "block" for f in privacy.find_secrets(text) if f.kind.startswith("secret") and f.kind != "secret.high_entropy"
+            f.tier == "block"
+            for f in privacy.find_secrets(text)
+            if f.kind.startswith("secret") and f.kind != "secret.high_entropy"
         )
 
     def test_pem_and_jwt(self):
@@ -33,7 +35,9 @@ class TestSecrets:
 
     def test_high_entropy_is_alert_not_block(self):
         text = "deploy with aG38fjQ9zPbX72KdLm05wRtY1cVn4eH6"
-        hits = [f for f in privacy.find_secrets(text) if f.kind == "secret.high_entropy"]
+        hits = [
+            f for f in privacy.find_secrets(text) if f.kind == "secret.high_entropy"
+        ]
         assert hits and hits[0].tier == "alert"
 
     def test_plain_prose_is_clean(self):
