@@ -316,5 +316,23 @@
     "subject": "Dict-seed: feed mechanism -- bias half (initial_prompt) shipped; post-correct deferred to #69",
     "completedAt": "2026-06-24",
     "learnings": "Shipped the BIAS half only (initial_prompt enrichment from cached EDA top_seeds) -- advisory to Whisper, can't corrupt, so safe to ship on-by-default without GPU validation. KEY: Whisper keeps only the LAST ~224 tokens of initial_prompt, so the curated manual glossary must go at the TAIL (auto-seeds ahead of it) or your hand-picked words get truncated. seed_prompt.initial_prompt(manual, seeds, bias_enabled) is fully injectable -> pure tests, no vocab.txt/EDA touched; engine._vocab_prompt delegates. The POST-CORRECT (transcript rewrite) is deferred to #69's FP/FN harness and #69's description updated to own it -- a rewrite must be MEASURED before trusted. Effectiveness of the bias itself also awaits #69 (mechanism shipped, not yet proven to help). A bias-off-but-seeds-passed bug was caught by tests -> gate seeds unconditionally on bias_enabled."
+  },
+  {
+    "id": "85",
+    "subject": "Onboarding: spoken help ('que peux-tu faire')",
+    "completedAt": "2026-06-24",
+    "learnings": "A new 'help' voice command (commands.py) + delivery._show_help fires a fire-and-forget notify-send (Popen, never waited -- per the desktop-feedback memory) with cheatsheet.as_text(brief=True); absent notify-send -> toast points at `tuparles cheatsheet`. Structural safety like #41: whitelist of DISTINCTIVE multi-word phrases (FR+EN), never bare 'aide'/'help' (collide with prose), whole-take exact match under MAX_COMMAND_TOKENS. KEY REUSE: cheatsheet.as_text() is the ONE renderer shared by CLI + notification + future panel, so help can't diverge across surfaces. execute_command's 'help' branch flows through the existing daemon _run_command path -- no daemon change needed. The notification IS the spoken-help surface; the richer in-app panel is #83's deferred Qt deliverable."
+  },
+  {
+    "id": "89",
+    "subject": "Quick-chat: phrase-pack format + deterministic trigger->expansion engine",
+    "completedAt": "2026-06-24",
+    "learnings": "Pure anchored engine: a trigger fires ONLY on a whole-take fullmatch (never a substring in prose -- the misfire corpus is the load-bearing test), with <name> template slots compiled to non-greedy named groups. Match case-insensitively via re.IGNORECASE on a whitespace-normalized ORIGINAL (not casefolded) so captured slot values keep the user's case; collapse trigger whitespace at parse time so spacing can't break a match. Pack = hand-editable ~/.config/tuparles/phrasepack.json, re-read every take (hot-reload like vocab); malformed/absent -> [] (a broken file never costs a take). SAFE-ON: quickchat_enabled default True but an empty pack is a no-op, so it can't fire until you write a macro. Wired into the daemon BETWEEN command-handling and delivery (expansion delivered + recorded like dictation). Also surfaced in the cheat-sheet (#83) so user macros are discoverable. GOTCHA: zsh does NOT word-split unquoted $VARS -- list files explicitly in shell gates."
+  },
+  {
+    "id": "83-core",
+    "subject": "Onboarding: cheat-sheet CORE + tuparles cheatsheet (panel deferred)",
+    "completedAt": "2026-06-24",
+    "learnings": "DERIVE-not-hardcode is the whole point: cheatsheet.entries() reads the live grammar -- commands.vocabulary() (new public view of the #41 meta-language), punctuation.SPOKEN_TO_SYMBOL, syntax.catalogue() (each family carries its own summary/triggers, co-located with its regex so help can't drift), and the user's quickchat pack (#89). A humanize() renders the punctuation regexes into readable phrases, GUARDED by a test that fails if a pattern grows a construct it can't render. search() is accent+case-insensitive (NFKD strip). #83 stays pending: only the Qt tray/settings PANEL remains (thin render over entries()/search())."
   }
 ]

@@ -146,6 +146,25 @@
   (names, topics) stays alert-only until #106. Glue (settings-aware) lives one
   level out of the pure, rentable `privacy/` core.
 
+### Research
+- **The personal + register prior** (`docs/research/2026-06-24-real-take-error-taxonomy.md`)
+  — mined a real greenfield take; the proper-noun casualties + the `épiailles`
+  misfire argue for a frequency prior (`wordfreq` IDF + TF-IDF "uniquely yours"
+  + RRF over cold/warm/hot signals into Whisper's 224-token tail). The #54 EPIC's
+  missing half (#116 entity-aware seeding, #117 register prior).
+- **Granola, in and out** (`docs/research/2026-06-24-granola-bridge-in-out.md`,
+  #118) — the team records meetings in Granola, so: IN = mine that corpus (local
+  cache, offline) as a dict-seed context source (the team's meetings teach
+  TuParles its vocab); OUT = roundtable mode (#108/#38) as the sovereign
+  note-taker (Granola's API is read-only — we export, not write-back). Plus 3
+  links + tips + a privacy flag shared with the team.
+- **Personalized casing — a new moat** (#119 epic → #120–123) — match the user's
+  natural capitalization fingerprint (lowkey-lowercase / Proper / code-casual)
+  instead of Whisper's one formal house style. Signal stack: explicit setting →
+  current-box register (hot) → history profile (warm) → app-class → per-language.
+  Safety crux: re-casing is a rewrite, so smart-lowercase must preserve proper
+  nouns/acronyms (converges on #116's entity detection); default = preserve.
+
 ## Sprint 8 — 2026-06-24 · Cartographier les prochains fronts (research + roadmap)
 
 ### Research
