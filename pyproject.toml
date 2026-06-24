@@ -87,7 +87,10 @@ ignore = [
 "tests/*" = ["E402"]  # tests sometimes import after sys.path / marker setup
 
 [tool.mypy]
-python_version = "3.11"
+# No hardcoded python_version: mypy then matches the interpreter it runs under,
+# so the 3.12 CI cell can parse numpy's 3.12-only `type` statements in its stub
+# (a fixed 3.11 target choked on them). The 3.11 matrix cell still enforces the
+# 3.11 minimum-supported floor.
 # TuParles deploys only on Linux/Unix (fcntl single-instance lock, evdev hotkey,
 # X11/Wayland). Type-check for that target on every runner, so the cross-OS CI
 # matrix (which exists for the pure-python *runtime*) doesn't flag fcntl.flock as
