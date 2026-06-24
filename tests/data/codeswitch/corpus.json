@@ -163,6 +163,42 @@
       "must_contain": ["merge conflict", "rebase", "main"],
       "must_not_contain": ["merge conflit", "rebète", "rebasse", "sur maine"],
       "note": "'conflict' vs French 'conflit'; 'rebase' has no anchor."
+    },
+    {
+      "id": "apis-not-epiailles",
+      "text": "Tu peux trouver les températures avec des API sur internet.",
+      "difficulty": "hard",
+      "category": "acronyms",
+      "must_contain": ["API"],
+      "must_not_contain": ["épiailles", "épis", "aiguilles"],
+      "note": "REAL MISFIRE 2026-06-24 (greenfield, zero context). 'des APIs sur internet' decoded as 'des épiailles sur internet'. The English plural acronym (ay-pee-EYEZ) dissolves into French nonsense — the trailing -z of the spoken plural is the trap (/e.pi.aj/ matches the English pronunciation, not French 'a-pé-i'). Reference uses uninflected 'API' (natural FR usage) so the gate isn't brittle on the plural -s. Complements ci-api-llm-gpu (spelled-letter singular)."
+    },
+    {
+      "id": "highscore-survives",
+      "text": "L'idée c'est un highscore qu'on peut partager de manière virale.",
+      "difficulty": "medium",
+      "category": "en-noun-borrow",
+      "must_contain": ["highscore"],
+      "must_not_contain": ["high score", "score élevé", "ix score"],
+      "note": "REAL SURVIVAL 2026-06-24 — pin it so a decode change can't split or translate it. 'highscore' must stay one token (not 'high score') and not be Frenchified to 'score élevé'."
+    },
+    {
+      "id": "replayable-not-rejouable",
+      "text": "On veut un jeu jouable et replayable.",
+      "difficulty": "medium",
+      "category": "en-adj-borrow",
+      "must_contain": ["replayable"],
+      "must_not_contain": ["rejouable", "replay able"],
+      "note": "REAL SURVIVAL 2026-06-24. The English adjective must not be translated to 'rejouable' nor split into 'replay able'."
+    },
+    {
+      "id": "self-contained-artefact",
+      "text": "Fais-moi un artefact interactif self-contained dans Claude.",
+      "difficulty": "medium",
+      "category": "compound-borrow",
+      "must_contain": ["self contained"],
+      "must_not_contain": ["auto contenu", "self contenu"],
+      "note": "REAL SURVIVAL 2026-06-24. NOTE: the scorer maps hyphen->space, so 'self-contained' and 'self contained' are indistinguishable here; we gate on the tokens surviving and ban the TRANSLATION ('auto-contenu'), not the hyphenation, which this scorer cannot see."
     }
   ]
 }
