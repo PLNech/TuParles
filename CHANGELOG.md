@@ -35,6 +35,14 @@
   that network issues (Visa / MC / Amex / Discover / UnionPay / Diners / JCB).
   The eval caught this on its first run — exactly why "measure before you trust".
 
+### Added
+- **`tuparles report` — prefilled bug-report URL** (`bugreport.py`, #87) — builds
+  a `github.com/PLNech/TuParles/issues/new?title=…&body=…` link with an
+  auto-gathered environment block (version / Python / OS / Wayland-vs-X11) and
+  opens it in the browser. No token, no API, no account data sent — a public repo
+  can't ship a usable token, so the URL path is the honest answer (first piece of
+  onboarding epic #55).
+
 ### Infra
 - **CI off Node 20** (#43) — `actions/checkout@v4→v5` and `setup-python@v5→v6`
   (Node 24). GitHub force-deprecates Node 20 on runners in June 2026 and removes
