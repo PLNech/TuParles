@@ -274,5 +274,23 @@
     "subject": "PII P1: deterministic redaction core (secrets + denylist + frequency-floor)",
     "completedAt": "2026-06-24",
     "learnings": "Three detectors, ONE safety semantic split: checksum-validated structured PII (stdnum IBAN/NIR/Luhn) and known secret prefixes carry BLOCK authority; high-entropy tokens and topic hits are ALERT-only -- precision earns the right to redact. Denylist matching runs on a normalize() pass (NFKD accent-strip + casefold + leet-map) but only to DECIDE redaction, never on delivered text, so it can be lossy + Scunthorpe-safe (whole-token match). The _CANDIDATE regex must be contiguous (\\b[0-9A-Za-z]{10,34}\\b) -- an early version allowed spaces and gobbled across tokens. Core is standalone: NOT yet wired into the live utterance/analytics/dict paths (that integration is the next stroke)."
+  },
+  {
+    "id": "115",
+    "subject": "PII P1.5: wire deterministic core into live utterance / analytics / dict paths",
+    "completedAt": "2026-06-24",
+    "learnings": "The gate before defaulting persist-redaction ON was EMPIRICAL, not a judgment call: does any re-deliver path (repeat/redo/nudge) paste text read back from history.db? Traced it -- the only history.last()/recent() consumers are copy-last (clipboard), the tray history menu, and analytics; NONE re-paste via deliver(). So redacting at persist makes those show minimized text BY DESIGN, not a regression. Verbatim is delivered upstream; only the stored copy is shaped. Settings-aware glue (privacy_policy.py) lives one level OUT of the pure privacy/ core -- keeps the core rentable/standalone. Dict-seed leg deferred: #68 isn't built, don't hook into nonexistent code."
+  },
+  {
+    "id": "104",
+    "subject": "PII: sensitive-content eval corpus + harness (FR+EN red-team, leakage rate)",
+    "completedAt": "2026-06-24",
+    "learnings": "Two ASYMMETRIC metrics: leakage (planted secret survived -> must be 0) and over-redaction (clean text masked -> also 0 since detectors are deterministic). First run caught a REAL precision bug: bare Luhn passes ~1-in-10 random digit strings, so a 15-digit order number was masked as Amex -- fixed by requiring a real network IIN prefix + issued length, restoring the high precision that earns block authority. TWO scanners agreed: GitHub push-protection BLOCKED the push because a literal sk_live_ test key sat in the corpus -- the firewall's own red-team material is exactly what the firewall stops. Fix: assemble credential-shaped fixtures at load time via concatenation ({{AWS}}/{{GHP}}/{{STRIPE}} markers); never store a real-looking secret in a tracked file. amend HEAD (push was rejected so nothing was on remote) to purge the secret from the commit tree."
+  },
+  {
+    "id": "107",
+    "subject": "PII: Réglages privacy UI (denylist editor, block/alert tiers + anonymity floor)",
+    "completedAt": "2026-06-24",
+    "learnings": "Separate PrivacyDialog (not inline in the already-tall SettingsDialog). Pure parse_terms helper (one term/line, de-duped, order-preserving) tested without Qt; an offscreen-Qt round-trip pins that _save() writes EXACTLY the setting keys active_denylist() reads, so the UI can't silently drift from the engine (same untested-indirection trap the advisor flagged on telemetry). Operator profiles / faker / cloud-egress / fail-closed deferred to #105 -- don't build knobs without a consumer."
   }
 ]
