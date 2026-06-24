@@ -76,6 +76,17 @@
   punctuation regexes into readable phrases, guarded by a test that fails if a
   pattern grows a construct it can't render. Pure core; the tray/settings panel
   is a thin render over `entries()` (onboarding epic #55, blocks #85).
+- **Quick-chat / voice macros — engine + pack format** (`quickchat.py`, #89) —
+  a SHORT spoken trigger expands to a curated text (CS-radio "enemy spotted"
+  meets Dragon auto-texts). Pure anchored engine: a trigger fires only on a
+  whole-take `fullmatch` (never a substring inside prose — *when in doubt it's
+  text*, same doctrine as #41), with `<name>` template slots filled from what
+  you say. The pack is a hand-editable `~/.config/tuparles/phrasepack.json`
+  (`phrasepack.example.json` to copy), re-read every take like vocab. Safe-on
+  (`quickchat_enabled`): an empty pack is a no-op, so it can't fire until you
+  write a macro. Wired into the daemon between the command and delivery stages;
+  the expansion is delivered and recorded like any dictation. Role packs (#90)
+  and richer activation (#91) build on this core. 23 tests incl. a misfire corpus.
 - **Spoken help — "que peux-tu faire ?"** (#85) — a new `help` voice command
   (a structurally-safe whitelist of distinctive multi-word phrases, FR+EN; never
   bare "aide"/"help", which collide with prose) pops the cheat-sheet as a

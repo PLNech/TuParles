@@ -17,7 +17,7 @@ import time
 from PySide6.QtCore import QMetaObject, QObject, Qt, QTimer, Signal, Slot
 from PySide6.QtWidgets import QApplication
 
-from tuparles import history, privacy_policy, settings, telemetry
+from tuparles import history, privacy_policy, quickchat, settings, telemetry
 from tuparles.audio import Recorder
 from tuparles.commands import Command
 from tuparles.commands import parse as parse_command
@@ -194,6 +194,12 @@ class Controller(QObject):
             if cmd is not None:
                 self._run_command(cmd)
                 return  # an edit is not a transcript — no delivery, no history
+            # Quick-chat (#89): a whole-take trigger expands to canned text, which
+            # is then delivered + recorded like any dictation. None → pass through.
+            expansion = quickchat.expand_active(text)
+            if expansion is not None:
+                telemetry.event("quickchat.fired")
+                text = expansion
             if text:
                 t1 = time.monotonic()
                 deliver(

@@ -1,0 +1,30 @@
+{
+  "_comment": "Quick-chat / voice macros (#89). Copy to ~/.config/tuparles/phrasepack.json and edit. A trigger fires ONLY on a whole-take anchored match (say exactly the trigger, nothing more) — it never fires inside a sentence. Use <name> for a template slot filled from what you say after. Re-read every take, so edits apply immediately.",
+  "phrases": [
+    {
+      "trigger": "lgtm",
+      "expansion": "Looks good to me ✅",
+      "role": "eng"
+    },
+    {
+      "trigger": "ship it",
+      "expansion": "LGTM — merging and shipping. 🚢",
+      "role": "eng"
+    },
+    {
+      "trigger": "standup <projet>",
+      "expansion": "*Standup — <projet>*\n- Hier :\n- Aujourd'hui :\n- Blocages :",
+      "role": "eng"
+    },
+    {
+      "trigger": "merci pour la review",
+      "expansion": "Merci beaucoup pour la review, j'intègre les retours et je reping. 🙏",
+      "role": "eng"
+    },
+    {
+      "trigger": "no repro",
+      "expansion": "Impossible de reproduire de mon côté — peux-tu partager les étapes exactes, l'environnement et un screenshot ?",
+      "role": "product"
+    }
+  ]
+}

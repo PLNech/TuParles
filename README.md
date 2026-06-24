@@ -44,6 +44,12 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
   "point", "new line") in both languages, a personal lexicon for your
   jargon, and deterministic collapse of Whisper repetition loops. No AI
   rewriting: a visible mishear beats a confident wrong autocorrect.
+- **Voice macros (quick-chat)** — a short spoken trigger expands to a canned
+  text: say "lgtm" and get your full review sign-off, "standup billing" and get
+  a filled template. Triggers fire only on an exact whole-take match (never
+  inside a sentence), and the pack is a hand-editable JSON file you own. Off
+  until you write one. *(Engine shipped; role packs and radial activation
+  coming.)*
 - **History & stats, local forever** — every take lands in SQLite with
   its telemetry (duration, decode time, words/min, detected language).
   `tuparles history "query"` searches it; `tuparles stats` shows your
