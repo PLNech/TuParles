@@ -28,6 +28,14 @@ _DEFAULTS: dict[str, object] = {
     # canned text. Safe-on — an empty/absent phrasepack.json is a no-op, so it
     # can't fire until you write a macro. Structural match only (never fuzzy).
     "quickchat_enabled": True,
+    # Personalized casing (#119/#120): re-case final text to your natural style.
+    # "preserve" (default) = identity, ships dark — a wrong autocorrect is worse
+    # than a visible mishear. Other styles: "lower" (lowkey all-lowercase),
+    # "sentence" (Capitalize sentence starts only), "upper". The engine protects
+    # URLs/identifiers/ALL-CAPS acronyms, but until smart proper-noun detection
+    # (#122) lands, "lower" also lowercases names ("paris") and plural acronyms
+    # ("apis") — that's the lowkey aesthetic, opt-in, not a bug.
+    "casing_style": "preserve",
 }
 
 

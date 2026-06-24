@@ -7,6 +7,8 @@ the test measures a fiction the user never sees. So the order lives here, once:
    later stage rewrites them
 2. lexicon — deterministic fixes for caught-red-handed mishears
 3. repeat-collapse — sentence-level, needs the (near-)final text to group runs
+4. casing — re-case to the user's style (#120); last, on the final text, and an
+   identity no-op unless they opt into a style (default `preserve`)
 
 Whatever the daemon does to `Transcription.text` to get user-facing text, it
 does by calling this. Keep it that way.
@@ -15,6 +17,7 @@ does by calling this. Keep it that way.
 from collections.abc import Callable
 
 from tuparles import syntax_features  # noqa: F401  (import = register families)
+from tuparles.casing import apply_casing
 from tuparles.lexicon import apply_lexicon
 from tuparles.punctuation import apply_spoken_punctuation
 from tuparles.repeats import collapse_repeats
@@ -38,4 +41,5 @@ def postprocess(
     """
     text = apply_lexicon(apply_spoken_punctuation(text))
     text = apply_syntax(text, ctx, on_fire=on_syntax_fire)
-    return collapse_repeats(text)
+    text = collapse_repeats(text)
+    return apply_casing(text)
