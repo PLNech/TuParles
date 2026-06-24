@@ -76,6 +76,13 @@
   punctuation regexes into readable phrases, guarded by a test that fails if a
   pattern grows a construct it can't render. Pure core; the tray/settings panel
   is a thin render over `entries()` (onboarding epic #55, blocks #85).
+- **Spoken help — "que peux-tu faire ?"** (#85) — a new `help` voice command
+  (a structurally-safe whitelist of distinctive multi-word phrases, FR+EN; never
+  bare "aide"/"help", which collide with prose) pops the cheat-sheet as a
+  fire-and-forget desktop notification. Shares the one `cheatsheet.as_text()`
+  renderer with the CLI (a `brief` mode sized for the toast), so voice, terminal
+  and the future panel can't show different help. No `notify-send` → the
+  confirmation toast points at `tuparles cheatsheet`.
 
 ### Infra
 - **CI off Node 20** (#43) — `actions/checkout@v4→v5` and `setup-python@v5→v6`

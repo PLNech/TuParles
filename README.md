@@ -167,6 +167,7 @@ tuparles update           # check GitHub for a newer release (no token)
 tuparles whatsnew         # the latest changelog section
 tuparles cheatsheet       # every voice command & syntax phrase (searchable)
 tuparles cheatsheet quote # …filtered (accent/case-insensitive)
+                          # …or just dictate "que peux-tu faire ?" hands-free
 ```
 
 Everything lives in `~/.local/share/tuparles/history.db` and

@@ -76,6 +76,23 @@ _UNITS = {
 # Undo is reversible and inherently safe, so it needs no doubling.
 _UNDO_PHRASES = {"annule", "annuler", "annulation", "undo"}
 
+# Spoken help (#85): a whole-take whitelist of distinctive multi-word phrases.
+# No bare "aide"/"help" — those collide with prose ("à l'aide", "help me out").
+# Both hyphen and spaced forms, like _OPEN_TERMINAL, since ASR varies. Showing
+# the cheat-sheet on a misfire is harmless (it's a whole take; you'd notice).
+_HELP_PHRASES = {
+    "que peux-tu faire",
+    "que peux tu faire",
+    "qu'est-ce que tu sais faire",
+    "tu sais faire quoi",
+    "liste des commandes",
+    "montre l'aide",
+    "montre-moi l'aide",
+    "aide tuparles",
+    "what can you do",
+    "show help",
+}
+
 # Nudge tweaks the LAST edit. Only the explicit multi-word forms — never a
 # bare "plus"/"more", which collides with prose. "encore" is deliberately
 # excluded (too polysemous).
@@ -155,7 +172,7 @@ class Command:
     carry its parameters. action="literal" means 'not a command after all —
     deliver `text` as ordinary dictation' (the result of a literal-escape)."""
 
-    action: str  # "delete" | "undo" | "nudge" | "open_terminal" | "literal"
+    action: str  # delete | undo | nudge | open_terminal | help | literal
     unit: str = "word"  # delete: word | char | line | all
     count: int = 1  # delete: how many units
     direction: str = "more"  # nudge: more | less
@@ -217,6 +234,8 @@ def _parse_simple(norm: str) -> Command | None:
     """Whole-take exact-match commands: undo, nudge, open-terminal."""
     if norm in _UNDO_PHRASES:
         return Command("undo")
+    if norm in _HELP_PHRASES:
+        return Command("help")
     if norm in _NUDGE_MORE:
         return Command("nudge", direction="more")
     if norm in _NUDGE_LESS:
