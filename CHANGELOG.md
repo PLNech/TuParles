@@ -1,5 +1,38 @@
 # Changelog
 
+## Sprint 10 — 2026-06-24 · Ton style (personalized casing) + le GPU qui revient
+
+### Added
+- **Re-case engine — personalized-casing core** (`casing.py`, #120, EPIC #119)
+  — *descriptive* casing: re-case the final text to the style you actually
+  write in. `recase(text, style, *, protect=)` with styles `preserve` (default,
+  pure identity — ships dark), `lower` (lowkey all-lowercase), `sentence`
+  (Capitalize sentence starts, never down-case the middle so proper nouns
+  survive), `upper`. Conservative model-free guards never re-case non-prose:
+  URLs / emails / @handles, identifiers (camelCase, snake_case, digit-bearing),
+  and ALL-CAPS acronyms. A `protect` predicate is the seam where smart
+  proper-noun detection (#122) and the gazetteer (#116) plug in later. Wired as
+  the **last** `pipeline.postprocess` stage; a new `casing_style` setting
+  (default `preserve`) keeps it an identity until you opt in. "It's a setting."
+  - **Honest limit until #122:** `lower` also lowercases proper nouns
+    ("paris") and plural acronyms ("apis") — `str.isupper()` is False on
+    "APIs". That's the lowkey aesthetic, opt-in, documented; not a bug.
+  - Doctrine in action: sentence-case treats a terminator *behind a closing
+    quote* (`he said "go."`) as **not** a boundary, so we never capitalize the
+    next word on an ambiguous quote-internal period. A missed cosmetic beats a
+    wrong rewrite — *when in doubt, it's text.*
+
+### Infra
+- **GPU CUDA stack repaired** (#124, Option 1 — venv patch) — `ctranslate2
+  4.8.0` hard-imports `torch 2.1.0`, whose loader demanded the full CUDA
+  **12.1** lib convoy while the installed `nvidia-cu12` stack was **12.9**
+  (pulled by faster-whisper). Installed the missing 12.9 wheels (cupti +
+  cufft / curand / cusolver / cusparse / nccl / nvtx / nvjitlink), leaning on
+  CUDA minor-version forward-compat, so torch → ctranslate2 import again. These
+  wheels are **off `poetry.lock`**; the durable fix (align torch to the
+  ctranslate2 CUDA gen in `pyproject`, then re-lock) is tracked as **#124**.
+  GPU verification deferred — laptop on battery (econ power mode).
+
 ## Sprint 9 — 2026-06-24 · Le pare-feu se branche (PII firewall, from core to live)
 
 ### Added
