@@ -15,6 +15,19 @@
   minimized (block-tier `<KIND>` placeholders before `history.db`). A
   `Réglages › Confidentialité` toggle (`pii_redact_history`, default on) and a
   configurable analytics frequency floor (`pii_analytics_min_count`).
+- **PII eval corpus + leakage harness** (`tests/data/pii/corpus.json`,
+  `tests/test_pii_eval.py`, `privacy/eval.py`, #104) — 27 FR+EN red-team cases
+  scoring two asymmetric metrics: LEAKAGE (a planted secret that survived — must
+  be zero) and OVER-REDACTION (clean text wrongly masked — must be zero too,
+  since the detectors are deterministic). Pure text, runs in the normal suite,
+  so a privacy regression breaks CI. First run: **0% leakage, 0% over-redaction**.
+
+### Fixed
+- **Card detector demoted Luhn from sole authority** (#104) — bare Luhn passes
+  ~1-in-10 random digit strings, so a 15-digit order number was being masked as
+  an Amex. Block-tier now also requires a real network IIN prefix + a length
+  that network issues (Visa / MC / Amex / Discover / UnionPay / Diners / JCB).
+  The eval caught this on its first run — exactly why "measure before you trust".
 
 ### Doctrine
 - **Minimize before persist, never before deliver.** The paste hot-path is
