@@ -1,0 +1,226 @@
+{
+  "version": 1,
+  "description": "Adversarial FR+EN red-team corpus for the local PII firewall (#104). Each case is text a bilingual developer might dictate; block-tier PII is planted to test LEAKAGE (must_redact spans that must NOT survive redaction) and clean tokens are planted to test OVER-REDACTION (must_keep spans that MUST survive). Hard negatives — non-Luhn card numbers, bad-checksum IBANs, git SHAs, code symbols, Scunthorpe words — are the precision tests: the firewall must leave them alone, because a wrong autocorrect is worse than a visible mishear. The `denylist` is loaded once and applied to every case. Credential-shaped tokens are written as `{{AWS}}`/`{{GHP}}`/`{{STRIPE}}` markers and assembled at load time (tests/test_pii_eval.py), so no real-looking secret sits in the tracked file and GitHub's own scanner stays happy. Grow it from every real near-miss.",
+  "denylist": {
+    "block": ["Ascensio", "Mercure"],
+    "alert": ["Helios"]
+  },
+  "cases": [
+    {
+      "id": "secret-aws-key",
+      "lang": "en",
+      "category": "secret",
+      "text": "the AWS key is {{AWS}} so do not commit it",
+      "must_redact": ["{{AWS}}"],
+      "must_keep": ["so do not commit it"]
+    },
+    {
+      "id": "secret-github-pat",
+      "lang": "en",
+      "category": "secret",
+      "text": "use token {{GHP}} for the push",
+      "must_redact": ["{{GHP}}"],
+      "must_keep": ["for the push"]
+    },
+    {
+      "id": "secret-stripe-live",
+      "lang": "en",
+      "category": "secret",
+      "text": "prod billing uses {{STRIPE}} right now",
+      "must_redact": ["{{STRIPE}}"],
+      "must_keep": ["prod billing uses", "right now"]
+    },
+    {
+      "id": "secret-jwt",
+      "lang": "en",
+      "category": "secret",
+      "text": "auth header was eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36 yesterday",
+      "must_redact": ["eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36"],
+      "must_keep": ["auth header was", "yesterday"]
+    },
+    {
+      "id": "secret-pem-header",
+      "lang": "en",
+      "category": "secret",
+      "text": "the file started with -----BEGIN RSA PRIVATE KEY----- and then base64",
+      "must_redact": ["-----BEGIN RSA PRIVATE KEY-----"],
+      "must_keep": ["the file started with", "and then base64"]
+    },
+    {
+      "id": "struct-email",
+      "lang": "fr",
+      "category": "structured",
+      "text": "tu peux écrire à guillaume@example.com pour la suite du projet",
+      "must_redact": ["guillaume@example.com"],
+      "must_keep": ["pour la suite du projet"]
+    },
+    {
+      "id": "struct-iban-fr",
+      "lang": "fr",
+      "category": "structured",
+      "text": "alors mon iban c'est FR1420041010050500013M02606 tu peux le noter",
+      "must_redact": ["FR1420041010050500013M02606"],
+      "must_keep": ["tu peux le noter"]
+    },
+    {
+      "id": "struct-iban-de",
+      "lang": "fr",
+      "category": "structured",
+      "text": "le compte allemand DE89370400440532013000 est encore actif",
+      "must_redact": ["DE89370400440532013000"],
+      "must_keep": ["le compte allemand", "est encore actif"]
+    },
+    {
+      "id": "struct-iban-gb",
+      "lang": "en",
+      "category": "structured",
+      "text": "wire it to GB82WEST12345698765432 before friday",
+      "must_redact": ["GB82WEST12345698765432"],
+      "must_keep": ["before friday"]
+    },
+    {
+      "id": "struct-nir",
+      "lang": "fr",
+      "category": "structured",
+      "text": "mon numéro de sécu est 255081416802538 pour le dossier",
+      "must_redact": ["255081416802538"],
+      "must_keep": ["mon numéro de sécu est", "pour le dossier"]
+    },
+    {
+      "id": "struct-card-visa",
+      "lang": "fr",
+      "category": "structured",
+      "text": "paye avec la carte 4111111111111111 elle marche encore",
+      "must_redact": ["4111111111111111"],
+      "must_keep": ["elle marche encore"]
+    },
+    {
+      "id": "struct-card-mc",
+      "lang": "en",
+      "category": "structured",
+      "text": "the mastercard 5555555555554444 expired last month",
+      "must_redact": ["5555555555554444"],
+      "must_keep": ["expired last month"]
+    },
+    {
+      "id": "struct-card-amex",
+      "lang": "en",
+      "category": "structured",
+      "text": "amex 378282246310005 is the corporate one",
+      "must_redact": ["378282246310005"],
+      "must_keep": ["is the corporate one"]
+    },
+    {
+      "id": "denylist-block-codename",
+      "lang": "fr",
+      "category": "denylist",
+      "text": "le projet Ascensio démarre lundi avec toute l'équipe",
+      "must_redact": ["Ascensio"],
+      "must_keep": ["le projet", "démarre lundi avec toute l'équipe"]
+    },
+    {
+      "id": "denylist-block-second-term",
+      "lang": "fr",
+      "category": "denylist",
+      "text": "on migre Mercure vers le nouveau cluster ce soir",
+      "must_redact": ["Mercure"],
+      "must_keep": ["on migre", "vers le nouveau cluster ce soir"]
+    },
+    {
+      "id": "denylist-alert-survives",
+      "lang": "fr",
+      "category": "denylist",
+      "text": "le client Helios attend la démo pour mardi",
+      "must_redact": [],
+      "must_keep": ["Helios", "attend la démo pour mardi"]
+    },
+    {
+      "id": "codeswitch-iban-embedded",
+      "lang": "mixed",
+      "category": "codeswitch",
+      "text": "donc en gros tu push le fix puis tu wires le montant sur FR7630006000011234567890189 et c'est bon",
+      "must_redact": ["FR7630006000011234567890189"],
+      "must_keep": ["tu push le fix", "et c'est bon"]
+    },
+    {
+      "id": "codeswitch-aws-embedded",
+      "lang": "mixed",
+      "category": "codeswitch",
+      "text": "le deploy a leaké la clé {{AWS}} dans les logs c'est un disaster",
+      "must_redact": ["{{AWS}}"],
+      "must_keep": ["le deploy a leaké la clé", "dans les logs"]
+    },
+    {
+      "id": "hardneg-code-symbol",
+      "lang": "en",
+      "category": "hard-negative",
+      "text": "we pass RequestOptions to getUserById and read the faceting config",
+      "must_redact": [],
+      "must_keep": ["RequestOptions", "getUserById", "faceting"]
+    },
+    {
+      "id": "hardneg-bad-card",
+      "lang": "en",
+      "category": "hard-negative",
+      "text": "the order number 1234567890123456 is not a card it just looks like one",
+      "must_redact": [],
+      "must_keep": ["1234567890123456"]
+    },
+    {
+      "id": "hardneg-bad-iban",
+      "lang": "fr",
+      "category": "hard-negative",
+      "text": "ce faux iban FR0000000000000000000000 a un checksum invalide",
+      "must_redact": [],
+      "must_keep": ["FR0000000000000000000000"]
+    },
+    {
+      "id": "hardneg-bad-nir",
+      "lang": "fr",
+      "category": "hard-negative",
+      "text": "le numéro 295057524500158 n'a pas la bonne clé de contrôle",
+      "must_redact": [],
+      "must_keep": ["295057524500158"]
+    },
+    {
+      "id": "hardneg-git-sha-is-alert-not-block",
+      "lang": "en",
+      "category": "hard-negative",
+      "text": "the bug landed in commit a1b2c3d4e5f60718293a4b5c6d7e8f9012345678 last week",
+      "must_redact": [],
+      "must_keep": ["a1b2c3d4e5f60718293a4b5c6d7e8f9012345678", "last week"]
+    },
+    {
+      "id": "hardneg-high-entropy-is-alert-not-block",
+      "lang": "en",
+      "category": "hard-negative",
+      "text": "deploy with the build id aG38fjQ9zPbX72KdLm05wRtY1cVn4eH6 today",
+      "must_redact": [],
+      "must_keep": ["aG38fjQ9zPbX72KdLm05wRtY1cVn4eH6", "today"]
+    },
+    {
+      "id": "hardneg-scunthorpe",
+      "lang": "en",
+      "category": "hard-negative",
+      "text": "we drove through Scunthorpe on the way to the offsite",
+      "must_redact": [],
+      "must_keep": ["Scunthorpe", "on the way to the offsite"]
+    },
+    {
+      "id": "clean-prose-fr",
+      "lang": "fr",
+      "category": "clean",
+      "text": "on parle de faceting et de RequestOptions dans la doc Algolia",
+      "must_redact": [],
+      "must_keep": ["on parle de faceting et de RequestOptions dans la doc Algolia"]
+    },
+    {
+      "id": "clean-prose-en",
+      "lang": "en",
+      "category": "clean",
+      "text": "let us ship the parallel agents and call it a day",
+      "must_redact": [],
+      "must_keep": ["let us ship the parallel agents and call it a day"]
+    }
+  ]
+}
