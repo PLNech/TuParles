@@ -43,16 +43,22 @@ def _utterance_corpus(limit: int):
 def utterance_tags(limit: int = 2000, top: int = 50) -> list[tuple[str, float]]:
     """Tag cloud over recent dictations — the words you actually speak.
 
-    min_count=1: dictations are short, so a count≥2 gate would empty the cloud.
+    The corpus is built from already-redacted history (block-tier PII was
+    stripped at persist, #115), so the only PII risk left is a rarely-spoken
+    name. `pii_analytics_min_count` is the k-floor against that: default 1
+    keeps short clouds non-empty; raise it for k-anonymity over one-off terms.
     """
     if not nlp_available():
         return []
     corpus = _utterance_corpus(limit)
     if corpus is None:
         return []
+    from tuparles import privacy_policy
     from tuparles.nlp.engines import keywords
 
-    return keywords.tag_cloud(corpus, by="tfidf", top=top, min_count=1)
+    return keywords.tag_cloud(
+        corpus, by="tfidf", top=top, min_count=privacy_policy.analytics_min_count()
+    )
 
 
 def utterance_keyphrases(

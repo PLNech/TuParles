@@ -1,5 +1,30 @@
 # Changelog
 
+## Sprint 9 — 2026-06-24 · Le pare-feu se branche (PII firewall, from core to live)
+
+### Added
+- **PII deterministic core** (`src/tuparles/privacy/`, #103) — the
+  high-assurance, no-model / no-torch layer: known secret prefixes + Shannon
+  entropy, checksum-validated structured PII (`python-stdnum`: IBAN / FR NIR /
+  Luhn), a Scunthorpe-safe normalized denylist, a frequency floor for
+  aggregates, and a `scan` / `redact` orchestrator. Two safety tiers: `block`
+  (precise enough to redact) vs `alert` (surfaced, never auto-redacted).
+- **PII firewall wired into the live paths** (`privacy_policy.py`, #115) — the
+  core now runs over the utterance persist path and the analytics tag cloud.
+  Dictation is still pasted **verbatim**; only the *stored* transcript is
+  minimized (block-tier `<KIND>` placeholders before `history.db`). A
+  `Réglages › Confidentialité` toggle (`pii_redact_history`, default on) and a
+  configurable analytics frequency floor (`pii_analytics_min_count`).
+
+### Doctrine
+- **Minimize before persist, never before deliver.** The paste hot-path is
+  sacred — you always get exactly what you said. The firewall shapes only what
+  we keep, so a dictated secret lands in the focused app but never on disk.
+- **Precision earns the right to redact.** Only checksum-validated / known-prefix
+  spans carry block authority (~zero false positives); the statistical net
+  (names, topics) stays alert-only until #106. Glue (settings-aware) lives one
+  level out of the pure, rentable `privacy/` core.
+
 ## Sprint 8 — 2026-06-24 · Cartographier les prochains fronts (research + roadmap)
 
 ### Research

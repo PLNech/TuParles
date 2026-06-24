@@ -104,6 +104,19 @@ class SettingsDialog(QDialog):
         forget.clicked.connect(self._forget_telemetry)
         layout.addWidget(forget)
 
+        redact_hint = QLabel(
+            "Le <b>pare-feu PII</b> masque les secrets et identifiants vérifiés "
+            "(IBAN, n° de sécu, carte, clés d'API) <b>avant l'enregistrement</b> "
+            "dans l'historique. Le texte dicté est toujours collé tel quel : "
+            "seule la <i>copie conservée</i> est nettoyée. Attention, c'est "
+            "<b>irréversible</b> — la donnée masquée n'est pas gardée."
+        )
+        redact_hint.setWordWrap(True)
+        layout.addWidget(redact_hint)
+        self._redact = QCheckBox("Masquer les PII dans l'historique")
+        self._redact.setChecked(bool(settings.get("pii_redact_history")))
+        layout.addWidget(self._redact)
+
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
@@ -143,4 +156,5 @@ class SettingsDialog(QDialog):
         settings.put("languages", codes)
         settings.put("input_device", self._mic.currentData())
         telemetry.set_enabled(self._telemetry.isChecked())
+        settings.put("pii_redact_history", self._redact.isChecked())
         self.accept()
