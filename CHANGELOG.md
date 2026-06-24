@@ -39,6 +39,10 @@
 - **CI off Node 20** (#43) — `actions/checkout@v4→v5` and `setup-python@v5→v6`
   (Node 24). GitHub force-deprecates Node 20 on runners in June 2026 and removes
   it 2026-09-16; this clears the warning spam and future-proofs the cross-OS matrix.
+- **CI lint pinned to poetry.lock** (#43) — `ruff==0.9.10` + `mypy==2.1.0`
+  installed explicitly, and `python-stdnum` added to the runner deps. An unpinned
+  `ruff` had auto-bumped on the runner and failed the matrix on new `UP` rules in
+  untouched files; CI lint now can't silently drift from local.
 
 ### Doctrine
 - **Minimize before persist, never before deliver.** The paste hot-path is
