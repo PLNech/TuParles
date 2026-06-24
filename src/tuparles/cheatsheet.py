@@ -20,6 +20,8 @@ from dataclasses import dataclass
 from tuparles import (
     commands,
     punctuation,
+    quickchat,
+    settings,
     syntax,
     syntax_features,  # noqa: F401  (import = register families)
 )
@@ -142,9 +144,29 @@ def _syntax_entries() -> list[CheatEntry]:
 # --- public API ---------------------------------------------------------------
 
 
+def _quickchat_entries() -> list[CheatEntry]:
+    """The user's own quick-chat macros (#89) — so a macro you defined is
+    discoverable, not a secret you have to remember. Empty pack → no section."""
+    if not settings.get("quickchat_enabled"):
+        return []
+    out: list[CheatEntry] = []
+    for phrase in quickchat.load():
+        preview = " ".join(phrase.expansion.split())
+        if len(preview) > 60:
+            preview = preview[:59] + "…"
+        out.append(CheatEntry("Quick-chat", phrase.trigger, (), f"→ {preview}"))
+    return out
+
+
 def entries() -> list[CheatEntry]:
-    """The whole sheet, in display order: commands, punctuation, syntax."""
-    return [*_command_entries(), *_punctuation_entries(), *_syntax_entries()]
+    """The whole sheet, in display order: commands, punctuation, syntax, and any
+    quick-chat macros the user has defined."""
+    return [
+        *_command_entries(),
+        *_punctuation_entries(),
+        *_syntax_entries(),
+        *_quickchat_entries(),
+    ]
 
 
 def _fold(text: str) -> str:
