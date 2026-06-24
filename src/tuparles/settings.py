@@ -36,6 +36,14 @@ _DEFAULTS: dict[str, object] = {
     # (#122) lands, "lower" also lowercases names ("paris") and plural acronyms
     # ("apis") — that's the lowkey aesthetic, opt-in, not a bug.
     "casing_style": "preserve",
+    # « Comment Tu Parles ? » onboarding (#80): first-launch / post-update perso
+    # card. `onboarding_done` flips True once it runs; `onboarding_axes_seen`
+    # records which perso axes the user has been offered, so a later release that
+    # adds an axis re-surfaces only the new one. `role` (#90) is chosen here and
+    # consumed by the quick-chat role packs once they exist.
+    "onboarding_done": False,
+    "onboarding_axes_seen": [],
+    "role": "none",
 }
 
 

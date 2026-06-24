@@ -3,6 +3,19 @@
 ## Sprint 10 — 2026-06-24 · Ton style (personalized casing) + le GPU qui revient
 
 ### Added
+- **« Comment Tu Parles ? » onboarding — core** (`onboarding.py`, #80, EPIC
+  #55) — the personalization front door: a first-launch / post-update card that
+  offers four perso axes, each with a conservative default — **Ton style**
+  (casing #120), **Ton rôle** (role pack #90), **Tes langues**, **Ta vue** — and
+  becomes the first UI that writes `casing_style`, waking the re-case engine.
+  Pure testable core (this commit): trigger logic (`axes(force=)`, tracked by
+  `onboarding_done` + `onboarding_axes_seen` so a release that adds an axis
+  re-surfaces only the new one; manual replay forces all), a `preview(key,
+  value)` that runs the **real** engine so the card can't show a style the
+  pipeline wouldn't produce, and `apply_choices` writing each choice to
+  settings. Two views ride on top (next): the sleek animated Qt carousel + a
+  no-Qt `tuparles onboarding` text fallback — graceful degradation made literal,
+  same core/view split as the cheat-sheet (#83). Design note in `docs/research/`.
 - **Voice-caps — region all-caps** (`syntax_features/caps.py`, #59, EPIC #53) —
   the second spoken-syntax family after quotes. Wrap a passage to SHOUT between
   a paired open/close, bilingual: "tout en majuscules … fin des majuscules" /
