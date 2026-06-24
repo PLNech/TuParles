@@ -62,7 +62,9 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
   `history.db`. High-precision detection only, so it destroys ~zero real
   text; on by default, a toggle in *Réglages › Confidentialité*. The
   analytics tag cloud also honours a frequency floor so a once-spoken name
-  can be kept from surfacing.
+  can be kept from surfacing. A *Pare-feu PII* editor adds your own terms
+  in two tiers — **block** (masked, for confidential project/client names)
+  and **alert** (surfaced, never auto-erased) — case- and accent-insensitive.
 
 ## Architecture
 
