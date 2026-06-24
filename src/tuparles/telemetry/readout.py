@@ -28,12 +28,6 @@ def first_seen() -> dict[str, str]:
     return seen
 
 
-def never_fired(known: list[str]) -> list[str]:
-    """Features that exist but have never fired — the discovery gap itself."""
-    fired = {name for _ts, name, _attrs in sink.read()}
-    return [k for k in known if k not in fired]
-
-
 def attr_split(name: str, attr: str) -> Counter[str]:
     """Distribution of one attr across one event (e.g. entry path hotkey/tray)."""
     counts: Counter[str] = Counter()

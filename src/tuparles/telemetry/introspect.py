@@ -97,6 +97,8 @@ def corpus_analysis() -> dict | None:
     import json
     from pathlib import Path
 
+    # parents[3] = repo root (telemetry → tuparles → src → root); assumes a dev
+    # checkout. A non-editable install has no docs/ → None → "Aucune analyse".
     data_dir = Path(__file__).resolve().parents[3] / "docs" / "research" / "data"
     cached = sorted(data_dir.glob("*-nlp-eda.json")) if data_dir.is_dir() else []
     if not cached:
