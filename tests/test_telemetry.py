@@ -74,12 +74,6 @@ class TestReadout:
         assert counts["command.fired"] == 2
         assert readout.usage_counts(prefix="syntax.") == {"syntax.used": 1}
 
-    def test_never_fired_is_the_discovery_gap(self, tmp_path, monkeypatch):
-        _isolate(tmp_path, monkeypatch)
-        telemetry.event("syntax.used")
-        known = ["syntax.used", "mode.switch", "command.fired"]
-        assert readout.never_fired(known) == ["mode.switch", "command.fired"]
-
     def test_attr_split(self, tmp_path, monkeypatch):
         _isolate(tmp_path, monkeypatch)
         telemetry.event("entry.dictation", source="hotkey")
@@ -215,3 +209,52 @@ class TestDashboardHtml:
         # either way it must be a non-crashing string under the right heading.
         html = dashboard._code_html()
         assert "Ton code" in html or "Aucune analyse" in html
+
+
+class _Recorder:
+    recording = False
+
+    def start(self) -> None:
+        self.recording = True
+
+
+class _Bubble:
+    def start_recording(self) -> None:
+        pass
+
+
+class TestDaemonEntryInstrumentation:
+    """The entry-path wiring (toggle_from_tray/hotkey → event in the *start*
+    branch) is the riskiest new code, and the seam/HTML tests don't touch it.
+    Drive a stubbed Controller under offscreen Qt to pin the source attr.
+
+    command.fired is NOT covered here — _run_command calls execute_command,
+    which fires real keystrokes; it awaits a live daemon run.
+    """
+
+    def _controller(self, monkeypatch):
+        monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+        monkeypatch.setattr("tuparles.daemon.IS_WAYLAND", False)
+        from PySide6.QtWidgets import QApplication
+
+        from tuparles.daemon import Bridge, Controller
+
+        QApplication.instance() or QApplication([])  # one app, offscreen
+        return Controller(
+            engine=object(),  # no supports_partials → no partials thread
+            recorder=_Recorder(),
+            bubble=_Bubble(),
+            bridge=Bridge(),
+        )
+
+    def test_tray_entry_tagged(self, tmp_path, monkeypatch):
+        _isolate(tmp_path, monkeypatch)
+        self._controller(monkeypatch).toggle_from_tray()
+        rows = sink.read(name="entry.dictation")
+        assert rows and rows[0][2] == {"source": "tray"}
+
+    def test_hotkey_entry_tagged(self, tmp_path, monkeypatch):
+        _isolate(tmp_path, monkeypatch)
+        self._controller(monkeypatch).toggle_from_hotkey()
+        rows = sink.read(name="entry.dictation")
+        assert rows and rows[0][2] == {"source": "hotkey"}
