@@ -36,6 +36,12 @@
   The eval caught this on its first run — exactly why "measure before you trust".
 
 ### Added
+- **What's-new on update — core + `tuparles whatsnew`** (`whatsnew.py`, #82) —
+  detects when the installed version differs from the last one you were shown and
+  surfaces the top CHANGELOG section once; `tuparles whatsnew` shows it on demand.
+  Pure + injectable (version + changelog text), reuses #86's version sense. The
+  tray/dialog card that auto-pops on first launch after an update is a thin Qt
+  follow-up on this core.
 - **Dict-seed bias feed** (`seed_prompt.py`, #68) — Whisper's `initial_prompt`
   now folds the codebase's top dict-seed terms (from the cached EDA) in with your
   manual glossary, so the decoder spells `getFacetValues` right. Advisory only

@@ -32,6 +32,7 @@ def main() -> None:
     rep.add_argument("title", nargs="*", help="short summary of the issue")
     rep.add_argument("--no-open", action="store_true", help="just print the URL")
     sub.add_parser("update", help="Check GitHub for a newer release (no token)")
+    sub.add_parser("whatsnew", help="Show the latest changelog section")
     args = parser.parse_args()
 
     if args.cmd == "history":
@@ -48,6 +49,8 @@ def main() -> None:
         _report(args)
     elif args.cmd == "update":
         _update()
+    elif args.cmd == "whatsnew":
+        _whatsnew()
     else:
         from tuparles.daemon import run
 
@@ -112,6 +115,15 @@ def _report(args) -> None:
         import webbrowser
 
         webbrowser.open(url)
+
+
+def _whatsnew() -> None:
+    from tuparles import whatsnew
+
+    text = whatsnew._changelog_text()
+    section = whatsnew.latest_section(text) if text else None
+    print(section or "Pas de notes de version trouvées.")
+    whatsnew.mark_seen()  # seeing it manually counts as seen
 
 
 def _update() -> None:
