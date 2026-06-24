@@ -161,3 +161,27 @@ def search(query: str, items: list[CheatEntry] | None = None) -> list[CheatEntry
     if not needle:
         return list(items)
     return [e for e in items if needle in _fold(e.haystack())]
+
+
+def as_text(query: str = "", *, brief: bool = False) -> str:
+    """Render the sheet (optionally filtered) as text. The ONE renderer the CLI,
+    spoken-help notification (#85), and any future panel share, so they can't
+    show different help. `brief` = one line per row (title + first triggers),
+    sized for a desktop notification; full = triggers + notes, for the CLI."""
+    items = search(query)
+    if not items:
+        return f"Rien pour « {query} »." if query else "(vide)"
+    lines: list[str] = []
+    category: str | None = None
+    for entry in items:
+        if entry.category != category:
+            category = entry.category
+            lines.append(category if not lines else f"\n{category}")
+        if brief:
+            lines.append(f"  {entry.title} : {', '.join(entry.triggers[:2])}")
+            continue
+        lines.append(f"  {entry.title}")
+        lines.extend(f"      · {trigger}" for trigger in entry.triggers)
+        if entry.note:
+            lines.append(f"      {entry.note}")
+    return "\n".join(lines)

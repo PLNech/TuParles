@@ -128,20 +128,7 @@ def _report(args) -> None:
 def _cheatsheet(args) -> None:
     from tuparles import cheatsheet
 
-    items = cheatsheet.search(args.query)
-    if not items:
-        print(f"Rien pour « {args.query} ».")
-        return
-    category = None
-    for entry in items:
-        if entry.category != category:
-            category = entry.category
-            print(f"\n{category}")
-        print(f"  {entry.title}")
-        for trigger in entry.triggers:
-            print(f"      · {trigger}")
-        if entry.note:
-            print(f"      {entry.note}")
+    print(cheatsheet.as_text(args.query))
 
 
 def _whatsnew() -> None:

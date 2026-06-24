@@ -494,10 +494,34 @@ def execute_command(cmd) -> str:
         label = "annulé"
     elif cmd.action == "open_terminal":
         label = _open_terminal()
+    elif cmd.action == "help":
+        label = _show_help()
     else:
         label = cmd.action
     print(f"command: {cmd.action} → {label}")
     return label
+
+
+def _show_help() -> str:
+    """Spoken help (#85): pop the cheat-sheet summary as a desktop notification,
+    fire-and-forget (notify-send blocks if waited on). The full searchable panel
+    is the tray/settings view (#83); this answers 'que peux-tu faire' on the
+    spot. No notify-send → just point at the CLI in the confirmation toast."""
+    from tuparles import cheatsheet
+
+    if not shutil.which("notify-send"):
+        return "aide : tuparles cheatsheet"
+    body = cheatsheet.as_text(brief=True)
+    try:
+        subprocess.Popen(
+            ["notify-send", "-a", "TuParles", "TuParles — que puis-je faire ?", body],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except OSError:
+        pass
+    return "aide affichée"
 
 
 def to_clipboard(text: str) -> None:
