@@ -65,6 +65,18 @@
   touch the network); every failure path returns `None` so a dead check can't
   cost a launch.
 
+### Added
+- **Cheat-sheet core + `tuparles cheatsheet [query]`** (`cheatsheet.py`, #83) —
+  one searchable, bilingual reference of every voice command and syntax phrase,
+  **derived from the live grammar**: `commands.vocabulary()` (a new public view
+  of the #41 meta-language), `punctuation.SPOKEN_TO_SYMBOL`, and a new
+  `syntax.catalogue()` over the registered families — each family now carries
+  its own `summary`/`triggers` help, co-located with its regex so it can't
+  drift. Search is accent- and case-insensitive. A `humanize()` turns the
+  punctuation regexes into readable phrases, guarded by a test that fails if a
+  pattern grows a construct it can't render. Pure core; the tray/settings panel
+  is a thin render over `entries()` (onboarding epic #55, blocks #85).
+
 ### Infra
 - **CI off Node 20** (#43) — `actions/checkout@v4→v5` and `setup-python@v5→v6`
   (Node 24). GitHub force-deprecates Node 20 on runners in June 2026 and removes

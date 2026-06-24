@@ -33,6 +33,12 @@ def main() -> None:
     rep.add_argument("--no-open", action="store_true", help="just print the URL")
     sub.add_parser("update", help="Check GitHub for a newer release (no token)")
     sub.add_parser("whatsnew", help="Show the latest changelog section")
+    cs = sub.add_parser(
+        "cheatsheet", help="Searchable list of voice commands & syntax phrases"
+    )
+    cs.add_argument(
+        "query", nargs="?", default="", help="filter (accent/case-insensitive)"
+    )
     args = parser.parse_args()
 
     if args.cmd == "history":
@@ -51,6 +57,8 @@ def main() -> None:
         _update()
     elif args.cmd == "whatsnew":
         _whatsnew()
+    elif args.cmd == "cheatsheet":
+        _cheatsheet(args)
     else:
         from tuparles.daemon import run
 
@@ -115,6 +123,25 @@ def _report(args) -> None:
         import webbrowser
 
         webbrowser.open(url)
+
+
+def _cheatsheet(args) -> None:
+    from tuparles import cheatsheet
+
+    items = cheatsheet.search(args.query)
+    if not items:
+        print(f"Rien pour « {args.query} ».")
+        return
+    category = None
+    for entry in items:
+        if entry.category != category:
+            category = entry.category
+            print(f"\n{category}")
+        print(f"  {entry.title}")
+        for trigger in entry.triggers:
+            print(f"      · {trigger}")
+        if entry.note:
+            print(f"      {entry.note}")
 
 
 def _whatsnew() -> None:

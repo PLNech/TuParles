@@ -136,4 +136,18 @@ def apply(text: str, ctx: syntax.SyntaxContext) -> str:
     return text
 
 
-syntax.register(syntax.SyntaxFeature(name="quotes", apply=apply, order=30))
+syntax.register(
+    syntax.SyntaxFeature(
+        name="quotes",
+        apply=apply,
+        order=30,
+        summary="Dis les guillemets, récupère les vrais — la paire est gérée. "
+        "Bare « guillemets » seul reste du texte ; il faut une paire.",
+        triggers=(
+            "ouvre les guillemets … ferme les guillemets",
+            "entre guillemets",
+            "open quote … close quote",
+            "unquote",
+        ),
+    )
+)
