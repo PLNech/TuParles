@@ -292,5 +292,11 @@
     "subject": "PII: Réglages privacy UI (denylist editor, block/alert tiers + anonymity floor)",
     "completedAt": "2026-06-24",
     "learnings": "Separate PrivacyDialog (not inline in the already-tall SettingsDialog). Pure parse_terms helper (one term/line, de-duped, order-preserving) tested without Qt; an offscreen-Qt round-trip pins that _save() writes EXACTLY the setting keys active_denylist() reads, so the UI can't silently drift from the engine (same untested-indirection trap the advisor flagged on telemetry). Operator profiles / faker / cloud-egress / fail-closed deferred to #105 -- don't build knobs without a consumer."
+  },
+  {
+    "id": "43",
+    "subject": "CI chore: bump actions off Node 20 -- became a full CI resurrection",
+    "completedAt": "2026-06-24",
+    "learnings": "main's CI had been RED for many commits before this session (the 'ruff/mypy clean' in memory was LOCAL-only -- always verify CI, not just local). What looked like a one-line Node bump uncovered SIX stacked root causes, each masking the next because a failing step aborts before later ones run: (1) unpinned ruff auto-bumped on the runner -> new UP rules failed untouched files [pin ruff==0.9.10 + mypy==2.1.0 to poetry.lock]; (2) python-stdnum missing from the runner pip line -> privacy tests couldn't collect; (3) ruff format --check is a SEPARATE gate from ruff check -- ran ruff format over the tree; (4) hotkey.py mypy union-attr because evdev (optional Linux dep) is absent on runners -> cast(Any, key.fileobj); (5) fcntl.flock flagged on Windows cells -> mypy platform='linux' (app is Unix-only, type-check the deploy target); (6) PySide6 absent on runners -> pytest.importorskip guards on Qt-touching tests; (7) numpy 3.12 stub uses PEP-695 'type' which a hardcoded python_version=3.11 rejects -> drop the pin, mypy matches each cell. KEY METHOD: reproduce CI locally (mypy --platform win32, version-matched interpreter, PySide6-absent path) instead of blind push-and-wait -- each CI round-trip is ~3min. Bump was checkout@v5 + setup-python@v6 (Node 24; Node 20 force-deprecated June 2026, removed 2026-09-16)."
   }
 ]
