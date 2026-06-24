@@ -55,6 +55,14 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
   cached codebase analysis that seeds the decoder). Feature usage is
   tracked **locally and opt-out** — nothing leaves the machine; toggle it
   off or wipe it in *Réglages › Confidentialité*.
+- **PII firewall — minimize before persist** — what you dictate is always
+  pasted verbatim, but the *stored* copy is cleaned first: secrets and
+  checksum-validated identifiers (IBAN, n° de sécu, credit card, API keys)
+  are masked with a `<KIND>` placeholder before they ever reach
+  `history.db`. High-precision detection only, so it destroys ~zero real
+  text; on by default, a toggle in *Réglages › Confidentialité*. The
+  analytics tag cloud also honours a frequency floor so a once-spoken name
+  can be kept from surfacing.
 
 ## Architecture
 

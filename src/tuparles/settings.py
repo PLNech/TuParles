@@ -9,6 +9,14 @@ _DEFAULTS: dict[str, object] = {
     "languages": [],  # ISO codes; empty = auto-detect among all 100
     "input_device": None,  # mic name; None/empty = system default
     "telemetry_enabled": True,  # LOCAL usage introspection; opt-out, never leaves the box
+    # PII firewall (#102) — minimize before persist / analyze. Block-tier only
+    # (checksum-validated IBAN/NIR/card + known secret prefixes): ~100% precision,
+    # so auto-redaction destroys ~zero false positives. Alert-tier is never
+    # auto-redacted. The denylist editor + operator profiles live in #107.
+    "pii_redact_history": True,  # redact block-tier spans before they hit history.db
+    "pii_denylist_block": [],  # user terms always redacted from the stored record
+    "pii_denylist_alert": [],  # user terms surfaced but never auto-redacted
+    "pii_analytics_min_count": 1,  # k-floor for the tag cloud; raise for k-anonymity
 }
 
 
