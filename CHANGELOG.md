@@ -43,6 +43,12 @@
   installed explicitly, and `python-stdnum` added to the runner deps. An unpinned
   `ruff` had auto-bumped on the runner and failed the matrix on new `UP` rules in
   untouched files; CI lint now can't silently drift from local.
+- **CI green again** (#43) — `main`'s matrix had been red for several commits
+  (predating this sprint). Two remaining repairs: ran `ruff format` over the
+  tree (a separate CI gate from `ruff check`), and fixed an env-dependent mypy
+  error in `hotkey.py` — `evdev` is an optional Linux dep absent on the runners,
+  so `selectors` `key.fileobj` typed as `int|HasFileno` and tripped `union-attr`;
+  a `cast(Any, …)` makes the type-check consistent with or without evdev's stubs.
 
 ### Doctrine
 - **Minimize before persist, never before deliver.** The paste hot-path is

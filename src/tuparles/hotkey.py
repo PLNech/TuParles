@@ -18,6 +18,7 @@ import selectors
 import threading
 import time
 from collections.abc import Callable
+from typing import Any, cast
 
 from tuparles.config import HOTKEY_DEBOUNCE_S, IS_WAYLAND
 
@@ -192,7 +193,11 @@ class _EvdevListener:
                             warned.add(path)
                             print(f"hotkey: {path} illisible ({e}) — ignoré")
             for key, _ in sel.select(timeout=1.0):
-                dev = key.fileobj  # type: ignore[assignment]  # selector holds our InputDevice
+                # The selector holds our evdev InputDevice; typeshed types
+                # key.fileobj as int|HasFileno, and evdev is an optional Linux
+                # dep absent on CI runners — cast to Any so the type-check is
+                # consistent whether or not evdev's stubs are installed.
+                dev = cast(Any, key.fileobj)
                 try:
                     events = list(dev.read())
                 except OSError:  # unplugged mid-read
