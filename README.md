@@ -164,6 +164,7 @@ tuparles vocab suggest    # mine your history for glossary candidates
 tuparles vocab review     # accept/reject them interactively
 tuparles report "bug…"    # open a prefilled GitHub issue (no account data sent)
 tuparles update           # check GitHub for a newer release (no token)
+tuparles whatsnew         # the latest changelog section
 ```
 
 Everything lives in `~/.local/share/tuparles/history.db` and
