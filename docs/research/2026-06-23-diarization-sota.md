@@ -50,3 +50,26 @@ If higher overlap accuracy needed later, `whisper-diarization` is the upgrade.
 - **Overlapping speech and turn boundaries** are where accuracy bleeds (~89 ms boundary error). pyannote `community-1` has an **exclusive diarization mode** (one speaker per instant) that makes word-alignment cleaner.
 - **Don't pick NeMo** unless ≤4 speakers, English-only, streaming.
 - **For our dual-channel capture (mic vs monitor), channel identity is free ground-truth "me vs them" diarization — diarization models only matter for splitting multiple remote speakers on the single monitor channel.**
+
+## Addendum (2026-06-24): the torch-pin escape + roundtable framing
+
+A second research pass (for "roundtable mode") confirmed the above and added one
+load-bearing option the first pass missed:
+
+- **`sherpa-onnx` offline diarization** (pyannote-segmentation-3.0 + CAM++ +
+  agglomerative clustering) is the **no-torch, CPU-light fallback** that dodges
+  the WhisperX torch-pin friction flagged in the Caveats above. ~45 MB, **no
+  PyTorch/CUDA**, un-gated ONNX (no per-user HF accept), ~12-15% DER, ~30s for a
+  45-min meeting on an M1. It powers OpenWhispr's 100%-local notetaker - a near-
+  exact TuParles analog. So: **community-1 on GPU as the default, sherpa-onnx as
+  the no-GPU / no-torch override** ("it's a setting").
+- **Re-host the CC-BY-4.0 weights** in our own release artifacts (mirror +
+  checksum + attribution): the HF gating becomes a one-time packaging chore, not
+  a per-user blocker. Never ship a tool that forces each user to make an HF
+  account.
+- **Roundtable caveat:** the "dual-channel = free me/them split" only helps
+  *remote calls*. At an **in-person table everyone is on the mic**, so on-mic
+  clustering does all the work - the monitor channel adds nothing.
+- **Named identification** (enrollment → voiceprint → name) is a separate layer:
+  see `2026-06-24-roundtable-speaker-id.md` (embeddings + abstain) and
+  `2026-06-24-roundtable-name-binding-eval-privacy.md` (binding, eval, GDPR).
