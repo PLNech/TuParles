@@ -28,7 +28,10 @@ jobs:
       # (fastembed, torch) live in the optional `embed` group and their tests
       # are deselected by default (`-m 'not gpu and not embed'`), so the matrix
       # never touches them.
-      - run: pip install pytest pytest-cov ruff mypy numpy markdown-it-py scikit-learn yake
+      # ruff + mypy are PINNED to the versions poetry.lock resolves, so CI lint
+      # rules can't silently drift from local: an unpinned `ruff` auto-bumped on
+      # the runner once and failed the matrix on new UP rules in untouched files.
+      - run: pip install pytest pytest-cov "ruff==0.9.10" "mypy==2.1.0" numpy markdown-it-py scikit-learn yake python-stdnum
       - run: ruff check src tests scripts
       - run: ruff format --check src tests scripts
       - run: mypy
