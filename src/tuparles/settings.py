@@ -20,6 +20,10 @@ _DEFAULTS: dict[str, object] = {
     # Update check (#86): opt-IN — a network call to GitHub reveals you run the
     # tool, so default off (local-first). `tuparles update` always works manually.
     "update_check_enabled": False,
+    # Dict-seed bias (#68): fold codebase seed terms into Whisper's initial_prompt
+    # so it spells your symbols right. Advisory only (never forces a decode), so
+    # default on; the conservative post-correct is a separate gated step (#69).
+    "dictseed_bias": True,
 }
 
 

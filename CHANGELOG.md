@@ -36,6 +36,15 @@
   The eval caught this on its first run — exactly why "measure before you trust".
 
 ### Added
+- **Dict-seed bias feed** (`seed_prompt.py`, #68) — Whisper's `initial_prompt`
+  now folds the codebase's top dict-seed terms (from the cached EDA) in with your
+  manual glossary, so the decoder spells `getFacetValues` right. Advisory only
+  (it nudges, never forces), so it's on by default behind `dictseed_bias`. Manual
+  glossary rides at the tail so it survives Whisper's 224-token tail-keep and wins
+  dedup. The risky *post-correct* half is deferred to #69 — a transcript rewrite
+  earns its place against the FP/FN harness first (a wrong autocorrect is worse
+  than a visible mishear). Effectiveness will be measured there; this ships the
+  safe, tested mechanism.
 - **`tuparles report` — prefilled bug-report URL** (`bugreport.py`, #87) — builds
   a `github.com/PLNech/TuParles/issues/new?title=…&body=…` link with an
   auto-gathered environment block (version / Python / OS / Wayland-vs-X11) and
