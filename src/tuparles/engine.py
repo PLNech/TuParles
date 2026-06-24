@@ -21,7 +21,6 @@ from tuparles.config import (
     QWEN_MODEL_DIR,
     QWEN_THREADS,
     SAMPLE_RATE,
-    VOCAB_FILE,
 )
 from tuparles.preprocess import normalize_audio
 
@@ -56,16 +55,12 @@ def decode_language_opts(selected: list[str]) -> tuple[str | None, bool]:
 
 
 def _vocab_prompt() -> str | None:
-    """Personal glossary → initial_prompt. Whisper treats it as preceding
-    context, which measurably biases decoding toward these spellings."""
-    if not VOCAB_FILE.exists():
-        return None
-    words = [
-        w.strip()
-        for w in VOCAB_FILE.read_text().splitlines()
-        if w.strip() and not w.lstrip().startswith("#")
-    ]
-    return f"Glossaire : {', '.join(words)}." if words else None
+    """Personal glossary (+ opt-in codebase dict-seeds) → initial_prompt. Whisper
+    treats it as preceding context, which measurably biases decoding toward these
+    spellings. The merge + dict-seed feed live in `seed_prompt` (#68)."""
+    from tuparles import seed_prompt
+
+    return seed_prompt.initial_prompt()
 
 
 def _preload_cuda_libs() -> None:
