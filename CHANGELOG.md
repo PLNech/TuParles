@@ -35,6 +35,11 @@
   that network issues (Visa / MC / Amex / Discover / UnionPay / Diners / JCB).
   The eval caught this on its first run — exactly why "measure before you trust".
 
+### Infra
+- **CI off Node 20** (#43) — `actions/checkout@v4→v5` and `setup-python@v5→v6`
+  (Node 24). GitHub force-deprecates Node 20 on runners in June 2026 and removes
+  it 2026-09-16; this clears the warning spam and future-proofs the cross-OS matrix.
+
 ### Doctrine
 - **Minimize before persist, never before deliver.** The paste hot-path is
   sacred — you always get exactly what you said. The firewall shapes only what
