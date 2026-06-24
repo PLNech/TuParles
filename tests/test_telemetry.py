@@ -183,7 +183,12 @@ class TestIntrospect:
 class TestDashboardHtml:
     """The dialog's three views are built by pure HTML functions (no QWidget),
     so we test the rendering logic without a QApplication — matching the
-    project's grandfathered UI-test boundary."""
+    project's grandfathered UI-test boundary. The dashboard *module* still
+    imports PySide6 at top, so skip on the Qt-less CI runners."""
+
+    @pytest.fixture(autouse=True)
+    def _need_qt(self):
+        pytest.importorskip("PySide6")
 
     def test_usage_html_shows_counts_and_discovery_gap(
         self, _clean_registry, tmp_path, monkeypatch
@@ -233,6 +238,10 @@ class TestDaemonEntryInstrumentation:
     command.fired is NOT covered here — _run_command calls execute_command,
     which fires real keystrokes; it awaits a live daemon run.
     """
+
+    @pytest.fixture(autouse=True)
+    def _need_qt(self):
+        pytest.importorskip("PySide6")
 
     def _controller(self, monkeypatch):
         monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")

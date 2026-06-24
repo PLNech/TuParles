@@ -43,12 +43,17 @@
   installed explicitly, and `python-stdnum` added to the runner deps. An unpinned
   `ruff` had auto-bumped on the runner and failed the matrix on new `UP` rules in
   untouched files; CI lint now can't silently drift from local.
-- **CI green again** (#43) — `main`'s matrix had been red for several commits
-  (predating this sprint). Two remaining repairs: ran `ruff format` over the
-  tree (a separate CI gate from `ruff check`), and fixed an env-dependent mypy
-  error in `hotkey.py` — `evdev` is an optional Linux dep absent on the runners,
-  so `selectors` `key.fileobj` typed as `int|HasFileno` and tripped `union-attr`;
-  a `cast(Any, …)` makes the type-check consistent with or without evdev's stubs.
+- **CI green again** (#43) — `main`'s matrix had been red for many commits
+  (predating this sprint), each failing step masking the next. Full repair:
+  (1) ran `ruff format` over the tree (a separate gate from `ruff check`);
+  (2) `hotkey.py` `cast(Any, key.fileobj)` so the evdev-less type-check is
+  consistent (evdev is an optional Linux dep absent on runners);
+  (3) `mypy` `platform = "linux"` — the app is Unix-only (fcntl/evdev/X11), so
+  type-checking for the deploy target stops Windows/macos cells flagging
+  `fcntl.flock`; (4) `pytest.importorskip("PySide6")` guards on the Qt-touching
+  tests (dashboard HTML, offscreen Controller, PrivacyDialog) so they skip on the
+  Qt-less runners instead of erroring. The cross-OS matrix exists for the
+  pure-python *runtime*; type/Qt concerns are pinned to the real target.
 
 ### Doctrine
 - **Minimize before persist, never before deliver.** The paste hot-path is

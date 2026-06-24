@@ -110,6 +110,9 @@ class TestPrivacyDialog:
     """
 
     def _dialog(self, tmp_path, monkeypatch):
+        import pytest
+
+        pytest.importorskip("PySide6")  # CI runners have no Qt; skip there
         monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
         monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
         from PySide6.QtWidgets import QApplication

@@ -88,6 +88,11 @@ ignore = [
 
 [tool.mypy]
 python_version = "3.11"
+# TuParles deploys only on Linux/Unix (fcntl single-instance lock, evdev hotkey,
+# X11/Wayland). Type-check for that target on every runner, so the cross-OS CI
+# matrix (which exists for the pure-python *runtime*) doesn't flag fcntl.flock as
+# missing on the Windows/macos cells.
+platform = "linux"
 files = ["src/tuparles"]
 check_untyped_defs = true
 warn_redundant_casts = true
