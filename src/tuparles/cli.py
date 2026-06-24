@@ -26,6 +26,11 @@ def main() -> None:
     voc.add_argument(
         "--min-count", type=int, default=2, help="suggest words seen ≥ N times"
     )
+    rep = sub.add_parser(
+        "report", help="Open a prefilled GitHub bug report (no account data sent)"
+    )
+    rep.add_argument("title", nargs="*", help="short summary of the issue")
+    rep.add_argument("--no-open", action="store_true", help="just print the URL")
     args = parser.parse_args()
 
     if args.cmd == "history":
@@ -38,6 +43,8 @@ def main() -> None:
         _print_stats()
     elif args.cmd == "vocab":
         _vocab(args)
+    elif args.cmd == "report":
+        _report(args)
     else:
         from tuparles.daemon import run
 
@@ -89,6 +96,19 @@ def _vocab(args) -> None:
         print(f"Ajouté : {', '.join(accepted)} — actif dès la prochaine dictée.")
     else:
         print("Rien ajouté.")
+
+
+def _report(args) -> None:
+    from tuparles.bugreport import issue_url
+
+    title = " ".join(args.title).strip() or "Bug : "
+    url = issue_url(title)
+    print("Signaler un bug (le rapport s'ouvre dans ton navigateur, pré-rempli) :")
+    print(url)
+    if not args.no_open:
+        import webbrowser
+
+        webbrowser.open(url)
 
 
 def _print_stats() -> None:
