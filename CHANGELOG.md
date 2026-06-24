@@ -85,6 +85,26 @@
   Qt-less runners instead of erroring. The cross-OS matrix exists for the
   pure-python *runtime*; type/Qt concerns are pinned to the real target.
 
+### Forensics
+- **Mined a real greenfield take into the code-switch corpus** (#83 side-quest,
+  `docs/research/2026-06-24-real-take-error-taxonomy.md`) — a ~250-word French
+  monologue dictated with *zero* context (a `claude.ai/new` field) gave us the
+  bare decoder's raw behaviour. Four cases added: the misfire `des APIs` →
+  `des épiailles` (English plural acronym, the `-z` dissolving into `-ailles`)
+  plus three survivals pinned against regression (`highscore`, `replayable`,
+  `self-contained`). Corpus now 22 cases; await WAV-regen + GPU run (#52).
+- **Corpus integrity guard** (`tests/test_codeswitch_corpus.py`) — pure, no-GPU.
+  Found that the scorer's `normalize()` collapses hyphen/apostrophe to space, so
+  a `must_contain` + `must_not_contain` reducing to the same tokens makes a case
+  *impossible to pass* (`self-contained` vs `self contained`). The guard asserts
+  that, plus unique ids and that every reference `text` passes its own gate.
+- **Seeded the dict-seed prior** (#116, #117) — the proper-noun casualties
+  (`Charlottesville`→`Charles de ville`, `Tombouctou`→`Tombout`) and the
+  `épiailles` misfire argue for a **personal + register frequency prior**:
+  bake an offline freq-ratio table (`wordfreq`/Lexique, frequencies-are-facts),
+  TF-IDF the "uniquely yours" terms, RRF-fuse cold/warm/hot signals into
+  Whisper's 224-token tail. The #54 EPIC's missing half, written up for #42.
+
 ### Doctrine
 - **Minimize before persist, never before deliver.** The paste hot-path is
   sacred — you always get exactly what you said. The firewall shapes only what
