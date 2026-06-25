@@ -35,6 +35,15 @@ class TestHistory:
         history.record("")
         assert history.last() is None
 
+    def test_record_returns_row_id(self, tmp_path, monkeypatch):
+        # the dev audio-capture keys its WAV on this id
+        _isolate(tmp_path, monkeypatch)
+        first = history.record("une")
+        second = history.record("deux")
+        assert isinstance(first, int)
+        assert second == first + 1
+        assert history.record("") is None
+
     def test_persists_across_connections(self, tmp_path, monkeypatch):
         _isolate(tmp_path, monkeypatch)
         history.record("durable")

@@ -59,14 +59,16 @@ def record(
     deliver_s: float | None = None,
     lang: str | None = None,
     lang_prob: float | None = None,
-) -> None:
+) -> int | None:
+    """Insert one take; return its row id (so the dev audio-capture can key the
+    WAV to the transcript), or None when there's nothing to record."""
     if not text:
-        return
+        return None
     ts = datetime.now().astimezone().isoformat(timespec="seconds")
     words = len(text.split())
     wpm = words / (audio_s / 60) if audio_s else None
     with closing(_conn()) as conn, conn:
-        conn.execute(
+        cur = conn.execute(
             "INSERT INTO dictations (ts, text, engine, audio_s, decode_s,"
             " deliver_s, chars, words, wpm, lang, lang_prob)"
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -84,6 +86,7 @@ def record(
                 lang_prob,
             ),
         )
+        return cur.lastrowid
 
 
 def recent(n: int = 8) -> list[tuple[str, str]]:

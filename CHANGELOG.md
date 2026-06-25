@@ -1,5 +1,31 @@
 # Changelog
 
+## Sprint 14 — 2026-06-26 · Rejoue ta voix (dev take-capture)
+
+The transliteration ablation (Sprint 13) proved a seed fix survives *synthetic*
+TTS acoustics. To prove it survives *yours*, you need your real audio on tap — a
+dev mode that stashes every take so it can be re-decoded across engines and seed
+regimes. "Forensics before theory", now with a real-audio substrate.
+
+### Added
+- **Dev take-capture** (`takes.py`, `daemon.py`) — with `TUPARLES_DEV` set, every
+  landed take's raw PCM is written to `takes/<id>.wav`, keyed to its history row,
+  next to the DB. Off for everyone else.
+- **`history.record()` returns the row id** so the capture can pair audio ↔
+  transcript (backward-compatible; existing callers ignore it).
+- **`scripts/replay_takes.py`** — re-decodes captured takes across seed regimes
+  and reports WER **drift vs the stored transcript** (the real-audio sibling of
+  `scripts/measure_seed_ablation.py`, which runs on TTS). Engine-swap is a
+  one-line extension.
+
+### Doctrine
+- **Raw voice on disk is opt-in via an env var, never a UI toggle.** This is your
+  unredacted voice (the stored transcript strips block-tier PII, #115; audio
+  can't be). So the gate is `TUPARLES_DEV` — a setting you can leave ON by
+  accident is the wrong shape for this. Local-only, and **self-pruning**: oldest
+  takes are evicted past a byte budget (256 MB ≈ ~2 h) so a dev convenience can
+  never silently fill a disk.
+
 ## Sprint 13 — 2026-06-25 · Translittération : on seede ce qu'on dit (forensics)
 
 A forensic read of the day's history DB (last 10 takes) turned "grosses erreurs

@@ -1,0 +1,67 @@
+import wave
+
+import numpy as np
+
+from tuparles import takes
+
+
+def _isolate(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+
+
+def _audio(seconds=0.5, rate=takes.SAMPLE_RATE):
+    return (np.random.default_rng(0).integers(-2000, 2000, int(seconds * rate))).astype(
+        np.int16
+    )
+
+
+class TestGate:
+    def test_disabled_by_default(self, monkeypatch):
+        monkeypatch.delenv("TUPARLES_DEV", raising=False)
+        assert not takes.dev_recording_enabled()
+
+    def test_falsey_values_stay_off(self, monkeypatch):
+        for val in ("", "0", "false", "no", "off", "  Off "):
+            monkeypatch.setenv("TUPARLES_DEV", val)
+            assert not takes.dev_recording_enabled(), val
+
+    def test_truthy_values_turn_on(self, monkeypatch):
+        for val in ("1", "true", "yes", "on"):
+            monkeypatch.setenv("TUPARLES_DEV", val)
+            assert takes.dev_recording_enabled(), val
+
+
+class TestSaveTake:
+    def test_noop_when_disabled(self, tmp_path, monkeypatch):
+        _isolate(tmp_path, monkeypatch)
+        monkeypatch.delenv("TUPARLES_DEV", raising=False)
+        assert takes.save_take(1, _audio()) is None
+        assert not takes.takes_dir().exists()
+
+    def test_noop_on_empty_audio(self, tmp_path, monkeypatch):
+        _isolate(tmp_path, monkeypatch)
+        monkeypatch.setenv("TUPARLES_DEV", "1")
+        assert takes.save_take(1, np.array([], dtype=np.int16)) is None
+
+    def test_writes_keyed_16k_mono_s16(self, tmp_path, monkeypatch):
+        _isolate(tmp_path, monkeypatch)
+        monkeypatch.setenv("TUPARLES_DEV", "1")
+        path = takes.save_take(42, _audio(seconds=0.25))
+        assert path is not None and path.name == "42.wav"
+        with wave.open(str(path), "rb") as w:
+            assert w.getframerate() == 16_000
+            assert w.getnchannels() == 1
+            assert w.getsampwidth() == 2  # int16, exactly what the engine wants
+
+    def test_prune_evicts_oldest_past_budget(self, tmp_path, monkeypatch):
+        _isolate(tmp_path, monkeypatch)
+        monkeypatch.setenv("TUPARLES_DEV", "1")
+        # tiny budget: each ~1 s take ≈ 32 KB, so 40 KB holds ~one
+        monkeypatch.setattr(takes, "_BYTES_BUDGET", 40 * 1024)
+        for i in range(5):
+            takes.save_take(i, _audio(seconds=1.0))
+        survivors = sorted(p.stem for p in takes.takes_dir().glob("*.wav"))
+        # the newest survives; the oldest were evicted to stay under budget
+        assert "4" in survivors
+        assert "0" not in survivors
+        assert len(survivors) < 5
