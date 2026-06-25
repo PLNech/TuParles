@@ -110,6 +110,6 @@ def corpus_analysis() -> dict | None:
     if not cached:
         return None
     try:
-        return json.loads(cached[-1].read_text())
+        return json.loads(cached[-1].read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None

@@ -29,7 +29,7 @@ def load(path: Path = VOCAB_FILE) -> list[str]:
         return []
     return [
         line.strip()
-        for line in path.read_text().splitlines()
+        for line in path.read_text(encoding="utf-8").splitlines()
         if line.strip() and not line.lstrip().startswith("#")
     ]
 
@@ -44,10 +44,10 @@ def add(words: list[str], path: Path = VOCAB_FILE) -> list[str]:
             fresh.append(w)
             known.add(w.casefold())
     if fresh:
-        existing = path.read_text() if path.exists() else ""
+        existing = path.read_text(encoding="utf-8") if path.exists() else ""
         if existing and not existing.endswith("\n"):
             existing += "\n"
-        path.write_text(existing + "\n".join(fresh) + "\n")
+        path.write_text(existing + "\n".join(fresh) + "\n", encoding="utf-8")
     return fresh
 
 

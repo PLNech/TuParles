@@ -34,7 +34,7 @@ def latest_section(text: str) -> str | None:
 
 def _changelog_text() -> str | None:
     try:
-        return _CHANGELOG.read_text()
+        return _CHANGELOG.read_text(encoding="utf-8")
     except OSError:
         return None
 

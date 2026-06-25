@@ -127,7 +127,7 @@ def load(path: Path | None = None) -> list[Phrase]:
     cost a take). Read fresh on each call, so edits take effect next take."""
     path = _path() if path is None else path
     try:
-        return parse_pack(path.read_text())
+        return parse_pack(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return []
 
