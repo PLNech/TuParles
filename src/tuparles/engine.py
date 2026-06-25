@@ -219,7 +219,7 @@ class ResilientEngine:
 
     @property
     def active_backend(self) -> str:
-        """"gpu" | "cpu" — which silicon is live. Drives the bubble/tray colour
+        """ "gpu" | "cpu" — which silicon is live. Drives the bubble/tray colour
         (green=GPU, blue=CPU). The fallback is sticky for the session, so this
         flips to "cpu" exactly when the GPU has truly given up and stays there."""
         return "cpu" if self._on_cpu else "gpu"
