@@ -262,13 +262,35 @@ def _x11_paste_key(combo: str) -> None:
         pass
 
 
+# Two incompatible ydotool CLIs in the wild:
+#  - Ubuntu's 0.1.8 is daemon-less and `key` takes a chord string ("ctrl+v").
+#  - Modern ydotool (≥1.0, Arch/Fedora) talks to a ydotoold daemon and `key`
+#    takes <keycode>:<state> pairs — it does NOT parse "ctrl+v". The keycodes
+#    are the Linux input-event codes the daemon feeds straight to uinput.
+# Presence of the `ydotoold` binary is the clean discriminator (modern ships it,
+# 0.1.8 doesn't); scripts/setup_wayland.sh sets up the daemon to match.
+_YDOTOOL_MODERN = shutil.which("ydotoold") is not None
+
+# linux/input-event-codes.h — only the keys our paste chords use.
+_EVDEV_CODES = {"ctrl": 29, "shift": 42, "v": 47}
+
+
+def _ydotool_key_argv(combo: str) -> list[str]:
+    """The `ydotool key …` argv for `combo` ("ctrl+v", "ctrl+shift+v"), in the
+    syntax this host's ydotool understands."""
+    if not _YDOTOOL_MODERN:
+        # --delay gives 0.1.8's freshly created uinput keyboard time to be
+        # recognized before the keys fire.
+        return ["ydotool", "key", "--delay", "200", combo]
+    codes = [_EVDEV_CODES[k] for k in combo.split("+")]
+    # press in order, release in reverse — a real chord.
+    seq = [f"{c}:1" for c in codes] + [f"{c}:0" for c in reversed(codes)]
+    return ["ydotool", "key", *seq]
+
+
 def _wayland_paste_key(combo: str) -> None:
-    # --delay gives ydotool 0.1.8's freshly created uinput keyboard time to be
-    # recognized before the keys fire.
     try:
-        subprocess.run(
-            ["ydotool", "key", "--delay", "200", combo], check=False, timeout=10
-        )
+        subprocess.run(_ydotool_key_argv(combo), check=False, timeout=10)
     except (subprocess.SubprocessError, OSError):
         pass
 

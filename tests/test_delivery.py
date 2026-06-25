@@ -207,6 +207,10 @@ class TestWaylandPasteCombo:
 
     def _capture(self, monkeypatch, is_terminal):
         calls = []
+        # Pin the daemon-less (0.1.8) argv shape these asserts expect; the modern
+        # evdev path has its own coverage (TestYdotoolArgv). Without this the
+        # result depends on whether ydotoold is installed on the dev box.
+        monkeypatch.setattr(delivery, "_YDOTOOL_MODERN", False)
         monkeypatch.setattr(delivery.shutil, "which", lambda _: "/usr/bin/ydotool")
         monkeypatch.setattr(delivery, "_focus_is_terminal", lambda: is_terminal)
         monkeypatch.setattr(
@@ -249,6 +253,32 @@ class TestWaylandPasteCombo:
 
         monkeypatch.setattr(delivery.subprocess, "run", boom)
         _wayland_paste()  # must not raise
+
+
+class TestYdotoolArgv:
+    """_ydotool_key_argv emits the syntax the host's ydotool understands:
+    daemon-less 0.1.8 takes a chord string (`ctrl+v`); modern ≥1.0 takes
+    <keycode>:<state> evdev pairs (press in order, release in reverse)."""
+
+    def test_legacy_emits_chord_string_with_delay(self, monkeypatch):
+        monkeypatch.setattr(delivery, "_YDOTOOL_MODERN", False)
+        assert delivery._ydotool_key_argv("ctrl+v") == [
+            "ydotool", "key", "--delay", "200", "ctrl+v",
+        ]
+
+    def test_modern_emits_evdev_press_release_pairs(self, monkeypatch):
+        monkeypatch.setattr(delivery, "_YDOTOOL_MODERN", True)
+        # ctrl=29, v=47: press in order, release in reverse — a real chord.
+        assert delivery._ydotool_key_argv("ctrl+v") == [
+            "ydotool", "key", "29:1", "47:1", "47:0", "29:0",
+        ]
+
+    def test_modern_chord_three_keys(self, monkeypatch):
+        monkeypatch.setattr(delivery, "_YDOTOOL_MODERN", True)
+        # ctrl=29, shift=42, v=47
+        assert delivery._ydotool_key_argv("ctrl+shift+v") == [
+            "ydotool", "key", "29:1", "42:1", "47:1", "47:0", "42:0", "29:0",
+        ]
 
 
 class TestWaylandClipboard:
@@ -300,6 +330,7 @@ class TestCapturedFocus:
         # A captured terminal class must drive the combo on its own; a live
         # _focus_is_terminal() call here would mean the race wasn't bypassed.
         calls = []
+        monkeypatch.setattr(delivery, "_YDOTOOL_MODERN", False)
         monkeypatch.setattr(delivery.shutil, "which", lambda _: "/usr/bin/ydotool")
         monkeypatch.setattr(
             delivery,
@@ -317,6 +348,7 @@ class TestCapturedFocus:
 
     def test_empty_capture_falls_back_to_live_read(self, monkeypatch):
         calls = []
+        monkeypatch.setattr(delivery, "_YDOTOOL_MODERN", False)
         monkeypatch.setattr(delivery.shutil, "which", lambda _: "/usr/bin/ydotool")
         monkeypatch.setattr(delivery, "_focus_is_terminal", lambda: True)
         monkeypatch.setattr(
@@ -335,6 +367,7 @@ class TestBeforePasteHook:
 
     def test_hook_runs_before_keystroke(self, monkeypatch):
         events = []
+        monkeypatch.setattr(delivery, "_YDOTOOL_MODERN", False)
         monkeypatch.setattr(delivery.shutil, "which", lambda _: "/usr/bin/ydotool")
         monkeypatch.setattr(delivery, "_focus_is_terminal", lambda: True)
         monkeypatch.setattr(
@@ -405,6 +438,7 @@ class TestChunkedDelivery:
     def test_wayland_chunked_hides_bubble_once_then_pastes_pieces(self, monkeypatch):
         self._no_sleep(monkeypatch)
         monkeypatch.setattr(delivery, "_WAYLAND", True)
+        monkeypatch.setattr(delivery, "_YDOTOOL_MODERN", False)
         monkeypatch.setattr(delivery.shutil, "which", lambda _: "/usr/bin/ydotool")
         hides, keys = [], []
 
