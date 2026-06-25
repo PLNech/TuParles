@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Install TuParles into the desktop: icon + launcher visible in GNOME search.
+# Install TuParles into the desktop: icon + launcher visible in the app launcher
+# (GNOME search, KDE Kickoff, etc. — any XDG-compliant desktop).
 # Idempotent; run from anywhere.
 set -euo pipefail
 
@@ -23,4 +24,4 @@ update-desktop-database "$APPS_DIR" 2>/dev/null || true
 gtk-update-icon-cache "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
 
 echo "Installed: $APPS_DIR/tuparles.desktop → $EXEC"
-echo "GNOME search should now find 'TuParles'."
+echo "Your app launcher (GNOME search, KDE Kickoff, …) should now find 'TuParles'."
