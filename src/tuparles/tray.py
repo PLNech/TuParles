@@ -175,10 +175,23 @@ class Tray(QObject):
         self._copy_act.setEnabled(True)
         self._rebuild_history()
 
+    def apply_live_settings(self) -> None:
+        """Re-read the settings the Réglages dialog can change and apply them
+        without a restart (start/stop the breath, repaint now). Wired to the
+        dialog's `accepted` — the rest (mic, langs, casing, PII) is already
+        read per-take, so this just covers the tray's own live state."""
+        self._animate = bool(settings.get("tray_animation"))
+        if self._animate and not self._timer.isActive():
+            self._timer.start()
+        elif not self._animate and self._timer.isActive():
+            self._timer.stop()
+        self._tray.setIcon(self._compose_icon())  # reflect the change at once
+
     def _open_settings(self) -> None:
         from tuparles.settings_ui import SettingsDialog
 
         self._settings_dialog = SettingsDialog()  # ref kept: GC-proof
+        self._settings_dialog.accepted.connect(self.apply_live_settings)
         self._settings_dialog.show()
         self._settings_dialog.raise_()
 

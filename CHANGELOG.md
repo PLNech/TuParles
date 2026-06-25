@@ -34,11 +34,20 @@ bubble *tell you what's happening*.
   livelier phase-shifted undulation while recording, and a travelling pulse
   while decoding — all in the engine colour. One ~10 Hz timer drives it. SNI
   trays ship each frame over DBus, so it's a `tray_animation` setting (default
-  on; off = static glyph). Applied at daemon start (toggle then *Redémarrer*).
+  on; off = static glyph) — applied **live** (the Réglages `accepted` signal
+  starts/stops the breath, no restart).
 - **Optional start tick** (`cue.py`, `settings.py`, `settings_ui.py`) — a soft
   synthesized cue the instant capture goes live, for those who want an audible
   "speak now" on top of the visual cues. Opt-in (default off — a quiet local
   tool shouldn't beep); no new deps (synthesized through `sounddevice`).
+- **Bubble screen (multi-monitor)** (`ui.py`, `settings.py`, `settings_ui.py`) —
+  a `bubble_screen` setting + Réglages picker: **pin to a chosen monitor**
+  (default `primary` — deterministic, identical to before on a single screen),
+  or **follow the mouse** (the old behaviour). A pinned monitor that's been
+  unplugged degrades to primary, never crashing a take. Read fresh on each
+  appearance, so it applies on the next dictation — no restart. (Follow-focused-
+  window and mirror-on-all deferred: focus-screen isn't reliably queryable on
+  native Wayland, and mirroring touches the Wayland paste-hide path.)
 
 ### Fixed
 - **Wayland bubble positioning** (`daemon.py`, `ui.py`, README, SPEC §1) — native

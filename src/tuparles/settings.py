@@ -48,6 +48,15 @@ _DEFAULTS: dict[str, object] = {
     "onboarding_done": False,
     "onboarding_axes_seen": [],
     "role": "none",
+    # Which screen the bubble appears on (multi-monitor). "primary" pins it to
+    # the primary screen (default — deterministic, and identical to before on a
+    # single monitor); "cursor" follows the screen under the mouse (the old
+    # behaviour); any other value is a QScreen.name() to pin to that monitor.
+    # Read fresh each time the bubble shows, so a change applies on the next take.
+    # (Follow-focused-window and mirror-on-all are deliberately not here yet —
+    # focus-screen isn't reliably queryable on native Wayland, and mirroring
+    # touches the Wayland paste-hide path.)
+    "bubble_screen": "primary",
     # Tray "breathing creature": the menubar glyph gently animates (a calm
     # breath at rest, livelier while recording, a travelling pulse while
     # decoding) for an alive feel. ~10 Hz icon updates travel over DBus on SNI
