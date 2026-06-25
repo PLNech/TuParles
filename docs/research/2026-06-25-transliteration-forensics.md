@@ -147,8 +147,14 @@ PLN's box has the EDA cache, FULL is what he actually runs, so this turns the
 ablation win into a real-box win.
 
 The eval is GPU-gated (needs WAVs from `scripts/gen_codeswitch_wavs.py`); CI runs
-the structure + unit gates. Real captured-audio replay (vs TTS) is the next step
-— see the dev-record-audio mode.
+the structure + unit gates.
+
+**These numbers are on synthetic TTS** — piper voices reading franglais. They
+show the *direction* (seeding nearly doubles recall, the cap kills the
+hallucination), but the TTS acoustic isn't your voice. That's why the next step
+shipped immediately: dev take-capture (`takes.py`, `TUPARLES_DEV`) stashes your
+real takes so `scripts/replay_takes.py` re-runs this ablation on *your* audio.
+Measure on the real thing before trusting the synthetic delta.
 
 ## Roadmap
 

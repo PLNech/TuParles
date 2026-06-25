@@ -17,7 +17,15 @@ import time
 from PySide6.QtCore import QMetaObject, QObject, Qt, QTimer, Signal, Slot
 from PySide6.QtWidgets import QApplication
 
-from tuparles import cue, history, privacy_policy, quickchat, settings, telemetry
+from tuparles import (
+    cue,
+    history,
+    privacy_policy,
+    quickchat,
+    settings,
+    takes,
+    telemetry,
+)
 from tuparles.audio import Recorder
 from tuparles.commands import Command
 from tuparles.commands import parse as parse_command
@@ -224,7 +232,7 @@ class Controller(QObject):
                     # delivered above; only block-tier PII is stripped from the
                     # stored record (#115). The metric drift from placeholders
                     # is within noise (each masked span ≈ one token).
-                    history.record(
+                    take_id = history.record(
                         privacy_policy.redact_for_storage(text),
                         engine=getattr(
                             self._engine, "engine_name", type(self._engine).__name__
@@ -235,6 +243,12 @@ class Controller(QObject):
                         lang=result.language,
                         lang_prob=result.language_prob,
                     )
+                    # Dev-only (TUPARLES_DEV): stash the raw audio keyed to this
+                    # row so it can be replayed across engines/seeds. No-op for
+                    # everyone else; never the redacted text — replay needs the
+                    # real acoustics. See takes.py / scripts/replay_takes.py.
+                    if take_id is not None:
+                        takes.save_take(take_id, audio)
                 except Exception:
                     pass  # a lost history row must never cost a delivery
                 self._bridge.final.emit(text)
