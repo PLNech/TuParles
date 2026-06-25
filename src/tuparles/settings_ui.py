@@ -162,6 +162,29 @@ class SettingsDialog(QDialog):
         clear.clicked.connect(self._clear_all)
         layout.addWidget(clear)
 
+        layout.addWidget(QLabel("<b>Style d'écriture</b>"))
+        casing_hint = QLabel(
+            "Comment la casse de ta dictée est rendue. <b>Préservé</b> respecte "
+            "ce que tu dis (par défaut) ; <b>minuscules</b> met tout en bas de "
+            "casse (sigles et identifiants protégés) ; <b>Phrase</b> met une "
+            "majuscule en début de phrase. Réglage repris de « Comment tu parles ? »."
+        )
+        casing_hint.setWordWrap(True)
+        layout.addWidget(casing_hint)
+        self._casing = QComboBox()
+        # Same axis the onboarding card writes — share its labels so the two
+        # surfaces can never disagree about what a style is called.
+        from tuparles.onboarding import AXES
+
+        casing_axis = next(a for a in AXES if a.key == "casing_style")
+        for choice in casing_axis.choices:
+            self._casing.addItem(choice.label, choice.value)
+        current_style = settings.get("casing_style")
+        i = self._casing.findData(current_style)
+        if i >= 0:
+            self._casing.setCurrentIndex(i)
+        layout.addWidget(self._casing)
+
         layout.addWidget(QLabel("<b>Confidentialité</b>"))
         privacy_hint = QLabel(
             "Le suivi d'usage est <b>100 % local</b> : il sert à voir quelles "
@@ -234,6 +257,7 @@ class SettingsDialog(QDialog):
         ]
         settings.put("languages", codes)
         settings.put("input_device", self._mic.currentData())
+        settings.put("casing_style", self._casing.currentData())
         telemetry.set_enabled(self._telemetry.isChecked())
         settings.put("pii_redact_history", self._redact.isChecked())
         self.accept()

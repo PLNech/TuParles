@@ -39,6 +39,12 @@ def main() -> None:
     cs.add_argument(
         "query", nargs="?", default="", help="filter (accent/case-insensitive)"
     )
+    onb = sub.add_parser(
+        "onboarding", help="« Comment tu parles ? » — personnaliser (vue texte)"
+    )
+    onb.add_argument(
+        "--replay", action="store_true", help="rejouer même si déjà configuré"
+    )
     args = parser.parse_args()
 
     if args.cmd == "history":
@@ -59,6 +65,8 @@ def main() -> None:
         _whatsnew()
     elif args.cmd == "cheatsheet":
         _cheatsheet(args)
+    elif args.cmd == "onboarding":
+        _onboarding(args)
     else:
         from tuparles.daemon import run
 
@@ -129,6 +137,53 @@ def _cheatsheet(args) -> None:
     from tuparles import cheatsheet
 
     print(cheatsheet.as_text(args.query))
+
+
+def _onboarding(args) -> None:
+    """The no-Qt view of « Comment tu parles ? » (#80).
+
+    The graceful-degradation half of the onboarding pair: the same core the Qt
+    carousel rides, rendered as a numbered terminal walkthrough so it works
+    headless / on a minimal install. Each axis lists its choices with the *real*
+    live preview beside them (so the terminal can't promise a style the engine
+    wouldn't produce). Entrée = leave the setting untouched; q = stop and keep
+    the rest as they are.
+    """
+    from tuparles import onboarding
+
+    axes = onboarding.axes(force=args.replay)
+    if not axes:
+        print("Déjà configuré — `tuparles onboarding --replay` pour rejouer.")
+        return
+
+    print(
+        "« Comment tu parles ? » — quelques réglages, modifiables après dans Réglages."
+    )
+    print("Entrée = ne rien changer · q = garder le reste tel quel.\n")
+    chosen: dict[str, str] = {}
+    for axis in axes:
+        print(f"{axis.title} — {axis.question}")
+        for i, choice in enumerate(axis.choices, 1):
+            mark = "  (défaut)" if choice.value == axis.default else ""
+            sample = onboarding.preview(axis.key, choice.value)
+            print(f"  {i}. {choice.label:<14} {sample}{mark}")
+        try:
+            answer = input(f"  choix [1-{len(axis.choices)}] ? ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            break
+        if answer == "q":
+            break
+        if not answer:
+            continue  # blank = leave this axis untouched
+        if answer.isdigit() and 1 <= int(answer) <= len(axis.choices):
+            chosen[axis.key] = axis.choices[int(answer) - 1].value
+        else:
+            print("  (choix ignoré — inchangé)")
+        print()
+
+    onboarding.apply_choices(chosen)
+    print("C'est noté. `tuparles onboarding --replay` pour recommencer.")
 
 
 def _whatsnew() -> None:
