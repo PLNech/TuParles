@@ -21,9 +21,9 @@ class TestTargetScreen:
         return Bubble(level_source=lambda: 0.0)
 
     def test_default_is_primary(self, tmp_path, monkeypatch):
+        bubble = self._bubble(tmp_path, monkeypatch)  # importorskip first
         from PySide6.QtWidgets import QApplication
 
-        bubble = self._bubble(tmp_path, monkeypatch)
         assert bubble._target_screen() is QApplication.primaryScreen()
 
     def test_cursor_mode_resolves_a_screen(self, tmp_path, monkeypatch):
@@ -34,11 +34,11 @@ class TestTargetScreen:
         assert bubble._target_screen() is not None  # cursor's screen or primary
 
     def test_unknown_pinned_screen_falls_back_to_primary(self, tmp_path, monkeypatch):
+        bubble = self._bubble(tmp_path, monkeypatch)  # importorskip first
         from PySide6.QtWidgets import QApplication
 
         from tuparles import settings
 
-        bubble = self._bubble(tmp_path, monkeypatch)
         settings.put("bubble_screen", "Monitor-That-Was-Unplugged")
         # a vanished pinned monitor degrades to primary, never crashes a take
         assert bubble._target_screen() is QApplication.primaryScreen()
