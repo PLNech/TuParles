@@ -14,6 +14,14 @@ LEXICON: dict[str, str] = {
     r"\bqlors\b": "alors",
     r"\b[bp]oule request\b": "pull request",
     r"\bau fil ligne\b": "au feeling",
+    # 'Postgres' truncated to the non-word 'Postgre' (history 2026-06-25, id 7).
+    # \bPostgre\b leaves 'PostgreSQL' and 'Postgres' untouched (the trailing word
+    # char defeats the boundary). Safe to fix deterministically *because*
+    # 'Postgre' is never an intended word — the reason its siblings stay
+    # bias-only (DKIM->'des marques', build->'Bill', qwen->'Quinn') is that
+    # THEIR misfires are legitimate tokens; this one isn't. See corpus case
+    # 'postgres-not-postgre'.
+    r"\bPostgre\b": "postgres",
 }
 
 

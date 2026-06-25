@@ -199,6 +199,69 @@
       "must_contain": ["self contained"],
       "must_not_contain": ["auto contenu", "self contenu"],
       "note": "REAL SURVIVAL 2026-06-24. NOTE: the scorer maps hyphen->space, so 'self-contained' and 'self contained' are indistinguishable here; we gate on the tokens surviving and ban the TRANSLATION ('auto-contenu'), not the hyphenation, which this scorer cannot see."
+    },
+    {
+      "id": "dkim-dmarc-not-des-marques",
+      "text": "Je reçois des mails d'erreur DKIM, SPF ou DMARC presque tous les jours.",
+      "difficulty": "hard",
+      "category": "acronyms",
+      "must_contain": ["DKIM", "SPF", "DMARC"],
+      "must_not_contain": ["des kim", "des marques", "demark"],
+      "note": "REAL MISFIRE 2026-06-25 (history id 9). 'des erreurs DKIM, SPF ou DMARC' decoded as 'des erreurs des KIM, SPF, des marques'. The infra acronyms get re-lexicalised into French words: DKIM->'des KIM', DMARC->'des marques'. CRUCIAL: 'des marques' is a legitimate French phrase, so this is BIAS-ONLY (seed DKIM/DMARC in vocab.txt) and deliberately NOT a lexicon rewrite — forbidding 'des marques' post-decode would clobber real usage (a false positive). SPF survives (pronounceable when spelled)."
+    },
+    {
+      "id": "pii-privacy-not-pil-prev",
+      "text": "Assure-toi qu'on soit PII compatible et privacy sensitive.",
+      "difficulty": "hard",
+      "category": "acronyms",
+      "must_contain": ["PII", "privacy"],
+      "must_not_contain": ["pil", "prev", "si sensitive"],
+      "note": "REAL MISFIRE 2026-06-25 (history id 9). 'PII compatible, privacy sensitive' decoded as 'PIL compatible, PREV, SI sensitive'. PII->'PIL'; the English word 'privacy' shatters into the French-letter sequence 'PREV, SI'. Bias-only (seed PII, privacy)."
+    },
+    {
+      "id": "qwen-build-cpu-not-quinn-bill",
+      "text": "Je veux bien que tu bosses sur le build, le fallback, qwen et le CPU.",
+      "difficulty": "hard",
+      "category": "proper-noun-borrow",
+      "must_contain": ["build", "fallback", "qwen", "CPU"],
+      "must_not_contain": ["bill", "quinn", "cpp"],
+      "note": "REAL MISFIRE 2026-06-25 (history id 1, the take where PLN was literally discussing transliteration errors). 'le build, le fallback, qwen et le CPU' decoded as 'Bill, Fallback, Quinn, CPP'. Tool/model names collapse to the nearest names: build->'Bill', qwen->'Quinn' (our OWN CPU-fallback model!), CPU->'CPP'. BIAS-ONLY: 'Bill' (a person), 'Quinn' (a name), 'CPP' (C++/C-preprocessor) are all legit tokens, so post-decode rewrite = false positive. Fix is vocab.txt seeding."
+    },
+    {
+      "id": "ui-not-ueil",
+      "text": "Je veux qu'on réfléchisse un peu à l'UI de la bulle.",
+      "difficulty": "medium",
+      "category": "acronyms",
+      "must_contain": ["UI"],
+      "must_not_contain": ["ueil", "l oeil", "oeil"],
+      "note": "REAL MISFIRE 2026-06-25 (history id 2). 'réfléchir un peu à l'UI' decoded as 'à l'ueil'. The 2-letter UI dissolves into the non-word 'ueil'. Bias-only: although 'ueil' is a non-word, its intended form is ambiguous between 'UI' and the common FR expression 'l'œil', so we don't post-correct it."
+    },
+    {
+      "id": "postgres-not-postgre",
+      "text": "Les containers qu'on lance tournent sous Postgres.",
+      "difficulty": "easy",
+      "category": "proper-noun-borrow",
+      "must_contain": ["Postgres"],
+      "must_not_contain": ["postgre", "post grès"],
+      "note": "REAL MISFIRE 2026-06-25 (history id 7). 'tournent sous Postgres' decoded as 'setting up in Postgre' — the product name truncated to the non-word 'Postgre'. Unlike the others, 'Postgre' is NEVER an intended word, so this one IS also fixed deterministically in lexicon.py (Postgre->Postgres) on top of the bias."
+    },
+    {
+      "id": "personal-domains-not-neck-tl",
+      "text": "Je migre mes mails de plnech.fr vers nech.pl.",
+      "difficulty": "hard",
+      "category": "domain",
+      "must_contain": ["plnech fr", "nech pl"],
+      "must_not_contain": ["neck tl", "neck pl", "nec pl"],
+      "note": "REAL MISFIRE 2026-06-25 (history id 8, id 10). 'nech.pl' decoded as 'Neck.tl' (id 8, EN frame); the personal domains plnech.fr / nech.pl get re-lexicalised toward English words. NOTE: the scorer maps '.'->space, so the gate is on the surface tokens ('nech pl'), not the dotted domain. Personal-domain recall is bias-only via the gitignored vocab.txt — names stay local; the corpus pins that the right surfaces survive once seeded."
+    },
+    {
+      "id": "identity-paul-louis-nech",
+      "text": "Je m'appelle Paul-Louis Nech, c'est mon vrai nom.",
+      "difficulty": "medium",
+      "category": "proper-noun",
+      "must_contain": ["paul louis nech"],
+      "must_not_contain": ["neck", "nèche", "naish"],
+      "note": "Identity gate. Mishandling the user's own name is the worst failure mode (doctrine: the differentiator is where your voice lives afterward). 'Nech' must not become 'Neck'/'nèche'. Recall-driven: bias via the gitignored vocab.txt so the name stays local. Hyphen is invisible to the scorer, so we gate on the three tokens surviving in order."
     }
   ]
 }
