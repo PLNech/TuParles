@@ -139,14 +139,18 @@ class Tray(QObject):
         ph = self._phase
         if self._state == "recording":
             # the creature leans in: bigger, phase-shifted bars + a slight bob
-            heights = tuple(0.42 + 0.45 * (0.5 + 0.5 * math.sin(ph * 1.3 + i * 1.1))
-                            for i in range(3))
+            heights = tuple(
+                0.42 + 0.45 * (0.5 + 0.5 * math.sin(ph * 1.3 + i * 1.1))
+                for i in range(3)
+            )
             return heights, 0.9 * math.sin(ph * 0.9)
         if self._state == "processing":
             # a bright pulse travelling across the three bars: "thinking"
             center = (ph * 0.7) % 3
             heights = tuple(
-                0.30 + 0.55 * math.exp(-(min(abs(i - center), 3 - abs(i - center)) ** 2) / 0.6)
+                0.30
+                + 0.55
+                * math.exp(-(min(abs(i - center), 3 - abs(i - center)) ** 2) / 0.6)
                 for i in range(3)
             )
             return heights, 0.0

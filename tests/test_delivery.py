@@ -263,21 +263,37 @@ class TestYdotoolArgv:
     def test_legacy_emits_chord_string_with_delay(self, monkeypatch):
         monkeypatch.setattr(delivery, "_YDOTOOL_MODERN", False)
         assert delivery._ydotool_key_argv("ctrl+v") == [
-            "ydotool", "key", "--delay", "200", "ctrl+v",
+            "ydotool",
+            "key",
+            "--delay",
+            "200",
+            "ctrl+v",
         ]
 
     def test_modern_emits_evdev_press_release_pairs(self, monkeypatch):
         monkeypatch.setattr(delivery, "_YDOTOOL_MODERN", True)
         # ctrl=29, v=47: press in order, release in reverse — a real chord.
         assert delivery._ydotool_key_argv("ctrl+v") == [
-            "ydotool", "key", "29:1", "47:1", "47:0", "29:0",
+            "ydotool",
+            "key",
+            "29:1",
+            "47:1",
+            "47:0",
+            "29:0",
         ]
 
     def test_modern_chord_three_keys(self, monkeypatch):
         monkeypatch.setattr(delivery, "_YDOTOOL_MODERN", True)
         # ctrl=29, shift=42, v=47
         assert delivery._ydotool_key_argv("ctrl+shift+v") == [
-            "ydotool", "key", "29:1", "42:1", "47:1", "47:0", "42:0", "29:0",
+            "ydotool",
+            "key",
+            "29:1",
+            "42:1",
+            "47:1",
+            "47:0",
+            "42:0",
+            "29:0",
         ]
 
 

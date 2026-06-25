@@ -128,7 +128,9 @@ class Recorder:
         # Perceptual mapping (see config): gate out silence, scale to a
         # speech-typical peak, gamma-lift so quiet/mid speech still moves bars.
         rms = float(np.sqrt(np.mean(indata.astype(np.float32) ** 2)))
-        norm = max(0.0, (rms - LEVEL_NOISE_FLOOR) / (LEVEL_FULL_SCALE - LEVEL_NOISE_FLOOR))
+        norm = max(
+            0.0, (rms - LEVEL_NOISE_FLOOR) / (LEVEL_FULL_SCALE - LEVEL_NOISE_FLOOR)
+        )
         self.level = min(1.0, norm**LEVEL_GAMMA)
 
     def snapshot(self) -> np.ndarray:
