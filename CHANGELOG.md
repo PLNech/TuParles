@@ -29,6 +29,19 @@ bubble *tell you what's happening*.
   scanning across the bars, visually distinct from idle and the final flash.
 
 ### Added
+- **Role phrase packs** (`rolepacks.py`, `quickchat.py`, `cheatsheet.py`,
+  `onboarding.py`, #90, EPIC #88) — the "Ton rôle" onboarding axis (#80) now
+  *does* something: picking a role activates a curated, bilingual built-in
+  quick-chat pack (eng / product / design / marketing / strategy) without
+  hand-writing a `phrasepack.json`. `quickchat.active_phrases()` composes the
+  personal pack FIRST, then the role pack, so personal triggers win on collision
+  (a seed you extend, never a cage). Built-in triggers are deliberately *more*
+  conservative than personal ones (distinctive multi-word / acronym, never a
+  bare common word) since they arrive from one tap rather than a trigger you
+  typed — `fullmatch` anchoring + a misfire corpus over the whole catalogue keep
+  prose that merely contains a trigger as text. Activated macros are
+  discoverable in `tuparles cheatsheet`, and the onboarding preview now shows a
+  **real** expansion (« lgtm » → LGTM 🚀) instead of naming the role. Pure-CPU.
 - **A tray that breathes** (`tray.py`, `settings.py`, `settings_ui.py`) — the
   menubar glyph is now alive: a calm shallow breath (+ gentle bob) at rest, a
   livelier phase-shifted undulation while recording, and a travelling pulse

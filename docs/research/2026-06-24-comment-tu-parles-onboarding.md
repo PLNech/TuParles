@@ -58,9 +58,12 @@ discipline as the cheat-sheet core/panel (#83) and what's-new (#82).
 
 ## Honest gaps
 
-- **Ton rôle** records the choice (`role` setting) but has no effect until the
-  role phrase packs (#90) exist; its preview names the role rather than faking a
-  macro. When #90 lands, the preview upgrades to a real sample expansion.
+- ~~**Ton rôle** records the choice but has no effect until role packs (#90).~~
+  **Closed (#90):** picking a role now activates a curated built-in quick-chat
+  pack (`rolepacks.py`), composed with the personal pack (personal wins on
+  collision), discoverable in the cheat-sheet, and the preview shows a **real**
+  expansion (« lgtm » → LGTM 🚀) straight from the pack — no longer just naming
+  the role.
 - **First-launch *auto-surfacing*** isn't wired: the daemon only prints a
   one-line nudge ("→ tuparles onboarding"), gated by `should_show()`. The card
   popping up by itself waits on the Qt carousel; until then the walkthrough is
