@@ -1,5 +1,45 @@
 # Changelog
 
+## Sprint 13 — 2026-06-25 · Translittération : on seede ce qu'on dit (forensics)
+
+A forensic read of the day's history DB (last 10 takes) turned "grosses erreurs
+de translittération" into a measured taxonomy: ~80% of the damage is technical
+vocabulary with no decoder anchor — acronyms and names re-lexicalised into the
+nearest ordinary word (DKIM → « des KIM », DMARC → « des marques », qwen →
+« Quinn », CPU → « CPP », UI → « l'ueil », Postgres → « Postgre », the personal
+domains nech.pl/plnech.fr → « Neck.tl »). The fix follows the metric (low FP,
+low FN), not the gut. See
+`docs/research/2026-06-25-transliteration-forensics.md`.
+
+### Added
+- **7 real-misfire cases in the code-switch corpus** (`tests/data/codeswitch/`)
+  — DKIM/DMARC, PII/privacy, qwen/build/CPU, UI, Postgres, the personal domains,
+  and an **identity gate** for the user's own name. `must_contain` measures
+  recall (FN); `must_not_contain` measures the legit-word trap we must NOT emit
+  (FP — « des marques », « Bill », « Quinn » are all real tokens). Each case's
+  note records *why* it is bias-only or lexicon-safe.
+- **`vocab.txt` seeded with infra acronyms + identity** (local, gitignored) —
+  DKIM/DMARC/SPF/DNS/PII, Postgres, and `nech.pl`/`plnech.fr`/`Nech`/
+  `Paul-Louis Nech`/username, ridden at the prompt *tail* so they survive
+  Whisper's 224-token truncation. Zero-FP (advisory bias), immediate.
+
+### Fixed
+- **`Postgre → postgres`** in the lexicon (`lexicon.py`) — the lone offender
+  safe to rewrite deterministically, because « Postgre » is a non-word that is
+  *never* intended (`\bPostgre\b` leaves `Postgres`/`PostgreSQL` untouched).
+
+### Doctrine
+- **Bias raises recall for free; rewriting risks FP — so this whole error class
+  is bias-only.** The acronym/name misfires (« des marques » = DMARC, « Bill »
+  = build, « Quinn » = qwen, « CPP » = C++) collapse into *legitimate* words, so
+  a post-decode rewrite would be a false positive. The decoder `initial_prompt`
+  can only nudge, never insert — it's the zero-FP lever. The lexicon stays
+  nearly empty by design; only true non-words earn a rule.
+- **The 224-token budget is the real constraint.** "Seed 10k tech words" is
+  physically impossible (and hallucination-prone). The lever isn't volume, it's
+  *selection* of the ~30 best slots — next, TF-IDF over the history DB to rank
+  them from what the user actually says.
+
 ## Sprint 12 — 2026-06-25 · Une bulle par écran (multi-monitor finish)
 
 The two `bubble_screen` modes deferred at v0.2.0 (Sprint 11), now landed — so

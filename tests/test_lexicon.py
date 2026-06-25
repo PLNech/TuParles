@@ -18,6 +18,17 @@ def test_au_fil_ligne():
     assert apply_lexicon("on fait ça au fil ligne") == "on fait ça au feeling"
 
 
+def test_postgre_truncation_fixed():
+    assert apply_lexicon("ça tourne sous Postgre") == "ça tourne sous Postgres"
+    assert apply_lexicon("on lance postgre en local") == "on lance postgres en local"
+
+
+def test_postgres_and_postgresql_untouched():
+    # the trailing word char defeats \b, so the already-correct names survive
+    assert apply_lexicon("on lance Postgres") == "on lance Postgres"
+    assert apply_lexicon("base PostgreSQL managée") == "base PostgreSQL managée"
+
+
 def test_innocent_text_untouched():
     text = "Une poule sur un mur qui picore du pain dur."
     assert apply_lexicon(text) == text
