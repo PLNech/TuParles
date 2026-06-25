@@ -92,3 +92,52 @@ class TestApply:
         assert store["casing_style"] == "preserve"
         assert store["languages"] == ["fr", "en"]
         assert store["onboarding_done"] is True
+
+
+class TestCliView:
+    """The no-Qt walkthrough (`tuparles onboarding`) — the graceful fallback view
+    over the same core. Drives it by feeding scripted answers to input()."""
+
+    def _run(self, monkeypatch, answers, *, replay=False):
+        from types import SimpleNamespace
+
+        from tuparles import cli
+
+        it = iter(answers)
+        monkeypatch.setattr("builtins.input", lambda _prompt="": next(it))
+        cli._onboarding(SimpleNamespace(replay=replay))
+
+    def test_number_picks_choice_blank_leaves_untouched(self, store, monkeypatch):
+        # casing → "2" (lower); role blank; languages → "2" (fr); view blank.
+        self._run(monkeypatch, ["2", "", "2", ""])
+        assert store["casing_style"] == "lower"
+        assert store["languages"] == ["fr"]
+        assert "role" not in store  # blank wrote nothing
+        assert "view" not in store
+        assert store["onboarding_done"] is True
+
+    def test_quit_keeps_rest_and_still_marks_done(self, store, monkeypatch):
+        # Pick casing, then quit — later axes never written, but onboarding done.
+        self._run(monkeypatch, ["2", "q"])
+        assert store["casing_style"] == "lower"
+        assert "languages" not in store
+        assert store["onboarding_done"] is True
+
+    def test_bad_input_is_ignored_not_applied(self, store, monkeypatch):
+        # Out-of-range / non-numeric leaves the axis untouched.
+        self._run(monkeypatch, ["9", "nope", "x", "5"])
+        assert "casing_style" not in store
+        assert store["onboarding_done"] is True
+
+    def test_already_done_short_circuits(self, store, monkeypatch, capsys):
+        store["onboarding_done"] = True
+        store["onboarding_axes_seen"] = [a.key for a in onboarding.AXES]
+        # No input should be consumed; an empty iterator proves it.
+        self._run(monkeypatch, [])
+        assert "Déjà configuré" in capsys.readouterr().out
+
+    def test_replay_offers_all_even_when_done(self, store, monkeypatch):
+        store["onboarding_done"] = True
+        store["onboarding_axes_seen"] = [a.key for a in onboarding.AXES]
+        self._run(monkeypatch, ["3", "", "", ""], replay=True)
+        assert store["casing_style"] == "sentence"

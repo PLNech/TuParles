@@ -348,6 +348,14 @@ def run() -> None:
     app.aboutToQuit.connect(listener.stop)
     print("TuParles daemon up — Right Ctrl + Right Alt to dictate. Ctrl-C quits.")
 
+    # First launch (or a release that added an axis): point at the personalization
+    # walkthrough. The Qt carousel (#80 view) will surface this inline; until then
+    # this nudge is the no-Qt path, gated by should_show() so it stops once done.
+    from tuparles import onboarding
+
+    if onboarding.should_show():
+        print("Première fois ? Personnalise avec : tuparles onboarding")
+
     # Qt's loop won't run Python signal handlers unless the interpreter gets
     # scheduled; the no-op timer keeps Ctrl-C responsive.
     signal.signal(signal.SIGINT, lambda *_: app.quit())

@@ -48,9 +48,10 @@ writing each choice to settings. No Qt, no GPU, no heavy deps.
 
 Views ride on top, and there are **two** — graceful degradation made literal
 (the standing doctrine: every feature GPU-or-CPU, and here Qt-or-terminal):
-- the **Qt carousel** (the sleek animated card) — the rich view;
-- a **no-Qt text mode** (`tuparles onboarding`, numbered choices) — the fallback
-  that still works headless / on a minimal install.
+- the **Qt carousel** (the sleek animated card) — the rich view (still to come);
+- a **no-Qt text mode** (`tuparles onboarding`, `--replay` to re-run) —
+  **shipped**: numbered choices, each beside its real live preview, Entrée =
+  leave untouched, `q` = keep the rest. Works headless / on a minimal install.
 
 Both are thin renders of the same core, so they cannot diverge — the same
 discipline as the cheat-sheet core/panel (#83) and what's-new (#82).
@@ -60,8 +61,12 @@ discipline as the cheat-sheet core/panel (#83) and what's-new (#82).
 - **Ton rôle** records the choice (`role` setting) but has no effect until the
   role phrase packs (#90) exist; its preview names the role rather than faking a
   macro. When #90 lands, the preview upgrades to a real sample expansion.
-- The animated carousel + live-input demo (the view) is the next build; the core
-  is ready for it.
+- **First-launch *auto-surfacing*** isn't wired: the daemon only prints a
+  one-line nudge ("→ tuparles onboarding"), gated by `should_show()`. The card
+  popping up by itself waits on the Qt carousel; until then the walkthrough is
+  manual (or post-nudge) + headless.
+- The animated carousel + live-input demo (the rich view) is the next build; the
+  core and the text view are ready for it.
 
 > *« On reconnaît l'arbre à ses fruits, et l'outil à sa première poignée de
 > main. »* — the first handshake is the onboarding; make it feel like you.

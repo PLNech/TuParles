@@ -174,6 +174,8 @@ tuparles whatsnew         # the latest changelog section
 tuparles cheatsheet       # every voice command & syntax phrase (searchable)
 tuparles cheatsheet quote # …filtered (accent/case-insensitive)
                           # …or just dictate "que peux-tu faire ?" hands-free
+tuparles onboarding       # « Comment tu parles ? » — personalize (text view)
+tuparles onboarding --replay  # …re-run it even once configured
 ```
 
 Everything lives in `~/.local/share/tuparles/history.db` and

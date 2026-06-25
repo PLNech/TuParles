@@ -3,6 +3,17 @@
 ## Sprint 10 — 2026-06-24 · Ton style (personalized casing) + le GPU qui revient
 
 ### Added
+- **Onboarding — no-Qt text view + Réglages toggle** (`cli.py`,
+  `settings_ui.py`, `daemon.py`, #80) — the personalization core is now
+  *reachable*: `tuparles onboarding` (`--replay` to re-run) walks the four axes
+  as a numbered terminal prompt, each choice shown beside its **real** live
+  preview; Entrée leaves a setting untouched, `q` keeps the rest. The daemon
+  prints a one-line first-launch nudge (gated by `should_show()`, so it stops
+  once configured). `casing_style` also gets its Réglages picker, sharing the
+  onboarding card's exact labels so the two surfaces can't disagree. This is the
+  graceful-degradation half of the onboarding pair (Qt-or-terminal); the
+  animated Qt carousel is still to come — first-launch *auto-surfacing* awaits
+  it, the CLI is the manual + headless path today.
 - **« Comment Tu Parles ? » onboarding — core** (`onboarding.py`, #80, EPIC
   #55) — the personalization front door: a first-launch / post-update card that
   offers four perso axes, each with a conservative default — **Ton style**
