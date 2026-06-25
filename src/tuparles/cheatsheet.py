@@ -145,12 +145,13 @@ def _syntax_entries() -> list[CheatEntry]:
 
 
 def _quickchat_entries() -> list[CheatEntry]:
-    """The user's own quick-chat macros (#89) — so a macro you defined is
-    discoverable, not a secret you have to remember. Empty pack → no section."""
+    """The live quick-chat macros (#89) — your personal pack AND the built-in
+    role pack (#90), so a macro you defined OR one your role activated is
+    discoverable, not a secret you have to remember. Empty → no section."""
     if not settings.get("quickchat_enabled"):
         return []
     out: list[CheatEntry] = []
-    for phrase in quickchat.load():
+    for phrase in quickchat.active_phrases():
         preview = " ".join(phrase.expansion.split())
         if len(preview) > 60:
             preview = preview[:59] + "…"

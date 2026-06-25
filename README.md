@@ -60,9 +60,11 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
 - **Voice macros (quick-chat)** — a short spoken trigger expands to a canned
   text: say "lgtm" and get your full review sign-off, "standup billing" and get
   a filled template. Triggers fire only on an exact whole-take match (never
-  inside a sentence), and the pack is a hand-editable JSON file you own. Off
-  until you write one. *(Engine shipped; role packs and radial activation
-  coming.)*
+  inside a sentence), and the pack is a hand-editable JSON file you own. Pick a
+  **role** in onboarding (eng / product / design / marketing / strategy) and a
+  curated built-in pack activates instantly — your own macros always take
+  precedence. Everything you've got shows in `tuparles cheatsheet`. *(Radial
+  activation still coming.)*
 - **History & stats, local forever** — every take lands in SQLite with
   its telemetry (duration, decode time, words/min, detected language).
   `tuparles history "query"` searches it; `tuparles stats` shows your

@@ -85,19 +85,16 @@ def _lang_preview(value: str) -> str:
     return _LANG_PREVIEW.get(value, value)
 
 
-# Honest until #90: name the role + what it will seed, don't fake a macro.
-_ROLE_PREVIEW = {
-    "none": "—",
-    "eng": "eng — prépare tes macros (lgtm, ship it…)",
-    "product": "product — (specs, user stories…)",
-    "design": "design — (critique, specs UI…)",
-    "marketing": "marketing — (copy, claims…)",
-    "strategy": "strategy — (notes, decisions…)",
-}
-
-
 def _role_preview(value: str) -> str:
-    return _ROLE_PREVIEW.get(value, value)
+    # Since #90: show a REAL macro the role activates ("« lgtm » → LGTM 🚀"),
+    # straight from the built-in pack — no faking. "none" (and any role without
+    # a pack) names itself honestly.
+    from tuparles import rolepacks
+
+    if value == "none":
+        return "—"
+    sample = rolepacks.example(value)
+    return sample if sample else value
 
 
 def _apply_languages(value: str) -> None:

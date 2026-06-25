@@ -132,9 +132,21 @@ def load(path: Path | None = None) -> list[Phrase]:
         return []
 
 
+def active_phrases() -> list[Phrase]:
+    """The live phrase set: the user's personal pack FIRST, then the built-in
+    pack for the current role (#90). Personal triggers win on collision (first
+    match wins in `expand`), so a role pack is a seed the user can always
+    override. Role 'none'/unset contributes nothing. Lazy import keeps
+    `quickchat` the dependency-free engine and `rolepacks` the data on top."""
+    from tuparles import rolepacks
+
+    return load() + rolepacks.pack_for(settings.get("role"))
+
+
 def expand_active(text: str) -> str | None:
-    """The daemon entry point: expand against the live pack, gated on the
-    setting. Empty pack → None, so 'enabled' is safe as the default."""
+    """The daemon entry point: expand against the live phrase set (personal +
+    role pack), gated on the setting. Empty set → None, so 'enabled' is safe as
+    the default."""
     if not settings.get("quickchat_enabled"):
         return None
-    return expand(text, load())
+    return expand(text, active_phrases())
