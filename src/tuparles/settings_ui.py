@@ -131,6 +131,22 @@ class SettingsDialog(QDialog):
                 self._mic.setCurrentIndex(self._mic.count() - 1)
         layout.addWidget(self._mic)
 
+        self._start_sound = QCheckBox("Bip au démarrage de la dictée")
+        self._start_sound.setToolTip(
+            "Un petit son confirme que la dictée a démarré — tu peux parler. "
+            "Le repère visuel (bulle + onde) est toujours actif."
+        )
+        self._start_sound.setChecked(bool(settings.get("start_cue_sound")))
+        layout.addWidget(self._start_sound)
+
+        self._tray_anim = QCheckBox("Icône animée dans la barre des tâches")
+        self._tray_anim.setToolTip(
+            "L'icône respire doucement (et s'anime pendant la dictée). "
+            "Décoche si ton bureau rame avec les mises à jour d'icône."
+        )
+        self._tray_anim.setChecked(bool(settings.get("tray_animation")))
+        layout.addWidget(self._tray_anim)
+
         layout.addWidget(QLabel("<b>Langues de dictée</b>"))
         hint = QLabel(
             "Aucune = détection automatique. Une seule = forcée. "
@@ -258,6 +274,8 @@ class SettingsDialog(QDialog):
         settings.put("languages", codes)
         settings.put("input_device", self._mic.currentData())
         settings.put("casing_style", self._casing.currentData())
+        settings.put("start_cue_sound", self._start_sound.isChecked())
+        settings.put("tray_animation", self._tray_anim.isChecked())
         telemetry.set_enabled(self._telemetry.isChecked())
         settings.put("pii_redact_history", self._redact.isChecked())
         self.accept()

@@ -49,6 +49,7 @@ def test_healthy_gpu_stays_on_gpu():
     assert eng.transcribe(AUDIO).text == "gpu"
     assert eng.engine_name == "GpuEngine"
     assert eng.supports_partials is True
+    assert eng.active_backend == "gpu"  # bubble/tray colour stays green
 
 
 def test_suspend_resume_recovers_by_rebuilding_context():
@@ -79,9 +80,11 @@ def test_dead_gpu_falls_back_to_cpu_for_the_session():
         raise RuntimeError("no CUDA device")
 
     eng = _engine(factory)
+    assert eng.active_backend == "gpu"  # green until the GPU actually gives up
     assert eng.transcribe(AUDIO).text == "cpu"  # rebuild failed → CPU
     assert eng.engine_name == "QwenCpuEngine"
     assert eng.supports_partials is False
+    assert eng.active_backend == "cpu"  # now blue, sticky for the session
     # stays on CPU without retrying the GPU
     assert eng.transcribe(AUDIO).text == "cpu"
 

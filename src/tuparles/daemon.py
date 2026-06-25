@@ -17,7 +17,7 @@ import time
 from PySide6.QtCore import QMetaObject, QObject, Qt, QTimer, Signal, Slot
 from PySide6.QtWidgets import QApplication
 
-from tuparles import history, privacy_policy, quickchat, settings, telemetry
+from tuparles import cue, history, privacy_policy, quickchat, settings, telemetry
 from tuparles.audio import Recorder
 from tuparles.commands import Command
 from tuparles.commands import parse as parse_command
@@ -101,6 +101,7 @@ class Controller(QObject):
             # actually is, not merely where the take began).
             self._target_focus = capture_focus_class() if IS_WAYLAND else ""
             self._recorder.start()
+            cue.play_start()  # opt-in soft tick: capture is live, speak now
             telemetry.event("entry.dictation", source=self._entry_source)
             self._bubble.start_recording()
             self._bridge.state.emit("recording")
@@ -302,15 +303,39 @@ def run() -> None:
         print("TuParles tourne déjà — cette instance s'efface.")
         return
 
+    # Wayland: KWin/Mutter ignore client move()/xprop, so the frameless bubble
+    # gets centred and can't pin itself. Render via XWayland (where both work
+    # again) unless the user has deliberately forced a platform. Cheapest fix
+    # that keeps the X11-isms; we still deliver via the Wayland path (ydotool/
+    # wl-clipboard) since XDG_SESSION_TYPE stays "wayland".
+    if IS_WAYLAND and not os.environ.get("QT_QPA_PLATFORM"):
+        os.environ["QT_QPA_PLATFORM"] = "xcb"
+        print("Wayland — rendering the bubble via XWayland (QT_QPA_PLATFORM=xcb).")
+
     app = QApplication([])
     app.setQuitOnLastWindowClosed(False)  # the bubble hides, the daemon lives
+    if app.platformName() == "wayland":
+        # Forced native Wayland (no XWayland / overridden): degrade gracefully —
+        # bottom-centre placement and all-desktops stickiness are the
+        # compositor's call now (see Bubble._make_sticky). Say so, don't pretend.
+        print(
+            "Note: native Wayland (Qt platform 'wayland') — the compositor "
+            "controls bubble placement; bottom-centre and stickiness may not apply."
+        )
 
     print("Warming up the engine…")
     engine = load_engine()
 
     recorder = Recorder()
     bridge = Bridge()
-    bubble = Bubble(level_source=lambda: recorder.level, view=settings.get("view"))
+    # green=GPU, blue=CPU — a pull source for the ambient engine colour. The
+    # ResilientEngine flips to "cpu" only on a sticky session fallback.
+    backend_source = lambda: getattr(engine, "active_backend", "gpu")  # noqa: E731
+    bubble = Bubble(
+        level_source=lambda: recorder.level,
+        view=settings.get("view"),
+        backend_source=backend_source,
+    )
     controller = Controller(engine, recorder, bubble, bridge)
 
     bridge.toggled.connect(controller.toggle_from_hotkey)
@@ -321,7 +346,7 @@ def run() -> None:
     bridge.command.connect(bubble.show_final)  # edit confirmation toast
     bridge.error.connect(bubble.show_error)
 
-    tray = Tray()
+    tray = Tray(backend_source=backend_source)
     bridge.state.connect(tray.set_state)
     bridge.final.connect(tray.on_final)
     tray.toggle_requested.connect(controller.toggle_from_tray)

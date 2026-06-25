@@ -7,7 +7,10 @@ quit cleanly. History entries copy to clipboard on click — never typed
 into focus, because focus just moved to a menu.
 """
 
-from PySide6.QtCore import QObject, QRectF, Qt, QUrl, Signal
+import math
+from collections.abc import Callable
+
+from PySide6.QtCore import QObject, QRectF, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QColor, QDesktopServices, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import QMenu, QSystemTrayIcon
 
@@ -15,16 +18,20 @@ from tuparles import history, settings
 from tuparles.delivery import to_clipboard
 
 _IDLE = QColor(205, 214, 244)
-_RECORDING = QColor(122, 162, 247)  # bubble's accent
-_PROCESSING = QColor(127, 132, 156)
+# Recording/processing tint by engine, matching the bubble: green=GPU, blue=CPU.
+_GPU = QColor(122, 199, 130)
+_CPU = QColor(122, 162, 247)
 
-_BAR_HEIGHTS = (0.45, 0.85, 0.60)  # the bubble's waveform, frozen mid-breath
+_REST_HEIGHTS = (0.45, 0.85, 0.60)  # the glyph's pose when not animating
+_TRAY_FPS_MS = 100  # ~10 Hz: a gentle breath without hammering the DBus tray
 _HISTORY_SHOWN = 8
 _LABEL_CHARS = 46
 _README_URL = "https://github.com/PLNech/TuParles#readme"
 
 
-def _glyph(color: QColor) -> QIcon:
+def _glyph(color: QColor, heights=_REST_HEIGHTS, lift: float = 0.0) -> QIcon:
+    """Three rounded bars in `color`. `heights` (0..1 each) and `lift` (a small
+    vertical bob, in px) are what the breathing animation modulates per frame."""
     pm = QPixmap(22, 22)
     pm.fill(Qt.transparent)
     p = QPainter(pm)
@@ -33,9 +40,10 @@ def _glyph(color: QColor) -> QIcon:
     p.setBrush(color)
     bar_w, gap = 4, 3
     x = (22 - (bar_w * 3 + gap * 2)) / 2
-    for h in _BAR_HEIGHTS:
-        half = h * 9
-        p.drawRoundedRect(QRectF(x, 11 - half, bar_w, half * 2), 2, 2)
+    cy = 11 - lift
+    for h in heights:
+        half = min(0.95, max(0.0, h)) * 9
+        p.drawRoundedRect(QRectF(x, cy - half, bar_w, half * 2), 2, 2)
         x += bar_w + gap
     p.end()
     return QIcon(pm)
@@ -47,13 +55,17 @@ class Tray(QObject):
     quit_requested = Signal()
     view_changed = Signal(str)
 
-    def __init__(self, parent: QObject | None = None) -> None:
+    def __init__(
+        self,
+        parent: QObject | None = None,
+        backend_source: Callable[[], str] | None = None,
+    ) -> None:
         super().__init__(parent)
-        self._icons = {
-            "idle": _glyph(_IDLE),
-            "recording": _glyph(_RECORDING),
-            "processing": _glyph(_PROCESSING),
-        }
+        # Pull source for the ambient engine colour ("gpu"|"cpu"), as the bubble.
+        self._backend_source = backend_source or (lambda: "gpu")
+        self._state = "idle"
+        self._phase = 0.0  # advances each tick; drives the breath/pulse
+        self._animate = bool(settings.get("tray_animation"))
 
         self._menu = QMenu()
         self._toggle_act = self._menu.addAction("Dicter")
@@ -93,16 +105,71 @@ class Tray(QObject):
         )
         self._menu.addAction("Quitter").triggered.connect(self.quit_requested.emit)
 
-        self._tray = QSystemTrayIcon(self._icons["idle"], self)
+        self._tray = QSystemTrayIcon(self._compose_icon(), self)
         self._tray.setToolTip("TuParles — Ctrl droit + Alt droit pour dicter")
         self._tray.setContextMenu(self._menu)
         self._tray.show()
 
+        # The breath: one timer advances the phase and repaints the glyph. Only
+        # runs when animation is on; otherwise the glyph is set on state change.
+        self._timer = QTimer(self)
+        self._timer.setInterval(_TRAY_FPS_MS)
+        self._timer.timeout.connect(self._tick)
+        if self._animate:
+            self._timer.start()
+
+    def _engine_color(self) -> QColor:
+        return _GPU if self._backend_source() == "gpu" else _CPU
+
+    def _state_color(self) -> QColor:
+        if self._state == "recording":
+            return self._engine_color()  # full engine colour: clearly "live"
+        if self._state == "processing":
+            color = QColor(self._engine_color())
+            color.setAlpha(160)  # dimmer engine colour: "working, settling"
+            return color
+        return _IDLE
+
+    def _pose(self) -> tuple[tuple[float, ...], float]:
+        """(bar heights, vertical lift) for this frame. A calm breath at rest,
+        a livelier undulation + bounce while recording, a travelling pulse
+        while decoding. Returns the static rest pose when animation is off."""
+        if not self._animate:
+            return _REST_HEIGHTS, 0.0
+        ph = self._phase
+        if self._state == "recording":
+            # the creature leans in: bigger, phase-shifted bars + a slight bob
+            heights = tuple(0.42 + 0.45 * (0.5 + 0.5 * math.sin(ph * 1.3 + i * 1.1))
+                            for i in range(3))
+            return heights, 0.9 * math.sin(ph * 0.9)
+        if self._state == "processing":
+            # a bright pulse travelling across the three bars: "thinking"
+            center = (ph * 0.7) % 3
+            heights = tuple(
+                0.30 + 0.55 * math.exp(-(min(abs(i - center), 3 - abs(i - center)) ** 2) / 0.6)
+                for i in range(3)
+            )
+            return heights, 0.0
+        # idle: a slow, shallow breath with a gentle bob — alive, at rest
+        breath = 0.5 + 0.5 * math.sin(ph * 0.32)
+        heights = tuple(b * (0.86 + 0.14 * breath) for b in _REST_HEIGHTS)
+        return heights, 0.7 * math.sin(ph * 0.32)
+
+    def _compose_icon(self) -> QIcon:
+        heights, lift = self._pose()
+        return _glyph(self._state_color(), heights, lift)
+
+    def _tick(self) -> None:
+        self._phase += 0.2  # advance the breath
+        self._tray.setIcon(self._compose_icon())
+
     def set_state(self, state: str) -> None:
-        self._tray.setIcon(self._icons.get(state, self._icons["idle"]))
+        self._state = state
         self._toggle_act.setText(
             "Arrêter la dictée" if state == "recording" else "Dicter"
         )
+        if not self._animate:  # animated path repaints on the timer instead
+            self._tray.setIcon(self._compose_icon())
 
     def on_final(self, _text: str) -> None:
         self._copy_act.setEnabled(True)

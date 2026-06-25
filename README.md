@@ -28,6 +28,17 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
   preview of the last few seconds; on stop, the whole take gets a full
   beam decode. On a long take that final pass runs batched (VAD-chunked,
   parallel on GPU): a 3-minute monologue lands in about a second.
+- **A bubble that tells you what's happening** — the waveform tracks your
+  voice on a perceptual scale, so even quiet speech visibly moves the bars
+  ("I hear you"); the bars are **green on GPU, blue on CPU**, so you always
+  know which silicon is decoding (and a red flash for errors). While it
+  decodes, a bright pulse sweeps across the bars ("I'm working"); the take
+  lands on a green flash. By default the bubble shows your **whole take**,
+  word-wrapped and growing as you speak (switch to the discreet one-line
+  *minimal* pill in the tray or *Réglages*). The **tray glyph breathes** —
+  calm at rest, livelier while recording, a travelling pulse while decoding, in
+  the engine colour (toggle off in *Réglages*). Optional soft **start tick**
+  (*Réglages*, off by default) confirms recording has begun.
 - **Code-switching first-class** — by default the model auto-detects among
   100 languages per take. In *Réglages* you can confine detection to your
   own set: one language forces it; several turns on **per-segment**
@@ -105,27 +116,33 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
 
 ## Install
 
-One-liner (Ubuntu/Debian, X11 — needs git + poetry; Wayland adds one step, below):
+One-liner (Linux — apt / pacman / dnf / zypper, X11; needs git + poetry.
+Wayland adds one step, below):
 
 ```bash
 curl -fsSL https://github.com/PLNech/TuParles/releases/latest/download/install.sh | bash
 ```
 
-This pulls the repo, installs system + Python deps, builds the CPU fallback
-engine, downloads the model weights, and registers TuParles in GNOME search.
+This pulls the repo, installs system + Python deps (mapping package names to
+your distro), builds the CPU fallback engine, downloads the model weights, and
+registers TuParles in your desktop's app launcher.
 
 <details>
 <summary>Manual setup</summary>
 
 ```bash
-sudo apt install libopenblas-dev xdotool xsel libportaudio2 ffmpeg
+# system deps — pick your distro:
+sudo apt install libopenblas-dev xdotool xsel libportaudio2 ffmpeg   # Debian/Ubuntu
+sudo pacman -S --needed openblas xdotool xsel portaudio ffmpeg       # Arch
+sudo dnf install openblas-devel xdotool xsel portaudio ffmpeg        # Fedora
+
 git clone https://github.com/PLNech/TuParles && cd TuParles
 poetry install
 git clone --depth 1 https://github.com/antirez/qwen-asr vendor/qwen-asr
 make -C vendor/qwen-asr blas
 # model weights: see install.sh for the five files to fetch into models/
 cp vocab.example.txt vocab.txt           # then add your own names/jargon
-bash scripts/install_desktop.sh          # GNOME launcher (optional)
+bash scripts/install_desktop.sh          # desktop launcher (optional)
 poetry run tuparles
 ```
 
@@ -135,16 +152,26 @@ GPU (any recent NVIDIA card) is detected automatically and used for the
 primary faster-whisper engine; without one, the C fallback engine
 transcribes on CPU.
 
-### Wayland (GNOME)
+### Wayland
 
 Same install, then this once — and log out and back in afterwards:
 
 ```bash
-bash scripts/setup_wayland.sh   # input group · uinput rule · wl-clipboard/ydotool · GNOME extension
+bash scripts/setup_wayland.sh   # input group · uinput rule · wl-clipboard/ydotool · daemon · GNOME extension
 ```
 
-Other Wayland compositors fall back to Ctrl+V (no terminal detection without
-the GNOME extension); the X11 path also works under XWayland.
+It adapts to your ydotool: Ubuntu's daemon-less 0.1.8 needs nothing more, while
+modern ydotool (≥1.0, Arch/Fedora) gets a `ydotoold` **user service** + socket
+env so delivery can inject keys. On GNOME it also installs a focus-window
+extension for terminal paste detection (Ctrl+Shift+V); other compositors
+(KDE, etc.) detect terminals by window title and otherwise fall back to Ctrl+V.
+
+The daemon renders the bubble through **XWayland** on a Wayland session
+(`QT_QPA_PLATFORM=xcb`, set automatically): native Wayland compositors ignore
+a client's request to place itself, so the frameless bubble would otherwise be
+centred and unable to pin to all desktops. The X11 path also works under
+XWayland. If you force native Wayland (`QT_QPA_PLATFORM=wayland`), the daemon
+still runs but the compositor controls the bubble's position and stickiness.
 
 ## Personal glossary
 
@@ -162,7 +189,7 @@ steps. Changes take effect on the next take, no restart.
 ## CLI
 
 ```bash
-tuparles                  # start the daemon (or launch from GNOME search)
+tuparles                  # start the daemon (or launch from your app launcher)
 tuparles history          # last 20 takes
 tuparles history "tokens" # search your dictations
 tuparles stats            # local telemetry: takes, débit, decode speed, language mix

@@ -5,7 +5,11 @@ import os
 from pathlib import Path
 
 _DEFAULTS: dict[str, object] = {
-    "view": "minimal",  # minimal = one-line pill | full = whole wrapped text
+    # full = whole wrapped take (grows live) | minimal = one-line discreet pill.
+    # Default full: for a dictation tool, seeing your whole take is the point —
+    # a long take elided to ~5 words starves you of context. Minimal stays the
+    # opt-in "discreet pill".
+    "view": "full",
     "languages": [],  # ISO codes; empty = auto-detect among all 100
     "input_device": None,  # mic name; None/empty = system default
     "telemetry_enabled": True,  # LOCAL usage introspection; opt-out, never leaves the box
@@ -44,6 +48,17 @@ _DEFAULTS: dict[str, object] = {
     "onboarding_done": False,
     "onboarding_axes_seen": [],
     "role": "none",
+    # Tray "breathing creature": the menubar glyph gently animates (a calm
+    # breath at rest, livelier while recording, a travelling pulse while
+    # decoding) for an alive feel. ~10 Hz icon updates travel over DBus on SNI
+    # trays (GNOME/KDE) — default on, but a knob so a desktop that chokes on the
+    # churn (or a battery-minded user) can fall back to a static glyph.
+    "tray_animation": True,
+    # Start cue (SPEC: "feedback que la dictée a démarré"): a soft tick the
+    # instant capture goes live, so you know to speak. Opt-IN — a quiet local
+    # tool shouldn't beep by default; the visual cue (bubble + livelier bars +
+    # engine-coloured tray) is always on.
+    "start_cue_sound": False,
 }
 
 
