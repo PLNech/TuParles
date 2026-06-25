@@ -9,6 +9,7 @@ Settings are read on the next take, no daemon restart.
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -147,6 +148,31 @@ class SettingsDialog(QDialog):
         self._tray_anim.setChecked(bool(settings.get("tray_animation")))
         layout.addWidget(self._tray_anim)
 
+        layout.addWidget(QLabel("<b>Écran de la bulle</b>"))
+        screen_hint = QLabel(
+            "Sur quel écran la bulle s'affiche. « Écran principal » par défaut ; "
+            "épingle-la à un moniteur précis, ou laisse-la suivre la souris. "
+            "(Appliqué à la dictée suivante.)"
+        )
+        screen_hint.setWordWrap(True)
+        layout.addWidget(screen_hint)
+        self._screen = QComboBox()
+        self._screen.addItem("Écran principal", "primary")
+        self._screen.addItem("Suivre la souris", "cursor")
+        for s in QApplication.screens():
+            geo = s.geometry()
+            self._screen.addItem(
+                f"Écran : {s.name()}  ({geo.width()}×{geo.height()})", s.name()
+            )
+        current_screen = settings.get("bubble_screen") or "primary"
+        i = self._screen.findData(current_screen)
+        if i >= 0:
+            self._screen.setCurrentIndex(i)
+        else:  # pinned monitor not currently connected
+            self._screen.addItem(f"{current_screen}  ·  déconnecté", current_screen)
+            self._screen.setCurrentIndex(self._screen.count() - 1)
+        layout.addWidget(self._screen)
+
         layout.addWidget(QLabel("<b>Langues de dictée</b>"))
         hint = QLabel(
             "Aucune = détection automatique. Une seule = forcée. "
@@ -276,6 +302,7 @@ class SettingsDialog(QDialog):
         settings.put("casing_style", self._casing.currentData())
         settings.put("start_cue_sound", self._start_sound.isChecked())
         settings.put("tray_animation", self._tray_anim.isChecked())
+        settings.put("bubble_screen", self._screen.currentData())
         telemetry.set_enabled(self._telemetry.isChecked())
         settings.put("pii_redact_history", self._redact.isChecked())
         self.accept()

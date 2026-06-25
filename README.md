@@ -38,7 +38,9 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
   *minimal* pill in the tray or *Réglages*). The **tray glyph breathes** —
   calm at rest, livelier while recording, a travelling pulse while decoding, in
   the engine colour (toggle off in *Réglages*). Optional soft **start tick**
-  (*Réglages*, off by default) confirms recording has begun.
+  (*Réglages*, off by default) confirms recording has begun. On multi-monitor,
+  pick which screen the bubble uses in *Réglages* — pin it to a monitor
+  (default: primary) or have it follow the mouse.
 - **Code-switching first-class** — by default the model auto-detects among
   100 languages per take. In *Réglages* you can confine detection to your
   own set: one language forces it; several turns on **per-segment**

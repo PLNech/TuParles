@@ -28,6 +28,8 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QColor, QCursor, QFontMetrics, QPainter
 from PySide6.QtWidgets import QApplication, QWidget
 
+from tuparles import settings
+
 WIDTH, HEIGHT = 460, 56
 MAX_HEIGHT = 300  # full view stops growing here; older lines trim with …
 V_PAD = 16  # full-view vertical text padding
@@ -191,9 +193,21 @@ class Bubble(QWidget):
             self._phase += 0.16
         self.update()
 
+    def _target_screen(self):
+        """Which monitor the bubble lives on (settings "bubble_screen"): a pinned
+        screen by name, "cursor" to follow the mouse, else the primary screen.
+        Read fresh so a Réglages change lands on the next appearance."""
+        mode = settings.get("bubble_screen")
+        if mode == "cursor":
+            return QApplication.screenAt(QCursor.pos()) or QApplication.primaryScreen()
+        if mode and mode != "primary":
+            for s in QApplication.screens():
+                if s.name() == mode:
+                    return s  # pinned monitor still present
+        return QApplication.primaryScreen()  # default / pinned screen unplugged
+
     def _home_pos(self) -> QPoint:
-        # The screen you're working on, not blindly the primary one.
-        screen = QApplication.screenAt(QCursor.pos()) or QApplication.primaryScreen()
+        screen = self._target_screen()
         geo = screen.availableGeometry()
         return QPoint(
             geo.center().x() - WIDTH // 2,
