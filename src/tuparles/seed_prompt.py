@@ -30,7 +30,7 @@ def _manual_glossary() -> list[str]:
         return []
     return [
         w.strip()
-        for w in VOCAB_FILE.read_text().splitlines()
+        for w in VOCAB_FILE.read_text(encoding="utf-8").splitlines()
         if w.strip() and not w.lstrip().startswith("#")
     ]
 
@@ -46,7 +46,7 @@ def _seed_surfaces(limit: int = _SEED_LIMIT) -> list[str]:
     if not cached:
         return []
     try:
-        seeds = json.loads(cached[-1].read_text()).get("top_seeds", [])
+        seeds = json.loads(cached[-1].read_text(encoding="utf-8")).get("top_seeds", [])
     except (OSError, ValueError):
         return []
     return [s["surface"] for s in seeds[:limit] if s.get("surface")]

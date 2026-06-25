@@ -78,7 +78,7 @@ def _path() -> Path:
 
 def get(key: str):
     try:
-        data = json.loads(_path().read_text())
+        data = json.loads(_path().read_text(encoding="utf-8"))
     except (OSError, ValueError):
         data = {}
     return data.get(key, _DEFAULTS.get(key))
@@ -88,8 +88,8 @@ def put(key: str, value) -> None:
     path = _path()
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        data = json.loads(path.read_text())
+        data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         data = {}
     data[key] = value
-    path.write_text(json.dumps(data, indent=2) + "\n")
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")

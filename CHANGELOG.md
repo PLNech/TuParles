@@ -59,6 +59,13 @@ bubble *tell you what's happening*.
   infra workaround.
 
 ### Infra
+- **UTF-8 file I/O — Windows CI fixed** (`quickchat.py`, `vocab.py`,
+  `seed_prompt.py`, `whatsnew.py`, `settings.py`, `telemetry/introspect.py`) —
+  every `read_text`/`write_text` now passes `encoding="utf-8"`. On Windows the
+  locale default (cp1252) choked on UTF-8 content: the example phrasepack
+  failed to parse (red Windows matrix), and a `CHANGELOG`/`vocab.txt` with
+  accents would have too. The JSON paths were ASCII-safe but are made explicit
+  for uniformity. Pre-existing, surfaced by the cross-OS matrix.
 - **Reconciled the modern-ydotool delivery tests** (`tests/test_delivery.py`) —
   Sprint 9's ydotool ≥1.0 support (evdev `<keycode>:<state>` pairs) shipped
   without updating the paste-combo tests, which still pinned the daemon-less
