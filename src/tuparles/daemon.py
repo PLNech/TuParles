@@ -282,7 +282,7 @@ def run() -> None:
 
     from tuparles.hotkey import HotkeyListener
     from tuparles.tray import Tray
-    from tuparles.ui import Bubble
+    from tuparles.ui import BubbleGroup
 
     # GNOME launches us with stdout piped to journald, which Python block-
     # buffers: the forensic prints below never flushed during the freeze
@@ -331,7 +331,10 @@ def run() -> None:
     # green=GPU, blue=CPU — a pull source for the ambient engine colour. The
     # ResilientEngine flips to "cpu" only on a sticky session fallback.
     backend_source = lambda: getattr(engine, "active_backend", "gpu")  # noqa: E731
-    bubble = Bubble(
+    # A group, not a lone Bubble: "bubble_screen" can mirror on every monitor
+    # ("all") or follow one, resolved fresh each take. Single-screen modes light
+    # exactly one bubble, so this is identical to before on one monitor.
+    bubble = BubbleGroup(
         level_source=lambda: recorder.level,
         view=settings.get("view"),
         backend_source=backend_source,

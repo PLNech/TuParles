@@ -151,14 +151,17 @@ class SettingsDialog(QDialog):
         layout.addWidget(QLabel("<b>Écran de la bulle</b>"))
         screen_hint = QLabel(
             "Sur quel écran la bulle s'affiche. « Écran principal » par défaut ; "
-            "épingle-la à un moniteur précis, ou laisse-la suivre la souris. "
-            "(Appliqué à la dictée suivante.)"
+            "épingle-la à un moniteur précis, suis la souris ou la fenêtre active, "
+            "ou affiche-la sur tous les écrans à la fois. (Appliqué à la dictée "
+            "suivante.)"
         )
         screen_hint.setWordWrap(True)
         layout.addWidget(screen_hint)
         self._screen = QComboBox()
         self._screen.addItem("Écran principal", "primary")
         self._screen.addItem("Suivre la souris", "cursor")
+        self._screen.addItem("Suivre la fenêtre active", "focus")
+        self._screen.addItem("Sur tous les écrans", "all")
         for s in QApplication.screens():
             geo = s.geometry()
             self._screen.addItem(

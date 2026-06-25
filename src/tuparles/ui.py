@@ -17,6 +17,7 @@ from collections.abc import Callable
 
 from PySide6.QtCore import (
     QEasingCurve,
+    QObject,
     QParallelAnimationGroup,
     QPoint,
     QPropertyAnimation,
@@ -24,6 +25,7 @@ from PySide6.QtCore import (
     QRectF,
     Qt,
     QTimer,
+    Slot,
 )
 from PySide6.QtGui import QColor, QCursor, QFontMetrics, QPainter
 from PySide6.QtWidgets import QApplication, QWidget
@@ -52,12 +54,87 @@ _ERR = QColor(247, 118, 142)
 _PLACEHOLDER = "Je t'écoute…"
 
 
+# ── multi-monitor screen resolution (settings "bubble_screen") ──────────────
+# One place both the single Bubble and the mirroring BubbleGroup resolve the
+# setting, so a pin / cursor / focus / mirror choice can never mean two things.
+
+
+def _screen_by_name(name: str):
+    for s in QApplication.screens():
+        if s.name() == name:
+            return s
+    return None  # pinned monitor unplugged
+
+
+def _active_window_screen():
+    """The QScreen holding the focused window, best-effort — for "focus" mode.
+
+    X11 (and XWayland when the target is an X11 window): ask xdotool for the
+    active window's geometry and map its centre to a screen. Native Wayland
+    clients are invisible to xdotool, so this returns None there and the caller
+    degrades to the cursor's screen — a reliable "where I'm working" proxy, never
+    a silent no-op (a setting that quietly does nothing is worse than absent).
+    Fire-and-forget: any failure → None. Short cap — runs on the GUI thread at
+    take start (focus is calm then; normally a few ms)."""
+    try:
+        out = subprocess.run(
+            ["xdotool", "getactivewindow", "getwindowgeometry", "--shell"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=1,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    geo: dict[str, int] = {}
+    for line in out.splitlines():
+        key, _, val = line.partition("=")
+        val = val.strip()
+        if val.lstrip("-").isdigit():
+            geo[key.strip()] = int(val)
+    if "X" not in geo or "Y" not in geo:
+        return None
+    # Aim at the window's centre: a window straddling two monitors maps to the
+    # one it mostly sits on, not whichever owns its top-left pixel.
+    cx = geo["X"] + geo.get("WIDTH", 0) // 2
+    cy = geo["Y"] + geo.get("HEIGHT", 0) // 2
+    return QApplication.screenAt(QPoint(cx, cy))
+
+
+def resolve_screen(mode: str | None):
+    """One `bubble_screen` mode → the single QScreen the bubble calls home.
+
+    "cursor" → the mouse's screen; "focus" → the active window's screen (X11),
+    degrading to the cursor's screen then primary; a QScreen name → that monitor
+    if present; "primary"/"all"/unknown/unplugged → the primary screen."""
+    if mode == "cursor":
+        return QApplication.screenAt(QCursor.pos()) or QApplication.primaryScreen()
+    if mode == "focus":
+        return (
+            _active_window_screen()
+            or QApplication.screenAt(QCursor.pos())
+            or QApplication.primaryScreen()
+        )
+    if mode and mode not in ("primary", "all"):
+        return _screen_by_name(mode) or QApplication.primaryScreen()
+    return QApplication.primaryScreen()
+
+
+def resolve_screens(mode: str | None) -> list:
+    """A `bubble_screen` mode → the SET of screens the bubble shows on. "all"
+    mirrors on every monitor; every other mode lights exactly one."""
+    if mode == "all":
+        return list(QApplication.screens()) or [QApplication.primaryScreen()]
+    return [resolve_screen(mode)]
+
+
 class Bubble(QWidget):
     def __init__(
         self,
         level_source: Callable[[], float],
         view: str = "minimal",
         backend_source: Callable[[], str] | None = None,
+        screen_source: Callable[[], object] | None = None,
     ) -> None:
         super().__init__(
             None,
@@ -80,6 +157,11 @@ class Bubble(QWidget):
         # Pull source for the ambient engine colour ("gpu"|"cpu"); default to
         # gpu so older callers and tests keep the original look.
         self._backend_source = backend_source or (lambda: "gpu")
+        # When set (by BubbleGroup, for mirroring), this PINS the bubble to a
+        # specific screen, overriding the "bubble_screen" setting; the group
+        # owns placement so it can light one bubble per monitor. Default None →
+        # the setting drives placement (the standalone single-bubble path).
+        self._screen_source = screen_source
         self._levels: deque[float] = deque([0.0] * BAR_COUNT, maxlen=BAR_COUNT)
         self._state = "idle"  # idle | recording | processing | final | error
         self._view = view  # minimal (one eliding line) | full (wrapped, grows)
@@ -194,17 +276,13 @@ class Bubble(QWidget):
         self.update()
 
     def _target_screen(self):
-        """Which monitor the bubble lives on (settings "bubble_screen"): a pinned
-        screen by name, "cursor" to follow the mouse, else the primary screen.
-        Read fresh so a Réglages change lands on the next appearance."""
-        mode = settings.get("bubble_screen")
-        if mode == "cursor":
-            return QApplication.screenAt(QCursor.pos()) or QApplication.primaryScreen()
-        if mode and mode != "primary":
-            for s in QApplication.screens():
-                if s.name() == mode:
-                    return s  # pinned monitor still present
-        return QApplication.primaryScreen()  # default / pinned screen unplugged
+        """Which monitor the bubble lives on. When pinned by a BubbleGroup
+        (`screen_source`), that wins; otherwise the "bubble_screen" setting
+        resolves it (pin / cursor / focus / primary). Read fresh so a Réglages
+        change lands on the next appearance."""
+        if self._screen_source is not None:
+            return self._screen_source() or QApplication.primaryScreen()
+        return resolve_screen(settings.get("bubble_screen"))
 
     def _home_pos(self) -> QPoint:
         screen = self._target_screen()
@@ -381,3 +459,103 @@ class Bubble(QWidget):
             else:
                 lo = mid + 1
         return "…" + " ".join(words[lo:])
+
+
+class BubbleGroup(QObject):
+    """The daemon's face when it may span several monitors.
+
+    Holds one `Bubble` per screen (created lazily, reused across takes) and fans
+    every call out to the bubbles that are *active for the current take*. The
+    active set is resolved fresh at each take start from "bubble_screen"
+    (`resolve_screens`), so BOTH the chosen monitor and mirror mode apply live —
+    no restart, matching the rest of Réglages.
+
+    "all" lights every screen (a true mirror); every other mode lights exactly
+    one. A one-screen take is therefore the very same single Bubble as before,
+    just reached through the group — single-monitor users pay nothing.
+
+    Exposes the same surface the daemon wires to a Bubble (start_recording,
+    set_partial, start_processing, show_final, show_error, cancel, set_view) plus
+    a `@Slot hide()` so the Wayland paste-hide
+    (`daemon._hide_bubble_for_paste`'s BlockingQueuedConnection invoke) yields
+    keyboard focus on EVERY mirror, not just one — else the paste lands in
+    whichever bubble still holds focus instead of the user's window."""
+
+    def __init__(
+        self,
+        level_source: Callable[[], float],
+        view: str = "minimal",
+        backend_source: Callable[[], str] | None = None,
+    ) -> None:
+        super().__init__()
+        self._level_source = level_source
+        self._view = view
+        self._backend_source = backend_source
+        self._pool: dict[str, Bubble] = {}  # by QScreen.name(), reused
+        self._active: list[Bubble] = []  # lit for the current take
+
+    def _bubble_for(self, screen) -> Bubble:
+        """The pooled Bubble pinned to `screen`, created on first use. The pin
+        re-resolves by NAME each appearance, so an unplugged monitor degrades to
+        primary instead of dangling a freed QScreen pointer."""
+        name = screen.name()
+        bubble = self._pool.get(name)
+        if bubble is None:
+            bubble = Bubble(
+                self._level_source,
+                view=self._view,
+                backend_source=self._backend_source,
+                screen_source=lambda: _screen_by_name(name),
+            )
+            self._pool[name] = bubble
+        return bubble
+
+    def _activate(self) -> list[Bubble]:
+        """Resolve the take's active set, hiding any bubble that was lit last
+        take but isn't now (mode change, mouse moved screen, monitor unplugged).
+        De-dupes by screen name so a mode can't light the same monitor twice."""
+        by_name = {s.name(): s for s in resolve_screens(settings.get("bubble_screen"))}
+        new_active = [self._bubble_for(s) for s in by_name.values()]
+        for bubble in self._active:
+            if bubble not in new_active:
+                bubble.hide()
+        self._active = new_active
+        return new_active
+
+    # ── fan-out (mirrors Bubble's public surface) ───────────────────────────
+
+    def start_recording(self) -> None:
+        for bubble in self._activate():
+            bubble.start_recording()
+
+    def set_partial(self, text: str) -> None:
+        for bubble in self._active:
+            bubble.set_partial(text)
+
+    def start_processing(self) -> None:
+        for bubble in self._active:
+            bubble.start_processing()
+
+    def show_final(self, text: str) -> None:
+        for bubble in self._active:
+            bubble.show_final(text)
+
+    def show_error(self, msg: str) -> None:
+        for bubble in self._active:
+            bubble.show_error(msg)
+
+    def cancel(self) -> None:
+        for bubble in self._active:
+            bubble.cancel()
+
+    def set_view(self, view: str) -> None:
+        # Apply to every pooled bubble AND remember it, so a screen first lit on
+        # a later take is born with the current view.
+        self._view = view
+        for bubble in self._pool.values():
+            bubble.set_view(view)
+
+    @Slot()
+    def hide(self) -> None:
+        for bubble in self._active:
+            bubble.hide()
