@@ -108,8 +108,47 @@ Two layers, both already wired — this sprint just feeds them:
   immediate).
 - **One lexicon fix**: `Postgre → postgres` — the lone unambiguous non-word.
 
-The audio eval is GPU-gated and needs generated WAVs, so the numbers come from
-the GPU box (`pytest -m gpu`); CI runs the structure + unit gates.
+## Measured (2026-06-25, GPU box, 58 WAVs = 29 cases × 2 cross-lingual voices)
+
+We didn't argue it — we ran it. `scripts/measure_seed_ablation.py` decodes every
+WAV under three `initial_prompt` regimes (OFF = no bias, CURATED = manual
+glossary only, FULL = manual + codebase auto-seeds) and scores recall (FN) and
+leak (FP).
+
+| regime | new-case pass | new-case recall | all-case recall | all-case FP |
+|--------|--------------:|----------------:|----------------:|------------:|
+| OFF (baseline) | 1/14 | 8/28 (29%) | 64/124 (52%) | 4/190 (2%) |
+| CURATED        | 6/14 | 16/28 (57%) | 72/124 (58%) | 3/190 (2%) |
+| FULL (capped)  | 6/14 | 16/28 (57%) | 73/124 (59%) | 3/190 (2%) |
+
+**The headline: seeding nearly doubled recall on the target errors (29 → 57%)
+while FP stayed at 0% on the new cases.** Exactly the goal — high recall, low
+FP. Concrete rescues: `qwen` (OFF heard "quen"/"q1"), `CPU` ("sépu"), `Postgres`,
+and — the one PLN flagged — **`Paul-Louis Nech`** (OFF heard "Paul Wienek").
+The bias lever can only raise recall; it never inserted a wrong word, so
+precision held.
+
+### The over-seeding regression we *found by measuring*
+
+The first FULL run (before the budget cap) scored WORSE than CURATED — 56% vs
+58% recall, one extra leak — and on one case it **hallucinated outright**:
+`'J.V.U.K.W.N.R.E.F.L.…'`. The codebase EDA auto-seeds are `ALL_CAPS_CONSTANTS`
+and `CamelCase` identifiers; ~26 of them (747 chars / ~190 tokens) bias the
+decoder toward spelling words letter by letter. This is the "seed 10k" failure
+mode arriving early — at ~190 tokens, not 224. **The auto-seeds didn't just fail
+to help; they actively broke a case the curated prompt passed.**
+
+The fix (`seed_prompt._PROMPT_CHAR_BUDGET = 400`): trim auto-seeds
+(least-important first) until the prompt fits a hard budget well under Whisper's
+~224-token tail-keep; **never drop the curated manual glossary** (it's the
+point). Production prompt dropped 747 → 376 chars. Re-measured: FULL now 21/58
+pass, 59% recall, 3 leaks — *better* than CURATED, hallucination gone. Since
+PLN's box has the EDA cache, FULL is what he actually runs, so this turns the
+ablation win into a real-box win.
+
+The eval is GPU-gated (needs WAVs from `scripts/gen_codeswitch_wavs.py`); CI runs
+the structure + unit gates. Real captured-audio replay (vs TTS) is the next step
+— see the dev-record-audio mode.
 
 ## Roadmap
 

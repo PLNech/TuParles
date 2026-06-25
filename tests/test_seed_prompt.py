@@ -47,3 +47,28 @@ def test_gate_reads_setting(monkeypatch):
     assert out == "Glossaire : s, m."
     monkeypatch.setattr(seed_prompt.settings, "get", lambda key: False)
     assert seed_prompt.initial_prompt(manual=["m"], seeds=["s"]) == "Glossaire : m."
+
+
+def test_budget_trims_auto_seeds_least_important_first():
+    # ranked seeds: seed00 most important. With a small budget, the tail of the
+    # seed list is dropped first; manual is always kept (2026-06-25 over-seeding
+    # ablation — a stuffed prompt hallucinates).
+    seeds = [f"seed{i:02d}" for i in range(80)]  # 80 * ~8 chars >> budget
+    out = seed_prompt.initial_prompt(manual=["MyName"], seeds=seeds, bias_enabled=True)
+    assert out is not None
+    assert len(out) <= seed_prompt._PROMPT_CHAR_BUDGET
+    assert out.endswith("MyName.")  # manual survived, at the tail
+    assert "seed00" in out  # most-important seed kept
+    assert "seed79" not in out  # least-important seed trimmed
+
+
+def test_budget_never_drops_manual_even_when_oversized():
+    # a manual glossary alone larger than the budget is kept in full; only
+    # auto-seeds are ever trimmed.
+    big_manual = [f"Term{i:02d}" for i in range(80)]
+    out = seed_prompt.initial_prompt(
+        manual=big_manual, seeds=["dropme"], bias_enabled=True
+    )
+    assert out is not None
+    assert "dropme" not in out  # the auto-seed yields first
+    assert "Term00" in out and "Term79" in out  # every manual term survives

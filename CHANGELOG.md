@@ -27,6 +27,21 @@ low FN), not the gut. See
 - **`Postgre → postgres`** in the lexicon (`lexicon.py`) — the lone offender
   safe to rewrite deterministically, because « Postgre » is a non-word that is
   *never* intended (`\bPostgre\b` leaves `Postgres`/`PostgreSQL` untouched).
+- **Over-seeding hallucination** (`seed_prompt.py`) — the GPU ablation caught the
+  production prompt (manual + ~26 codebase auto-seeds, 747 chars) scoring *worse*
+  than manual-only and hallucinating letter-spelled garbage (`J.V.U.K.W.N…`):
+  `ALL_CAPS`/`CamelCase` identifiers near the 224-token ceiling teach the decoder
+  to spell. New `_PROMPT_CHAR_BUDGET` (400) trims auto-seeds (least-important
+  first) to a hard cap well under the tail-keep; the curated manual glossary is
+  never dropped. Production prompt 747 → 376 chars; FULL went from 20/58 (one
+  hallucination) to 21/58 pass, now *beating* manual-only.
+
+### Measured (GPU box, 58 WAVs = 29 cases × 2 cross-lingual voices)
+Ran it, didn't argue it (`scripts/measure_seed_ablation.py`, OFF/CURATED/FULL
+ablation): on the new target errors, seeding **nearly doubled recall, 29 → 57%,
+with FP held at 0%**. Rescues incl. `qwen`, `CPU`, `Postgres`, and the one that
+mattered — **`Paul-Louis Nech`** (baseline heard « Paul Wienek »). All-case
+recall 52 → 59%, leaks 4 → 3. High recall, low FP — the goal, with a number.
 
 ### Doctrine
 - **Bias raises recall for free; rewriting risks FP — so this whole error class
