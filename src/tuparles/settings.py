@@ -50,12 +50,13 @@ _DEFAULTS: dict[str, object] = {
     "role": "none",
     # Which screen the bubble appears on (multi-monitor). "primary" pins it to
     # the primary screen (default — deterministic, and identical to before on a
-    # single monitor); "cursor" follows the screen under the mouse (the old
-    # behaviour); any other value is a QScreen.name() to pin to that monitor.
-    # Read fresh each time the bubble shows, so a change applies on the next take.
-    # (Follow-focused-window and mirror-on-all are deliberately not here yet —
-    # focus-screen isn't reliably queryable on native Wayland, and mirroring
-    # touches the Wayland paste-hide path.)
+    # single monitor); "cursor" follows the screen under the mouse; "focus"
+    # follows the active window's screen (X11; degrades to the cursor's screen on
+    # native Wayland, where the focused window's geometry isn't queryable — never
+    # a silent no-op); "all" mirrors the bubble on every monitor; any other value
+    # is a QScreen.name() to pin to that monitor. Resolved fresh each take (see
+    # ui.resolve_screens + BubbleGroup), so every mode — mirror included —
+    # applies live, no restart.
     "bubble_screen": "primary",
     # Tray "breathing creature": the menubar glyph gently animates (a calm
     # breath at rest, livelier while recording, a travelling pulse while

@@ -43,6 +43,87 @@ class TestTargetScreen:
         # a vanished pinned monitor degrades to primary, never crashes a take
         assert bubble._target_screen() is QApplication.primaryScreen()
 
+    def test_focus_mode_resolves_a_screen(self, tmp_path, monkeypatch):
+        # focus follows the active window's screen on X11; offscreen has no
+        # window manager, so it degrades to the cursor/primary screen — the
+        # point is it ALWAYS resolves to a real screen, never None (no no-op).
+        bubble = self._bubble(tmp_path, monkeypatch)
+        from tuparles import settings
+
+        settings.put("bubble_screen", "focus")
+        assert bubble._target_screen() is not None
+
+    def test_pinned_screen_source_overrides_setting(self, tmp_path, monkeypatch):
+        # A BubbleGroup pins a bubble to a screen via screen_source, which must
+        # win over whatever "bubble_screen" says.
+        _qt(tmp_path, monkeypatch)
+        from PySide6.QtWidgets import QApplication
+
+        from tuparles import settings
+        from tuparles.ui import Bubble
+
+        primary = QApplication.primaryScreen()
+        settings.put("bubble_screen", "cursor")
+        bubble = Bubble(level_source=lambda: 0.0, screen_source=lambda: primary)
+        assert bubble._target_screen() is primary
+
+
+class TestResolveScreens:
+    def test_single_mode_is_one_screen(self, tmp_path, monkeypatch):
+        _qt(tmp_path, monkeypatch)
+        from tuparles.ui import resolve_screens
+
+        assert len(resolve_screens("primary")) == 1
+
+    def test_all_mode_covers_every_screen(self, tmp_path, monkeypatch):
+        _qt(tmp_path, monkeypatch)
+        from PySide6.QtWidgets import QApplication
+
+        from tuparles.ui import resolve_screens
+
+        # "all" mirrors on every connected monitor (≥1, == the screen count).
+        assert len(resolve_screens("all")) == len(QApplication.screens())
+
+
+class TestBubbleGroup:
+    def _group(self, tmp_path, monkeypatch):
+        _qt(tmp_path, monkeypatch)
+        from tuparles.ui import BubbleGroup
+
+        return BubbleGroup(level_source=lambda: 0.0)
+
+    def test_start_recording_lights_active_bubbles(self, tmp_path, monkeypatch):
+        group = self._group(tmp_path, monkeypatch)
+        group.start_recording()
+        assert group._active  # at least one screen lit
+        assert all(b._state == "recording" for b in group._active)
+
+    def test_all_mode_lights_one_bubble_per_screen(self, tmp_path, monkeypatch):
+        group = self._group(tmp_path, monkeypatch)
+        from PySide6.QtWidgets import QApplication
+
+        from tuparles import settings
+
+        settings.put("bubble_screen", "all")
+        group.start_recording()
+        assert len(group._active) == len(QApplication.screens())
+
+    def test_set_view_propagates_and_persists(self, tmp_path, monkeypatch):
+        group = self._group(tmp_path, monkeypatch)
+        group.start_recording()  # creates a pooled bubble
+        group.set_view("minimal")
+        assert group._view == "minimal"
+        assert all(b._view == "minimal" for b in group._pool.values())
+
+    def test_fanout_methods_never_raise(self, tmp_path, monkeypatch):
+        group = self._group(tmp_path, monkeypatch)
+        group.start_recording()
+        group.set_partial("salut")
+        group.start_processing()
+        group.show_final("salut le monde")
+        group.hide()  # the Wayland paste-hide slot
+        group.cancel()
+
 
 class TestScreenPicker:
     def test_save_persists_bubble_screen(self, tmp_path, monkeypatch):
@@ -56,3 +137,11 @@ class TestScreenPicker:
         dlg._screen.setCurrentIndex(i)
         dlg._save()
         assert settings.get("bubble_screen") == "cursor"
+
+    def test_picker_offers_focus_and_all(self, tmp_path, monkeypatch):
+        _qt(tmp_path, monkeypatch)
+        from tuparles.settings_ui import SettingsDialog
+
+        dlg = SettingsDialog()
+        assert dlg._screen.findData("focus") >= 0
+        assert dlg._screen.findData("all") >= 0

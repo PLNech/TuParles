@@ -1,5 +1,42 @@
 # Changelog
 
+## Sprint 12 — 2026-06-25 · Une bulle par écran (multi-monitor finish)
+
+The two `bubble_screen` modes deferred at v0.2.0 (Sprint 11), now landed — so
+the multi-monitor story is complete instead of half-told.
+
+### Added
+- **Mirror the bubble on every screen** (`ui.py`, `daemon.py`, `settings.py`,
+  `settings_ui.py`) — a new `bubble_screen: "all"` lights one bubble per monitor
+  at once. The daemon's face is now a `BubbleGroup` that fans every call
+  (`start_recording`/`set_partial`/`show_final`/…) out to the bubbles active for
+  the take; "all" simply makes the active set *every* screen. A `@Slot hide()`
+  fans the Wayland paste-hide out too, so **every** mirror yields keyboard focus
+  before the paste — else it would land in whichever bubble still held focus, not
+  your window. Single-screen modes light exactly one bubble, so a one-monitor
+  setup is byte-for-byte the old behaviour, reached through the group.
+- **Follow the active window's screen** (`ui.py`, `settings.py`,
+  `settings_ui.py`) — `bubble_screen: "focus"` puts the bubble where your text is
+  about to land. On X11 it maps the focused window's centre to a screen; on
+  native Wayland, where a client can't read the focused window's geometry, it
+  **degrades to the cursor's screen** (a reliable "where I'm working" proxy)
+  rather than silently doing nothing — *a setting that no-ops is worse than
+  absent*. Documented as such in the picker hint.
+
+### Changed
+- **The bubble's screen resolution is one shared function** (`ui.py`
+  `resolve_screen`/`resolve_screens`) — the single Bubble and the BubbleGroup
+  both route through it, so pin / cursor / focus / mirror can never mean two
+  different things. All four modes resolve **fresh each take**, so the mode (the
+  mirror included) applies live, no restart.
+
+### Infra
+- **Release notes come from the CHANGELOG, not the commit list** (`release.yml`)
+  — `release.yml` now extracts the top `## …` section (same rule as
+  `whatsnew.latest_section`) and publishes it via `--notes-file`, falling back to
+  `--generate-notes` if there's no section. Published releases now read like the
+  curated documentary the team writes.
+
 ## Sprint 11 — 2026-06-25 · La bulle prend vie (Bubble UX & engine-status pass)
 
 First real-world run on the XPS22 (Arch, Plasma 6 Wayland, RTX 2060) surfaced a

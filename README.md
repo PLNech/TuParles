@@ -40,7 +40,9 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
   the engine colour (toggle off in *Réglages*). Optional soft **start tick**
   (*Réglages*, off by default) confirms recording has begun. On multi-monitor,
   pick which screen the bubble uses in *Réglages* — pin it to a monitor
-  (default: primary) or have it follow the mouse.
+  (default: primary), follow the mouse, follow the active window (where your
+  text lands; on Wayland, where the focused window isn't queryable, it falls
+  back to the mouse's screen), or **mirror it on every screen** at once.
 - **Code-switching first-class** — by default the model auto-detects among
   100 languages per take. In *Réglages* you can confine detection to your
   own set: one language forces it; several turns on **per-segment**

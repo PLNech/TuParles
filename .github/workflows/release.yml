@@ -12,6 +12,39 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - run: gh release create "$GITHUB_REF_NAME" install.sh --generate-notes
+
+      # Publish the CURATED CHANGELOG section as the release notes, not GitHub's
+      # commit-list auto-notes — so a release reads like the documentary the team
+      # writes, not a raw log. We extract the top `## …` block (same rule as
+      # whatsnew.latest_section: from the first sprint header to the next one);
+      # the just-cut release is the one CHANGELOG leads with. Pure-stdlib so it
+      # needs no `poetry install`.
+      - name: Extract the CHANGELOG section for the notes
+        run: |
+          python3 - <<'PY'
+          import pathlib
+
+          lines = pathlib.Path("CHANGELOG.md").read_text(encoding="utf-8").splitlines()
+          start = next((i for i, ln in enumerate(lines) if ln.startswith("## ")), None)
+          section = ""
+          if start is not None:
+              end = next(
+                  (i for i in range(start + 1, len(lines)) if lines[i].startswith("## ")),
+                  len(lines),
+              )
+              section = "\n".join(lines[start:end]).strip()
+          pathlib.Path("RELEASE_NOTES.md").write_text(section, encoding="utf-8")
+          print("CHANGELOG section found" if section else "no CHANGELOG section — falling back to auto-notes")
+          PY
+
+      # --notes-file when we have a curated section; else degrade to GitHub's
+      # --generate-notes (a non-dev / empty CHANGELOG must never block a release).
+      - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -s RELEASE_NOTES.md ]; then
+            gh release create "$GITHUB_REF_NAME" install.sh --notes-file RELEASE_NOTES.md
+          else
+            gh release create "$GITHUB_REF_NAME" install.sh --generate-notes
+          fi
