@@ -20,7 +20,13 @@ except (OSError, ImportError):  # no libportaudio (e.g. CI) — pure helpers sti
     sd = None
 
 from tuparles import settings
-from tuparles.config import CHANNELS, SAMPLE_RATE
+from tuparles.config import (
+    CHANNELS,
+    LEVEL_FULL_SCALE,
+    LEVEL_GAMMA,
+    LEVEL_NOISE_FLOOR,
+    SAMPLE_RATE,
+)
 
 
 def _refresh_portaudio() -> None:
@@ -119,8 +125,11 @@ class Recorder:
     def _on_block(self, indata: np.ndarray, frames, time_info, status) -> None:
         with self._lock:
             self._chunks.append(indata.copy())
+        # Perceptual mapping (see config): gate out silence, scale to a
+        # speech-typical peak, gamma-lift so quiet/mid speech still moves bars.
         rms = float(np.sqrt(np.mean(indata.astype(np.float32) ** 2)))
-        self.level = min(1.0, rms / 8000.0)
+        norm = max(0.0, (rms - LEVEL_NOISE_FLOOR) / (LEVEL_FULL_SCALE - LEVEL_NOISE_FLOOR))
+        self.level = min(1.0, norm**LEVEL_GAMMA)
 
     def snapshot(self) -> np.ndarray:
         """Copy of everything captured so far, without stopping.

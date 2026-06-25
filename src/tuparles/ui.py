@@ -38,8 +38,13 @@ FPS_MS = 33  # one repaint per Recorder level sample
 _BG = QColor(17, 19, 27, 236)
 _TEXT_LIVE = QColor(205, 214, 244)
 _TEXT_DIM = QColor(127, 132, 156)
-_ACCENT = QColor(122, 162, 247)  # recording bars
-_OK = QColor(158, 206, 106)  # final-flash bars
+# Bars encode *which silicon* while recording/processing: green=GPU, blue=CPU
+# (saturated). The final flash is a brighter, whiter green so "landed" never
+# collides with the GPU-green ambient colour. Error stays red.
+_GPU = QColor(122, 199, 130)  # GPU active — recording/processing
+_CPU = QColor(122, 162, 247)  # CPU/qwen fallback — recording/processing
+_ACCENT = _CPU  # legacy alias: the pre-engine-colour default accent
+_OK = QColor(190, 235, 165)  # final-flash bars — brighter/whiter than _GPU
 _ERR = QColor(247, 118, 142)
 
 _PLACEHOLDER = "Je t'écoute…"
@@ -47,7 +52,10 @@ _PLACEHOLDER = "Je t'écoute…"
 
 class Bubble(QWidget):
     def __init__(
-        self, level_source: Callable[[], float], view: str = "minimal"
+        self,
+        level_source: Callable[[], float],
+        view: str = "minimal",
+        backend_source: Callable[[], str] | None = None,
     ) -> None:
         super().__init__(
             None,
@@ -67,6 +75,9 @@ class Bubble(QWidget):
         self.setFont(font)
 
         self._level_source = level_source
+        # Pull source for the ambient engine colour ("gpu"|"cpu"); default to
+        # gpu so older callers and tests keep the original look.
+        self._backend_source = backend_source or (lambda: "gpu")
         self._levels: deque[float] = deque([0.0] * BAR_COUNT, maxlen=BAR_COUNT)
         self._state = "idle"  # idle | recording | processing | final | error
         self._view = view  # minimal (one eliding line) | full (wrapped, grows)
@@ -199,7 +210,13 @@ class Bubble(QWidget):
 
     def _make_sticky(self) -> None:
         """Pin to all virtual desktops: a mid-take workspace switch must not
-        strand the bubble. Fire-and-forget — cosmetic, never blocks."""
+        strand the bubble. Fire-and-forget — cosmetic, never blocks.
+
+        xprop talks the X11 protocol; under native Wayland the compositor owns
+        placement and stickiness, so this would be a silent no-op anyway —
+        skip it explicitly (the launcher prefers XWayland, see daemon.run)."""
+        if QApplication.platformName() != "xcb":
+            return
         subprocess.Popen(
             [
                 "xprop",
@@ -257,8 +274,14 @@ class Bubble(QWidget):
         self._paint_text(p)
         p.end()
 
+    def _engine_color(self) -> QColor:
+        """green=GPU, blue=CPU — ambient indicator of the live backend."""
+        return _GPU if self._backend_source() == "gpu" else _CPU
+
     def _paint_bars(self, p: QPainter) -> None:
-        color = {"final": _OK, "error": _ERR}.get(self._state, _ACCENT)
+        # final = success-green flash, error = red; recording/processing follow
+        # the engine colour so green/blue always reads as "which silicon".
+        color = {"final": _OK, "error": _ERR}.get(self._state, self._engine_color())
         if self._state != "recording":
             color = QColor(color)
             color.setAlpha(140)
@@ -270,7 +293,14 @@ class Bubble(QWidget):
         for i in range(BAR_COUNT):
             if self._state == "recording":
                 lvl = self._levels[i]
-            else:  # gentle breathing wave while the GPU thinks / flashes
+            elif self._state == "processing":
+                # A bright pulse sweeping across the bars: clearly "scanning",
+                # distinct from idle's breathing and final's green flash. Most
+                # visible on long takes (the batched final decode ≈ 1 s).
+                center = (self._phase * 0.8) % BAR_COUNT
+                d = min(abs(i - center), BAR_COUNT - abs(i - center))  # wrap-around
+                lvl = 0.15 + 0.6 * math.exp(-(d * d) / 4.0)
+            else:  # idle / final / error: gentle breathing wave
                 lvl = 0.18 + 0.14 * math.sin(self._phase + i * 0.45)
             half = 1.5 + max(0.0, lvl) * max_half
             p.drawRoundedRect(QRectF(x, cy - half, BAR_W, half * 2), 1.5, 1.5)

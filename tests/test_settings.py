@@ -8,7 +8,7 @@ def _isolate(tmp_path, monkeypatch):
 class TestSettings:
     def test_default_view(self, tmp_path, monkeypatch):
         _isolate(tmp_path, monkeypatch)
-        assert settings.get("view") == "minimal"
+        assert settings.get("view") == "full"
 
     def test_put_then_get(self, tmp_path, monkeypatch):
         _isolate(tmp_path, monkeypatch)
@@ -24,6 +24,6 @@ class TestSettings:
         path = tmp_path / "tuparles" / "settings.json"
         path.parent.mkdir(parents=True)
         path.write_text("{not json")
+        assert settings.get("view") == "full"  # falls back to the default
+        settings.put("view", "minimal")  # heals the file
         assert settings.get("view") == "minimal"
-        settings.put("view", "full")  # heals the file
-        assert settings.get("view") == "full"

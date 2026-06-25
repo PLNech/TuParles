@@ -82,6 +82,7 @@ class GpuEngine:
     """Persistent large-v3-turbo on CUDA. Load once (~1.6 s), decode forever."""
 
     supports_partials = True
+    active_backend = "gpu"  # ambient engine indicator for the bubble/tray colour
 
     def __init__(self) -> None:
         _preload_cuda_libs()
@@ -158,6 +159,7 @@ class QwenCpuEngine:
     # Re-decoding a growing buffer at ~0.4x realtime would fall behind
     # within seconds (see docs/spike-backend.md) — waveform-only bubble.
     supports_partials = False
+    active_backend = "cpu"
 
     def transcribe(self, audio: np.ndarray) -> Transcription:
         if audio.size == 0:
@@ -214,6 +216,13 @@ class ResilientEngine:
     def engine_name(self) -> str:
         """Backend that actually served the last decode (for telemetry)."""
         return "QwenCpuEngine" if self._on_cpu else "GpuEngine"
+
+    @property
+    def active_backend(self) -> str:
+        """"gpu" | "cpu" — which silicon is live. Drives the bubble/tray colour
+        (green=GPU, blue=CPU). The fallback is sticky for the session, so this
+        flips to "cpu" exactly when the GPU has truly given up and stays there."""
+        return "cpu" if self._on_cpu else "gpu"
 
     @property
     def supports_partials(self) -> bool:

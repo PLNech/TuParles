@@ -1,5 +1,62 @@
 # Changelog
 
+## Sprint 11 — 2026-06-25 · La bulle prend vie (Bubble UX & engine-status pass)
+
+First real-world run on the XPS22 (Arch, Plasma 6 Wayland, RTX 2060) surfaced a
+batch of bubble-legibility papercuts (see `SPEC.md`). This sprint makes the
+bubble *tell you what's happening*.
+
+### Changed
+- **Perceptual mic meter** (`audio.py`, `config.py`, SPEC §2) — the waveform was
+  a linear `rms / 8000` over the full int16 range, so quiet/mid speech mapped to
+  near-flat bars. Now a light noise gate + speech-scaled normalize + perceptual
+  gamma (`LEVEL_NOISE_FLOOR` / `LEVEL_FULL_SCALE` / `LEVEL_GAMMA`): silence rests
+  flat, soft speech still clearly moves the bars. The bars jumping *is* the "I
+  hear you" cue, so this is also the start-of-recording feedback.
+- **Bars encode the engine: green = GPU, blue = CPU** (`ui.py`, `tray.py`,
+  `engine.py`, `daemon.py`, SPEC §5) — recording **and** processing bars (bubble
+  *and* tray glyph) now take an ambient colour from the live backend, via a
+  `backend_source` pull that mirrors `level_source`. `ResilientEngine` exposes
+  `active_backend` ("gpu"/"cpu"); the session-sticky fallback means it goes blue
+  exactly when the GPU has truly given up. The final flash is a brighter/whiter
+  green ("landed"), error stays red. **This changes the default look** (blue →
+  green while recording on GPU) — deliberate.
+- **Default view is now `full`** (`settings.py`, SPEC §4) — a dictation tool
+  should show your whole take; a long take elided to ~5 words starved context.
+  `minimal` stays the opt-in discreet one-line pill (tray · *Réglages*).
+- **Processing animation is a sweeping pulse** (`ui.py`, SPEC §3) — the idle
+  breathing wave read as "barely alive"; processing now sends a bright pulse
+  scanning across the bars, visually distinct from idle and the final flash.
+
+### Added
+- **A tray that breathes** (`tray.py`, `settings.py`, `settings_ui.py`) — the
+  menubar glyph is now alive: a calm shallow breath (+ gentle bob) at rest, a
+  livelier phase-shifted undulation while recording, and a travelling pulse
+  while decoding — all in the engine colour. One ~10 Hz timer drives it. SNI
+  trays ship each frame over DBus, so it's a `tray_animation` setting (default
+  on; off = static glyph). Applied at daemon start (toggle then *Redémarrer*).
+- **Optional start tick** (`cue.py`, `settings.py`, `settings_ui.py`) — a soft
+  synthesized cue the instant capture goes live, for those who want an audible
+  "speak now" on top of the visual cues. Opt-in (default off — a quiet local
+  tool shouldn't beep); no new deps (synthesized through `sounddevice`).
+
+### Fixed
+- **Wayland bubble positioning** (`daemon.py`, `ui.py`, README, SPEC §1) — native
+  Wayland compositors ignore client `move()`/`xprop`, centring the frameless
+  bubble. The daemon now renders via XWayland (`QT_QPA_PLATFORM=xcb`) on a
+  Wayland session so self-placement and all-desktops stickiness work again, and
+  degrades honestly if forced to native Wayland (`_make_sticky` no-ops off xcb;
+  a startup note instead of pretending). Cross-machine version of the per-box
+  infra workaround.
+
+### Infra
+- **Reconciled the modern-ydotool delivery tests** (`tests/test_delivery.py`) —
+  Sprint 9's ydotool ≥1.0 support (evdev `<keycode>:<state>` pairs) shipped
+  without updating the paste-combo tests, which still pinned the daemon-less
+  `ctrl+v` argv and didn't control `_YDOTOOL_MODERN` (so they passed/failed by
+  whether `ydotoold` was installed on the box). Tests now pin the backend
+  explicitly and `TestYdotoolArgv` covers both generations.
+
 ## Sprint 10 — 2026-06-24 · Ton style (personalized casing) + le GPU qui revient
 
 ### Added
@@ -73,6 +130,23 @@
   GPU verification deferred — laptop on battery (econ power mode).
 
 ## Sprint 9 — 2026-06-24 · Le pare-feu se branche (PII firewall, from core to live)
+
+### Infra
+- **Distro-portable install** (`install.sh`, `scripts/setup_wayland.sh`) — the
+  installer no longer assumes apt. A small package-manager layer
+  (`detect_pm` / `map_pkg` / `pkg_install`) maps the logical deps to apt /
+  pacman / dnf / zypper names (`libopenblas-dev`↔`openblas`↔`openblas-devel`,
+  `libportaudio2`↔`portaudio`), so Arch/Fedora/openSUSE install with the same
+  one-liner. Desktop messaging is no longer GNOME-specific.
+- **Modern ydotool support (Wayland delivery beyond Ubuntu)** (`delivery.py`,
+  `scripts/setup_wayland.sh`) — Ubuntu ships ydotool 0.1.8 (daemon-less, `key`
+  takes a `ctrl+v` chord string); ydotool ≥1.0 (Arch/Fedora) needs a running
+  `ydotoold` and `key` takes `<keycode>:<state>` evdev pairs instead. Delivery
+  now detects which CLI is present (via the `ydotoold` binary) and emits the
+  right argv; `setup_wayland.sh` installs a `ydotoold` **user service** +
+  `YDOTOOL_SOCKET` env (environment.d) when modern, and only cleans up the
+  obsolete unit on the daemon-less path. Non-GNOME Wayland (KDE, etc.) now
+  prints what it does for terminal paste instead of silently degrading.
 
 ### Added
 - **PII deterministic core** (`src/tuparles/privacy/`, #103) — the
