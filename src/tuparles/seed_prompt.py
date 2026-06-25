@@ -23,6 +23,18 @@ from tuparles.config import REPO_ROOT, VOCAB_FILE
 # auto-seeds so a big codebase can't crowd out the manual terms.
 _SEED_LIMIT = 30
 
+# Hard cap on the assembled prompt. A stuffed prompt doesn't merely waste
+# budget — codebase identifiers (ALL_CAPS_CONSTANTS, CamelCase) bias the
+# decoder toward spelling words out letter by letter. The 2026-06-25 seed
+# ablation measured this: the FULL regime (manual + ~26 auto-seeds, 747 chars
+# / ~190 tokens) scored WORSE than manual-only (355 chars) on the code-switch
+# eval AND hallucinated outright ('J.V.U.K.W.N…'), breaking a case the curated
+# prompt passed. So cap well under Whisper's own ~224-token tail-keep. Only
+# auto-seeds are trimmed (least-important first); the curated manual glossary
+# is never dropped — it is the point. See
+# docs/research/2026-06-25-transliteration-forensics.md.
+_PROMPT_CHAR_BUDGET = 400
+
 
 def _manual_glossary() -> list[str]:
     """The hand-curated personal glossary (vocab.txt), comments stripped."""
@@ -75,5 +87,15 @@ def initial_prompt(
 
     manual_keys = {w.casefold() for w in manual}
     fresh_seeds = [s for s in seed_list if s.casefold() not in manual_keys]
-    words = fresh_seeds + manual  # manual at the tail (curated, truncation-safe)
-    return f"Glossaire : {', '.join(words)}." if words else None
+
+    # Trim auto-seeds (least-important first — they are ranked, so drop the
+    # tail) until the whole prompt fits the budget. Manual rides at the tail
+    # and is never dropped: it survives both this trim and Whisper's own
+    # ~224-token tail-keep.
+    def _render(seeds: list[str]) -> str:
+        return f"Glossaire : {', '.join(seeds + manual)}."
+
+    while fresh_seeds and len(_render(fresh_seeds)) > _PROMPT_CHAR_BUDGET:
+        fresh_seeds = fresh_seeds[:-1]
+
+    return _render(fresh_seeds) if (fresh_seeds or manual) else None
