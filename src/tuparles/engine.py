@@ -17,6 +17,7 @@ import numpy as np
 
 from tuparles import settings
 from tuparles.config import (
+    PARTIAL_WINDOW_S,
     QWEN_BINARY,
     QWEN_MODEL_DIR,
     QWEN_THREADS,
@@ -84,6 +85,9 @@ class GpuEngine:
 
     supports_partials = True
     active_backend = "gpu"  # ambient engine indicator for the bubble/tray colour
+    # large-v3-turbo handles code-switch, so the GPU preview keeps the long
+    # context window. (The CPU `base` model needs a shorter one — see below.)
+    partial_window_s = PARTIAL_WINDOW_S
 
     def __init__(self) -> None:
         _preload_cuda_libs()
@@ -220,6 +224,13 @@ class QwenCpuEngine:
         (waveform-only) rather than crashing a take."""
         return bool(settings.get("cpu_partials_enabled"))
 
+    @property
+    def partial_window_s(self) -> int:
+        """Short tail (default 6 s) so the `base` model's one-language-per-window
+        detection tracks the *current* language instead of a French-dominant past
+        (#3 follow-up). Hot-reloaded — retune without a restart."""
+        return int(settings.get("cpu_partials_window_s") or PARTIAL_WINDOW_S)
+
     def transcribe_partial(self, audio: np.ndarray) -> str:
         if self._partials_failed or not settings.get("cpu_partials_enabled"):
             return ""
@@ -304,6 +315,15 @@ class ResilientEngine:
         if self._on_cpu:
             return self._cpu_engine().supports_partials
         return self._gpu is not None
+
+    @property
+    def partial_window_s(self) -> int:
+        # The CPU backend wants a shorter window than the GPU (code-switch language
+        # tracking, #3 follow-up). Follow the live backend so the daemon's tail
+        # length always matches whichever silicon is decoding.
+        if self._on_cpu:
+            return self._cpu_engine().partial_window_s
+        return PARTIAL_WINDOW_S
 
     def transcribe(self, audio: np.ndarray) -> Transcription:
         if self._on_cpu:

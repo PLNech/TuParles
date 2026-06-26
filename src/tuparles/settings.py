@@ -76,6 +76,15 @@ _DEFAULTS: dict[str, object] = {
     # can't load, the CPU bubble degrades to waveform-only.
     "cpu_partials_enabled": True,
     "cpu_partials_model": "base",
+    # CPU partials decode only this tail of the take (#3 follow-up). Shorter than
+    # the GPU window (PARTIAL_WINDOW_S=20) on purpose: the small `base` model
+    # picks ONE language per window, so a long French-dominant tail Frenchifies
+    # the English you just switched into. A short window lets the *current*
+    # language dominate, so the preview tracks what you're saying now. Trade-off:
+    # less back-context shown + a brief lag flipping at a switch. GPU is untouched
+    # (large-v3-turbo handles code-switch). Tune to taste; the captured-take
+    # replay (#7) is how we settle the value on real audio.
+    "cpu_partials_window_s": 6,
 }
 
 
