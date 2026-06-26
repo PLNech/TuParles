@@ -148,6 +148,16 @@ class SettingsDialog(QDialog):
         self._tray_anim.setChecked(bool(settings.get("tray_animation")))
         layout.addWidget(self._tray_anim)
 
+        self._cpu_partials = QCheckBox("Aperçu en direct sur CPU")
+        self._cpu_partials.setToolTip(
+            "Affiche le texte au fil de la parole même sans GPU, via un petit "
+            "modèle CPU (téléchargé une fois). Décoche sur une machine peu "
+            "puissante — la bulle garde alors l'onde sonore. (Le GPU n'est pas "
+            "concerné : il a toujours l'aperçu.)"
+        )
+        self._cpu_partials.setChecked(bool(settings.get("cpu_partials_enabled")))
+        layout.addWidget(self._cpu_partials)
+
         layout.addWidget(QLabel("<b>Écran de la bulle</b>"))
         screen_hint = QLabel(
             "Sur quel écran la bulle s'affiche. « Écran principal » par défaut ; "
@@ -305,6 +315,7 @@ class SettingsDialog(QDialog):
         settings.put("casing_style", self._casing.currentData())
         settings.put("start_cue_sound", self._start_sound.isChecked())
         settings.put("tray_animation", self._tray_anim.isChecked())
+        settings.put("cpu_partials_enabled", self._cpu_partials.isChecked())
         settings.put("bubble_screen", self._screen.currentData())
         telemetry.set_enabled(self._telemetry.isChecked())
         settings.put("pii_redact_history", self._redact.isChecked())

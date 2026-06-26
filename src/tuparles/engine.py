@@ -152,14 +152,86 @@ class GpuEngine:
         return " ".join(s.text.strip() for s in segments).strip()
 
 
+class CpuPartialsEngine:
+    """A small whisper on CPU, for live *partials only* (#127). The qwen final
+    decode stays the source of truth; this just paints provisional text while
+    you speak, so CPU sessions get the streaming preview the GPU has — partials
+    degrade GPU-or-CPU like every other feature, never GPU-or-nothing.
+
+    Cheap by construction: faster-whisper is already a core dep and its CT2 CPU
+    backend needs no CUDA, so this rides the lean install — only the small model
+    weights fetch on first use (like the GPU model). A bounded window + greedy
+    beam keep a re-decode well above realtime (`base` ≈ 0.6 s for an 8 s window
+    on a laptop CPU), and the daemon's ~1 Hz loop self-paces, so a long window
+    just yields fewer partials, never a backlog. Default `base`; drop to `tiny`
+    on a low-power box via the `cpu_partials_model` setting.
+
+    Partials ≠ final: this is a different (smaller) model than qwen, so the
+    preview can drift slightly from what lands. That's the deal with every
+    partial — provisional text the final decode overwrites.
+    """
+
+    def __init__(self, model: str | None = None) -> None:
+        from faster_whisper import WhisperModel
+
+        name = model or settings.get("cpu_partials_model") or "base"
+        self._model = WhisperModel(name, device="cpu", compute_type="int8")
+
+    def transcribe_partial(self, audio: np.ndarray) -> str:
+        if audio.size == 0:
+            return ""
+        pcm = normalize_audio(audio.astype(np.float32) / 32768.0)
+        language, multilingual = decode_language_opts(settings.get("languages") or [])
+        segments, _ = self._model.transcribe(
+            pcm,
+            beam_size=1,
+            vad_filter=True,
+            condition_on_previous_text=False,
+            without_timestamps=True,
+            language=language,
+            multilingual=multilingual,
+        )
+        return " ".join(s.text.strip() for s in segments).strip()
+
+
 class QwenCpuEngine:
     """Fallback: vendored qwen-asr C binary, fresh process per utterance
-    (weights are mmap'd, spawn costs ~0.65 s)."""
+    (weights are mmap'd, spawn costs ~0.65 s).
 
-    # Re-decoding a growing buffer at ~0.4x realtime would fall behind
-    # within seconds (see docs/spike-backend.md) — waveform-only bubble.
-    supports_partials = False
+    qwen itself can't stream (fresh process, ~0.4x realtime — see
+    docs/spike-backend.md), so live partials come from a separate small CPU
+    model (`CpuPartialsEngine`, #127), built lazily on the first partial and
+    opt-out via `cpu_partials_enabled`. If that model can't load (e.g. no
+    network on first use), we degrade silently to a waveform-only bubble."""
+
     active_backend = "cpu"
+
+    def __init__(self, partials_factory=CpuPartialsEngine) -> None:
+        self._partials_factory = partials_factory
+        self._partials: CpuPartialsEngine | None = None  # built lazily
+        self._partials_failed = False  # small model couldn't load → waveform-only
+
+    @property
+    def supports_partials(self) -> bool:
+        """Opt-in (default on): the extra small model is worth it for the live
+        preview, but a low-power box can turn it off. Optimistic — if enabled
+        but the model later fails to load, `transcribe_partial` degrades to ''
+        (waveform-only) rather than crashing a take."""
+        return bool(settings.get("cpu_partials_enabled"))
+
+    def transcribe_partial(self, audio: np.ndarray) -> str:
+        if self._partials_failed or not settings.get("cpu_partials_enabled"):
+            return ""
+        if self._partials is None:
+            try:
+                self._partials = self._partials_factory()
+            except Exception as exc:
+                print(
+                    f"CPU partials model unavailable ({str(exc)[:120]}); waveform-only"
+                )
+                self._partials_failed = True
+                return ""
+        return self._partials.transcribe_partial(audio)
 
     def transcribe(self, audio: np.ndarray) -> Transcription:
         if audio.size == 0:
@@ -226,7 +298,11 @@ class ResilientEngine:
 
     @property
     def supports_partials(self) -> bool:
-        return not self._on_cpu and self._gpu is not None
+        # On GPU: whenever a live context exists. After a sticky fallback: defer
+        # to the CPU engine, which now streams via its own small model (#127).
+        if self._on_cpu:
+            return self._cpu_engine().supports_partials
+        return self._gpu is not None
 
     def transcribe(self, audio: np.ndarray) -> Transcription:
         if self._on_cpu:
@@ -246,9 +322,13 @@ class ResilientEngine:
     def transcribe_partial(self, audio: np.ndarray) -> str:
         # Partials are frequent and best-effort: never rebuild on one (it would
         # thrash), never fall back — let the final transcribe() drive recovery.
-        if self._on_cpu or self._gpu is None:
-            return ""
+        # After a sticky CPU fallback, partials come from the CPU engine's own
+        # small model (#127); before that, from the live GPU context.
         try:
+            if self._on_cpu:
+                return self._cpu_engine().transcribe_partial(audio)
+            if self._gpu is None:
+                return ""
             return self._gpu.transcribe_partial(audio)
         except Exception:
             return ""
