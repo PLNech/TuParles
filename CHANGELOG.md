@@ -1,5 +1,34 @@
 # Changelog
 
+## Sprint 15 — 2026-06-26 · La couleur tient parole, le CPU prend la sienne
+
+Two follow-ups from a real CPU-only run (GPU wedged by a suspend/resume, #124):
+the bubble's colour broke its own promise, and the CPU bubble had no live text.
+
+### Fixed
+- **The bar colour holds its hue end to end** (`ui.py`, #color) — bars mean
+  *which silicon* (green = GPU, blue = CPU), but the final "landed" flash was a
+  fixed green, so a CPU take read blue → blue → **green** and looked like the GPU
+  had woken up. Now the landed flash *brightens the live backend hue toward
+  white*: green stays GPU, blue stays CPU, the hue is constant from first frame
+  to last, and "landed" reads as brightness, not colour. (Supersedes Sprint 11's
+  "brighter/whiter green" — that was the exact thing that misled.) `_bar_color()`
+  is extracted so the contract is unit-tested headless (no GPU needed).
+
+### Added
+- **Live partials on CPU** (`engine.py`, `settings.py`, `settings_ui.py`, #127) —
+  qwen can't stream (fresh process, ~0.4x realtime), so a CPU session used to get
+  a waveform but no preview text. A separate small whisper on CPU
+  (`CpuPartialsEngine`, default `base`, opt-out via *Réglages* « Aperçu en direct
+  sur CPU ») now paints provisional text while you speak; the qwen final decode
+  stays the source of truth and overwrites it. Cheap: faster-whisper is already a
+  core dep and its CT2 CPU backend needs no CUDA, so only the small weights fetch
+  on first use. The daemon's ~1 Hz partials loop self-paces (bounded window +
+  elapsed-subtracted cadence), so a long window yields fewer partials, never a
+  backlog; if the small model can't load, the bubble degrades to waveform-only.
+  This closes the last GPU-or-nothing gap — partials now degrade GPU-or-CPU like
+  every other feature.
+
 ## Sprint 14 — 2026-06-26 · Rejoue ta voix (dev take-capture)
 
 The transliteration ablation (Sprint 13) proved a seed fix survives *synthetic*

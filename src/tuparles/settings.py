@@ -69,6 +69,13 @@ _DEFAULTS: dict[str, object] = {
     # tool shouldn't beep by default; the visual cue (bubble + livelier bars +
     # engine-coloured tray) is always on.
     "start_cue_sound": False,
+    # Live partials on the CPU backend (#127). qwen can't stream, so the preview
+    # comes from a separate small whisper on CPU — opt-out for a low-power box,
+    # and `cpu_partials_model` picks size/quality ("base" default, "tiny" lighter).
+    # GPU partials are unaffected (they ride the main model). If the small model
+    # can't load, the CPU bubble degrades to waveform-only.
+    "cpu_partials_enabled": True,
+    "cpu_partials_model": "base",
 }
 
 

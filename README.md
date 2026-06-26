@@ -31,9 +31,10 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
 - **A bubble that tells you what's happening** — the waveform tracks your
   voice on a perceptual scale, so even quiet speech visibly moves the bars
   ("I hear you"); the bars are **green on GPU, blue on CPU**, so you always
-  know which silicon is decoding (and a red flash for errors). While it
-  decodes, a bright pulse sweeps across the bars ("I'm working"); the take
-  lands on a green flash. By default the bubble shows your **whole take**,
+  know which silicon is decoding (and a red flash for errors). That hue holds
+  from first frame to last — while it decodes, a bright pulse sweeps across the
+  bars ("I'm working"), and the take lands on a *brighter* flash of the **same**
+  colour (so green only ever means GPU). By default the bubble shows your **whole take**,
   word-wrapped and growing as you speak (switch to the discreet one-line
   *minimal* pill in the tray or *Réglages*). The **tray glyph breathes** —
   calm at rest, livelier while recording, a travelling pulse while decoding, in
@@ -112,8 +113,13 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
   partials are cheap greedy decodes of a sliding window.
 - **CPU fallback**: [Qwen3-ASR-0.6B](https://huggingface.co/Qwen/Qwen3-ASR-0.6B)
   via [antirez/qwen-asr](https://github.com/antirez/qwen-asr), a pure-C
-  inference engine (OpenBLAS) — used automatically when no GPU answers
-  (waveform-only bubble, no live partials).
+  inference engine (OpenBLAS) — used automatically when no GPU answers.
+- **CPU live partials**: qwen can't stream, so the preview text on a CPU
+  session comes from a separate small whisper on CPU (`base` by default,
+  greedy, bounded window) — faster-whisper's CT2 CPU backend, no CUDA. The
+  qwen final decode still rules; partials just paint provisional text as you
+  speak. Opt-out in *Réglages* (« Aperçu en direct sur CPU ») on a low-power
+  box, where the bubble falls back to waveform-only.
 - **Self-healing GPU**: if the CUDA context dies mid-session — a laptop
   suspend/resume is the classic culprit, leaving `nvidia-smi` happy but
   CUDA unusable — the engine rebuilds the context on the next take, and
