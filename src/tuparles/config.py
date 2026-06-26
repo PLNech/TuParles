@@ -36,13 +36,16 @@ NORMALIZE_MAX_GAIN = 12.0  # ~+21 dB ceiling; beyond this we'd amplify hiss
 NORMALIZE_SILENCE_FLOOR = 0.005  # peak below this = silence, leave it alone
 
 # Waveform amplitude mapping (audio.py): mic RMS (int16, ±32768) → the bubble's
-# 0..1 bar height. The raw RMS of speech (~300–2000) over the full int16 range
-# barely moved the bars and was linear, so quiet/mid speech read as flat. We
-# subtract a light noise gate, scale to a speech-typical peak, then apply a
-# perceptual gamma (<1) so even soft speech lifts into a visible range — the
-# bars jumping is the user's "I hear you" confirmation. Tune to the mic.
-LEVEL_NOISE_FLOOR = 80.0  # RMS below this = silence: bars rest flat
-LEVEL_FULL_SCALE = 3000.0  # RMS that should peg the meter
+# 0..1 bar height. We subtract a light noise gate, scale to a speech-typical
+# peak, then apply a perceptual gamma (<1) so even soft speech lifts into a
+# visible range — the bars jumping is the user's "I hear you" confirmation.
+# Tune to the mic: the first values (floor 80 / full-scale 3000) were set on a
+# loud desktop mic and left a quieter laptop mic (ambient RMS ~8, normal speech
+# ~80-100, loud ~140-250) flat — normal speech sat *under* the floor. Lowered to
+# match: floor below normal speech, full-scale near a loud peak. (Per-mic
+# sensitivity / auto-gain would generalise this; the spectrum view AGCs anyway.)
+LEVEL_NOISE_FLOOR = 50.0  # RMS below this = silence: bars rest flat
+LEVEL_FULL_SCALE = 300.0  # RMS that should peg the meter
 LEVEL_GAMMA = 0.6  # <1 lifts quiet speech; 1.0 = linear
 
 # Live partials: decode only the last N seconds (the bubble elides left,

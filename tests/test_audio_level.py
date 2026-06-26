@@ -37,13 +37,17 @@ def test_above_full_scale_clamps():
 
 
 def test_mid_speech_is_clearly_visible():
-    # ~1000 RMS is typical conversational speech. Old linear map gave ~0.125
-    # (a flat-looking bar); the perceptual lift must put it well into view.
-    level = _level_at(1000)
-    assert level > 1000 / 8000  # strictly more visible than the old linear map
+    # A speech RMS midway between the gate and full-scale must land well into
+    # the visible range, not the near-flat the old linear rms/8000 map gave.
+    # Calibration-relative so it survives a per-mic retune of the constants.
+    mid = (LEVEL_NOISE_FLOOR + LEVEL_FULL_SCALE) / 2
+    level = _level_at(mid)
+    assert level > mid / 8000  # strictly more visible than the old linear map
     assert 0.3 < level < 0.8
 
 
 def test_monotonic_in_loudness():
-    levels = [_level_at(v) for v in (100, 500, 1000, 2000, 3000)]
+    span = LEVEL_FULL_SCALE - LEVEL_NOISE_FLOOR
+    pts = [LEVEL_NOISE_FLOOR + span * f for f in (0.1, 0.3, 0.5, 0.7, 0.9)]
+    levels = [_level_at(v) for v in pts]
     assert levels == sorted(levels)
