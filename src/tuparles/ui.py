@@ -42,13 +42,15 @@ FPS_MS = 33  # one repaint per Recorder level sample
 _BG = QColor(17, 19, 27, 236)
 _TEXT_LIVE = QColor(205, 214, 244)
 _TEXT_DIM = QColor(127, 132, 156)
-# Bars encode *which silicon* while recording/processing: green=GPU, blue=CPU
-# (saturated). The final flash is a brighter, whiter green so "landed" never
-# collides with the GPU-green ambient colour. Error stays red.
-_GPU = QColor(122, 199, 130)  # GPU active — recording/processing
-_CPU = QColor(122, 162, 247)  # CPU/qwen fallback — recording/processing
+# Bars encode *which silicon* is live — green=GPU, blue=CPU (saturated) — and
+# hold that hue from the first frame to the last: idle, recording, processing
+# AND the final "landed" flash are all the SAME colour, so green only ever
+# means GPU. "Landed" is signalled by *brightness* (a lift toward white, see
+# `_brighten`), never by switching hue — a CPU take stays blue end to end.
+# Error stays red.
+_GPU = QColor(122, 199, 130)  # GPU active
+_CPU = QColor(122, 162, 247)  # CPU/qwen fallback
 _ACCENT = _CPU  # legacy alias: the pre-engine-colour default accent
-_OK = QColor(190, 235, 165)  # final-flash bars — brighter/whiter than _GPU
 _ERR = QColor(247, 118, 142)
 
 _PLACEHOLDER = "Je t'écoute…"
@@ -126,6 +128,17 @@ def resolve_screens(mode: str | None) -> list:
     if mode == "all":
         return list(QApplication.screens()) or [QApplication.primaryScreen()]
     return [resolve_screen(mode)]
+
+
+def _brighten(color: QColor, t: float = 0.4) -> QColor:
+    """Lerp a colour `t` of the way toward white. The final-flash bars use this
+    so "landed" reads as a brighter pulse of the *same* backend hue (green stays
+    GPU, blue stays CPU) instead of a hue change that'd falsely signal GPU."""
+    return QColor(
+        round(color.red() + (255 - color.red()) * t),
+        round(color.green() + (255 - color.green()) * t),
+        round(color.blue() + (255 - color.blue()) * t),
+    )
 
 
 class Bubble(QWidget):
@@ -370,10 +383,19 @@ class Bubble(QWidget):
         """green=GPU, blue=CPU — ambient indicator of the live backend."""
         return _GPU if self._backend_source() == "gpu" else _CPU
 
+    def _bar_color(self) -> QColor:
+        """The bar colour for the current state. Every state but error keeps the
+        live backend hue: idle/recording/processing use it as-is, the final
+        "landed" flash brightens it toward white (brighter, not a different
+        colour — so green never means anything but GPU). Error is red."""
+        if self._state == "error":
+            return _ERR
+        if self._state == "final":
+            return _brighten(self._engine_color())
+        return self._engine_color()
+
     def _paint_bars(self, p: QPainter) -> None:
-        # final = success-green flash, error = red; recording/processing follow
-        # the engine colour so green/blue always reads as "which silicon".
-        color = {"final": _OK, "error": _ERR}.get(self._state, self._engine_color())
+        color = self._bar_color()
         if self._state != "recording":
             color = QColor(color)
             color.setAlpha(140)

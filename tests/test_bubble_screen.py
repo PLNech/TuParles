@@ -125,6 +125,46 @@ class TestBubbleGroup:
         group.cancel()
 
 
+class TestBarColour:
+    """The hue contract (#color): bars mean *which silicon* and hold that hue
+    end to end — green only ever means GPU, blue only ever means CPU. "Landed"
+    is a brightness lift, not a hue change (the old final-green broke this)."""
+
+    def _bubble(self, tmp_path, monkeypatch, backend):
+        _qt(tmp_path, monkeypatch)
+        from tuparles.ui import Bubble
+
+        return Bubble(level_source=lambda: 0.0, backend_source=lambda: backend)
+
+    def test_cpu_stays_blue_every_state(self, tmp_path, monkeypatch):
+        b = self._bubble(tmp_path, monkeypatch, "cpu")
+        for state in ("recording", "processing", "final"):
+            b._state = state
+            c = b._bar_color()
+            assert c.blue() > c.green() and c.blue() > c.red(), state  # blue-dominant
+
+    def test_gpu_stays_green_every_state(self, tmp_path, monkeypatch):
+        b = self._bubble(tmp_path, monkeypatch, "gpu")
+        for state in ("recording", "processing", "final"):
+            b._state = state
+            c = b._bar_color()
+            assert c.green() > c.blue() and c.green() > c.red(), state  # green-dominant
+
+    def test_final_reads_as_brighter_not_a_new_hue(self, tmp_path, monkeypatch):
+        b = self._bubble(tmp_path, monkeypatch, "cpu")
+        b._state = "recording"
+        rec = b._bar_color()
+        b._state = "final"
+        fin = b._bar_color()
+        assert fin.lightness() > rec.lightness()  # landed = brighter, still blue
+
+    def test_error_is_red(self, tmp_path, monkeypatch):
+        b = self._bubble(tmp_path, monkeypatch, "gpu")
+        b._state = "error"
+        c = b._bar_color()
+        assert c.red() > c.green() and c.red() > c.blue()
+
+
 class TestScreenPicker:
     def test_save_persists_bubble_screen(self, tmp_path, monkeypatch):
         _qt(tmp_path, monkeypatch)
