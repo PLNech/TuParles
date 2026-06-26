@@ -48,6 +48,15 @@ LEVEL_NOISE_FLOOR = 50.0  # RMS below this = silence: bars rest flat
 LEVEL_FULL_SCALE = 300.0  # RMS that should peg the meter
 LEVEL_GAMMA = 0.6  # <1 lifts quiet speech; 1.0 = linear
 
+# Live-partials sanity filter (partials.py, #3): SUPPRESS decoder-flagged junk
+# from the provisional preview — never rewrite (a wrong autocorrect is worse
+# than a visible mishear). These are faster-whisper's own defaults: a segment
+# Whisper itself would treat as non-speech, or a degenerate repetition loop.
+# Tuned to err toward *showing* — a rough partial beats a blank bubble.
+PARTIAL_NO_SPEECH_MAX = 0.6  # no_speech_prob above this AND logprob below…
+PARTIAL_AVG_LOGPROB_MIN = -1.0  # …this together = silence hallucination → drop
+PARTIAL_COMPRESSION_MAX = 2.4  # gzip ratio above this = repetition loop → drop
+
 # Live partials: decode only the last N seconds (the bubble elides left,
 # only the tail is visible — bounding the window bounds the latency).
 PARTIAL_WINDOW_S = 20

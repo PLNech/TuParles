@@ -1,5 +1,34 @@
 # Changelog
 
+## Sprint 17 — 2026-06-26 · Les partiels font le ménage
+
+Live partials sometimes flash junk — silence hallucinations and the canonical
+YouTube-caption ghosts Whisper loves ("Merci.", "Sous-titres réalisés par…",
+"Thanks for watching"). We suppress them, structurally, without ever rewriting
+a word.
+
+### Added
+- **Partials sanity filter** (`partials.py`, `tests/test_partials_sanity.py`,
+  #3) — a pure `sanitize_partial(segments)` both partial paths (GPU and CPU)
+  share, so they can't diverge. Drops a segment only on the decoder's own
+  signals — Whisper's no-speech test (`no_speech_prob > 0.6` *and*
+  `avg_logprob < -1.0`), a repetition-loop ratio (`compression_ratio > 2.4`),
+  bracketed sound-tags (`[Music]`, `♪…♪`) — plus an exact-phrase denylist of the
+  confident caption ghosts. Whole-segment match only, never substring, so
+  "merci beaucoup" survives. 12 headless tests (the GPU path can't run with the
+  card wedged; the pure function still gets covered).
+
+### Doctrine
+- **Suppress, never rewrite — and only what the decoder itself flags.** A
+  confident *mishear* of real speech ("ta courte vie") is left to flash and let
+  the final decode overwrite it: distinguishing it from a correct decode means
+  judging meaning, which a wrong autocorrect makes worse than a visible mishear.
+  Empirically, faster-whisper's internal thresholds + VAD already drop most
+  *silence* junk upstream; the real value-add is the denylist for the
+  high-confidence caption ghosts that sail through every confidence gate. Bias
+  is asymmetric: err toward *showing* a rough partial over a blank bubble (the
+  live preview is what the user praised).
+
 ## Sprint 16 — 2026-06-26 · On t'entend enfin (mic meter, calibré pour de vrai)
 
 Live-testing the CPU bubble on the 4080 laptop, the waveform looked dead: even
