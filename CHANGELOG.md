@@ -1,5 +1,36 @@
 # Changelog
 
+## Sprint 16 — 2026-06-26 · On t'entend enfin (mic meter, calibré pour de vrai)
+
+Live-testing the CPU bubble on the 4080 laptop, the waveform looked dead: even
+speaking loudly the bars never passed ~10%. Forensics (pavucontrol + a mic
+probe) showed why, and the fix is a calibration, not a rewrite.
+
+### Fixed
+- **Mic meter recalibrated to a quiet laptop mic** (`config.py`,
+  `tests/test_audio_level.py`) — the amplitude mapping (floor 80 / full-scale
+  3000) was set on the louder XPS22 desktop mic. This laptop's mic is ~10× quieter
+  (ambient RMS ~8, normal speech ~80-100, loud ~140-250), so *normal speech sat
+  under the 80 floor* and mapped to flat bars — a meter that looked frozen.
+  Lowered: floor 80 → 50 (below normal speech, above ambient), full-scale
+  3000 → 300 (near a loud peak). Validated live (« très très très calibré »).
+  Level tests made calibration-relative so a future per-mic retune won't break
+  them.
+
+### Doctrine
+- **Mic level constants are per-machine — measure the actual mic, don't inherit.**
+  The `3000` full-scale was never wrong on the box it was tuned on; it was wrong
+  *transplanted*. A meter calibrated above the new mic's speech floor is
+  indistinguishable from a broken one. Forensics (real RMS numbers) before
+  theory. The durable fix is auto-gain / a per-mic sensitivity setting (and the
+  planned FFT spectrum self-normalises, sidestepping it) — see #2.
+- **CPU quality is strategic, not a stopgap.** Mobile is a target, so "maximum
+  quality on limited hardware" is the goal, not a fallback we tolerate until the
+  GPU returns. Both the slow decode AND the colloquial-speech errors this session
+  trace to the CPU qwen-0.6B model — but the answer isn't only "get the GPU
+  back"; it's also audio pre-processing (#8) and text post-processing (#9) to
+  squeeze the small model. Re-measure on GPU before blaming the model class (#7).
+
 ## Sprint 15 — 2026-06-26 · La couleur tient parole, le CPU prend la sienne
 
 Two follow-ups from a real CPU-only run (GPU wedged by a suspend/resume, #124):

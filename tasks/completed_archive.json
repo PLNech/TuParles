@@ -364,5 +364,23 @@
     "subject": "CI rescued (format + Windows UTF-8) and first minor release v0.2.0",
     "completedAt": "2026-06-25",
     "learnings": "CI (ci.yml) has FOUR gates on a {ubuntu,macos,windows}×{3.11,3.12} matrix: ruff check, ruff format --check (SEPARATE from check — passing lint ≠ passing format; I twice pushed red here), mypy, pytest. WINDOWS matrix caught a pre-existing class of bug: Path.read_text()/write_text() without encoding= uses the locale default (cp1252 on Windows) → UnicodeDecodeError (a ValueError) on UTF-8 files. test_example_pack_is_valid failed because the example phrasepack loaded empty (caught→[]); CHANGELOG/vocab.txt with accents would have too (whatsnew's read was even uncaught). Fixed all 11 sites with encoding='utf-8' (JSON paths ASCII-safe via json.dumps but made explicit). CONVENTION going forward: always pass encoding='utf-8' to read_text/write_text. RELEASE is tag-driven: release.yml on a pushed v* tag → gh release create $TAG install.sh --generate-notes. Releasing had LAPSED at v0.1.0 (2026-06-11) despite ~11 sprints → cut catch-up v0.2.0 (pre-1.0 semver: features=minor). PUSH-RACE GOTCHA + RECOVERY: a concurrent push from the other machine advanced origin/main mid-tag, so the tag+auto-release got cut from an OFF-MAIN commit missing role-phrasepacks, and main lacked the version bump. Recovery: rebase the bump onto origin/main, push main, `gh release delete v0.2.0 --yes --cleanup-tag`, `git tag -f v0.2.0 HEAD`, push tag → release.yml recreates from the correct commit. Lesson: fetch before tagging; --generate-notes uses the commit list, not the curated CHANGELOG. Push auth: HTTPS fails in this env (no askpass) → origin switched to SSH (BatchMode), PLN works directly on main."
+  },
+  {
+    "id": "s15-colour",
+    "subject": "Fix bubble final-flash hue contract (green=GPU only)",
+    "completedAt": "2026-06-26",
+    "learnings": "Green meant two things at once — backend identity AND the success flash — colliding exactly on CPU (blue->blue->green). Fix: signal 'landed' via brightness (_brighten lerp toward white), never hue. One visual channel, one meaning. Extracted _bar_color() so the contract is unit-testable headless."
+  },
+  {
+    "id": "127",
+    "subject": "Live partials on the CPU backend",
+    "completedAt": "2026-06-26",
+    "learnings": "'qwen can't stream' was really 'can't with qwen' — faster-whisper is ALREADY a core dep and its CT2 CPU backend needs no CUDA, so a tiny base model on CPU is cheap, not a new heavy dep. The daemon partials loop already self-paces (tail window + elapsed-subtracted cadence), so a slow CPU decode degrades to fewer partials, never a backlog. Partials != final (smaller model) by design."
+  },
+  {
+    "id": "s16-miccal",
+    "subject": "Recalibrate mic meter to a quiet laptop mic",
+    "completedAt": "2026-06-26",
+    "learnings": "Level constants are per-machine. FULL_SCALE=3000/floor=80 (XPS22 desktop mic) left the quiet 4080-laptop mic's normal speech (~80-100 RMS) UNDER the floor -> flat bars. A meter calibrated above the mic's speech floor is indistinguishable from a broken one. Forensics (pavucontrol + RMS probe) before theory."
   }
 ]
