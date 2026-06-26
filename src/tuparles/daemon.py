@@ -159,8 +159,13 @@ class Controller(QObject):
             started = time.monotonic()
             # Tail window only: the bubble elides left so older audio is
             # invisible anyway, and a bounded window bounds decode latency
-            # (full-buffer re-decode fell behind ~1 Hz on long takes).
-            audio = self._recorder.snapshot()[-SAMPLE_RATE * PARTIAL_WINDOW_S :]
+            # (full-buffer re-decode fell behind ~1 Hz on long takes). The
+            # engine owns the length — GPU keeps the long context window, the
+            # CPU `base` model wants a short one so its one-language-per-window
+            # detection tracks the current language (#3 follow-up). Hot-read so
+            # a setting change applies to the next tick, no restart.
+            window_s = getattr(self._engine, "partial_window_s", PARTIAL_WINDOW_S)
+            audio = self._recorder.snapshot()[-SAMPLE_RATE * window_s :]
             if audio.size >= SAMPLE_RATE * PARTIAL_MIN_AUDIO_S:
                 with self._engine_lock:
                     if self._stop_partials.is_set():

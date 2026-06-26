@@ -17,6 +17,14 @@ a word.
   confident caption ghosts. Whole-segment match only, never substring, so
   "merci beaucoup" survives. 12 headless tests (the GPU path can't run with the
   card wedged; the pure function still gets covered).
+- **Shorter CPU-partials window** (`engine.py`, `daemon.py`, `settings.py`,
+  `cpu_partials_window_s`, default 6 s) — the `base` model picks ONE language
+  per decode window, so a long French-dominant tail Frenchified the English you
+  just switched into ("je suis au traducteur ici"). A short window lets the
+  *current* language dominate, so the preview tracks what you're saying now. The
+  engine owns the length (GPU keeps 20 s — large-v3-turbo handles code-switch),
+  hot-read so a retune needs no restart. Default to be settled on real captured
+  takes (#7), not synthetic translation-pairs.
 
 ### Doctrine
 - **Suppress, never rewrite — and only what the decoder itself flags.** A

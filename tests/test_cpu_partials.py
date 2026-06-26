@@ -74,6 +74,44 @@ def test_resilient_uses_cpu_partials_after_sticky_fallback(tmp_path, monkeypatch
     assert eng.transcribe_partial(AUDIO) == "cpu-partial"
 
 
+def test_cpu_partial_window_defaults_short(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    from tuparles.config import PARTIAL_WINDOW_S
+
+    # CPU window is deliberately shorter than the GPU one (code-switch tracking).
+    assert QwenCpuEngine().partial_window_s == 6
+    assert QwenCpuEngine().partial_window_s < PARTIAL_WINDOW_S
+
+
+def test_cpu_partial_window_is_a_setting(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    from tuparles import settings
+
+    settings.put("cpu_partials_window_s", 10)
+    assert QwenCpuEngine().partial_window_s == 10  # hot-read, no restart
+
+
+def test_resilient_window_follows_live_backend(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    from tuparles.config import PARTIAL_WINDOW_S
+
+    class DeadGpu:
+        supports_partials = True
+
+        def transcribe(self, audio):
+            raise RuntimeError("CUDA failed with error unknown error")
+
+        def transcribe_partial(self, audio):
+            raise RuntimeError("CUDA failed")
+
+    cpu = QwenCpuEngine(partials_factory=FakePartials)
+    eng = ResilientEngine(gpu_factory=DeadGpu, cpu_factory=lambda: cpu)
+    assert eng.partial_window_s == PARTIAL_WINDOW_S  # GPU still presumed live → long
+    eng.transcribe(AUDIO)  # GPU dies → sticky CPU
+    assert eng.active_backend == "cpu"
+    assert eng.partial_window_s == 6  # now follows the CPU engine's short window
+
+
 def test_gpu_partials_untouched_by_cpu_setting(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     from tuparles import settings
