@@ -22,6 +22,7 @@ from tuparles.config import (
     QWEN_THREADS,
     SAMPLE_RATE,
 )
+from tuparles.partials import sanitize_partial
 from tuparles.preprocess import normalize_audio
 
 
@@ -149,7 +150,7 @@ class GpuEngine:
             language=language,
             multilingual=multilingual,
         )
-        return " ".join(s.text.strip() for s in segments).strip()
+        return sanitize_partial(segments)
 
 
 class CpuPartialsEngine:
@@ -191,7 +192,7 @@ class CpuPartialsEngine:
             language=language,
             multilingual=multilingual,
         )
-        return " ".join(s.text.strip() for s in segments).strip()
+        return sanitize_partial(segments)
 
 
 class QwenCpuEngine:
