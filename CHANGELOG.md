@@ -16,6 +16,13 @@ Building toward the DeliveryTarget keystone — and seeding doubt on the way.
   indistinguishable from a shell by class, so dictating there: set `shift-enter`.
 
 ### Added
+- **`DeliveryTarget` — capture-time destination** (`delivery.py`, `daemon.py`,
+  `tests/test_delivery.py`, #13) — the window a take was dictated into, snapshotted
+  at take-START: `wm_class` (paste combo + newline mode) and, on X11, `window_id`.
+  The keystone for origin-window paste once takes deliver asynchronously (the
+  queue, #14) — a take pastes back where it was spoken, with that window's newline
+  semantics, even after focus moved on. Behaviour-equivalent today (one window per
+  sync take); `deliver()` accepts a `DeliveryTarget` (or a bare class, back-compat).
 - **Per-word confidence** (`engine.py`, `tests/test_word_confidence.py`, #23) —
   `Transcription` gains `words: list[Word] | None`; the GPU decode now requests
   `word_timestamps` and a pure `words_from_segments()` flattens faster-whisper's

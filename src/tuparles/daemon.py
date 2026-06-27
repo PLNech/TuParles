@@ -38,7 +38,8 @@ from tuparles.config import (
     SAMPLE_RATE,
 )
 from tuparles.delivery import (
-    capture_focus_class,
+    DeliveryTarget,
+    capture_target,
     deliver,
     execute_command,
     to_clipboard,
@@ -73,8 +74,8 @@ class Controller(QObject):
         self._stop_partials = threading.Event()
         self._press_started_take = False  # hold-to-talk: release only stops
         # a recording the same press started, never an ongoing toggled take
-        self._target_focus = ""  # window class captured when a take starts;
-        # delivery pastes Ctrl+Shift+V vs Ctrl+V from this (see capture below)
+        self._target = DeliveryTarget()  # window snapshotted when a take starts
+        # (class → paste combo + newline mode; id → origin-window paste, #13/#14)
         self._last_edit: Command | None = None  # last delete, for "un peu plus"
         self._entry_source = "hotkey"  # how the current take was started (telemetry)
         self._last_partial = ""  # most recent partial shown — forensics for an
@@ -115,13 +116,12 @@ class Controller(QObject):
         else:
             self._press_started_take = True
             self._last_partial = ""  # fresh take, no preview shown yet (#10)
-            # Wayland only: read focus NOW, while the target window still has
-            # it and gnome-shell is calm — before the bubble shows and steals
-            # it. A delivery-time read raced that and missed terminals (~12 ms,
-            # GUI ok). X11 keeps its live delivery-time read (the bubble never
-            # steals focus there, so it stays accurate and pastes where focus
-            # actually is, not merely where the take began).
-            self._target_focus = capture_focus_class() if IS_WAYLAND else ""
+            # Snapshot the destination window NOW, while it still has focus and
+            # gnome-shell is calm — before the bubble shows and (on Wayland)
+            # steals focus. Captures class + (X11) window id, so a take can paste
+            # back where it was dictated even after focus moves (#13, the queue's
+            # keystone). Empty fields fall back to a live read at delivery.
+            self._target = capture_target()
             self._recorder.start()
             cue.play_start()  # opt-in soft tick: capture is live, speak now
             telemetry.event("entry.dictation", source=self._entry_source)
@@ -262,7 +262,7 @@ class Controller(QObject):
                 t1 = time.monotonic()
                 deliver(
                     text,
-                    self._target_focus,
+                    self._target,
                     before_paste=self._hide_bubble_for_paste if IS_WAYLAND else None,
                 )
                 deliver_s = time.monotonic() - t1
