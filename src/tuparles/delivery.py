@@ -16,6 +16,7 @@ import shutil
 import string
 import subprocess
 import time
+from dataclasses import dataclass
 
 from tuparles import settings
 from tuparles.config import IS_WAYLAND as _WAYLAND
@@ -39,13 +40,68 @@ _MODIFIERS = [
 ]
 
 
-def deliver(text: str, focus_class: str = "", before_paste=None) -> None:
+@dataclass
+class DeliveryTarget:
+    """Where + how a take is delivered, snapshotted at take-START (#13).
+
+    The window it was dictated into: `wm_class` drives the paste combo and the
+    newline mode; `window_id` (X11) is for origin-window refocus once takes
+    deliver asynchronously (the queue, #14) — so a take pastes back where it was
+    spoken, with that window's newline semantics, even after focus moved on.
+    Empty fields = unknown; delivery falls back to a live read.
+    """
+
+    wm_class: str = ""
+    window_id: str = ""
+
+
+def capture_target() -> DeliveryTarget:
+    """Snapshot the focused window at take-start: class (+ id on X11) for
+    delivery routing (#13). Runs on the GUI thread at take-start (calm then), so
+    the calls are short-capped. Wayland has no id — clients can't refocus, so
+    origin-window paste stays X11-only for now (the GNOME extension would need an
+    ActivateById, #14). Empty fields when unreadable; delivery re-reads live."""
+    if _WAYLAND:
+        return DeliveryTarget(wm_class=_focus_wm_class(timeout=0.5))
+    try:
+        wid = subprocess.run(
+            ["xdotool", "getactivewindow"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=1,
+        ).stdout.strip()
+    except (subprocess.SubprocessError, OSError):
+        wid = ""
+    cls = ""
+    if wid:
+        try:
+            cls = subprocess.run(
+                ["xdotool", "getwindowclassname", wid],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=1,
+            ).stdout.strip()
+        except (subprocess.SubprocessError, OSError):
+            cls = ""
+    return DeliveryTarget(wm_class=cls, window_id=wid)
+
+
+def deliver(
+    text: str, target: "DeliveryTarget | str | None" = None, before_paste=None
+) -> None:
     if not text:
         return
+    # Back-compat: a bare wm_class string still works (older callers, tests).
+    if isinstance(target, str):
+        target = DeliveryTarget(wm_class=target)
+    elif target is None:
+        target = DeliveryTarget()
     t0 = time.monotonic()
     to_clipboard(text)
     t1 = time.monotonic()
-    _type_into_focus(text, focus_class, before_paste)
+    _type_into_focus(text, target.wm_class, before_paste)
     t2 = time.monotonic()
     # Pastes have clocked at ~3 s where ~0.3 s is expected — when delivery
     # drags, say which leg (clipboard vs xdotool) so the journal can tell.

@@ -487,7 +487,7 @@ class TestChunkedDelivery:
         monkeypatch.setattr(delivery.subprocess, "run", fake_run)
 
         text = "Première phrase. " + "mot " * 200  # > cap, multi-piece
-        delivery.deliver(text, focus_class="firefox|Navigator")
+        delivery.deliver(text, target="firefox|Navigator")
 
         assert not typed  # never typed, even chunked
         assert len(keys) >= 2  # several paste keystrokes
@@ -512,13 +512,60 @@ class TestChunkedDelivery:
         text = "ligne une\n" + "x" * (MAX_CHUNK_CHARS + 5)  # multi-line + long
         delivery.deliver(
             text,
-            focus_class="firefox|Navigator",
+            target="firefox|Navigator",
             before_paste=lambda: hides.append(1),
         )
 
         assert hides == [1]  # bubble hidden exactly once
         assert len(keys) >= 2  # several paste keystrokes
         assert set(keys) == {"ctrl+v"}  # firefox → plain Ctrl+V
+
+
+class TestCaptureTarget:
+    """DeliveryTarget snapshot at take-start (#13): class + (X11) window id."""
+
+    def test_x11_captures_class_and_id(self, monkeypatch):
+        monkeypatch.setattr(delivery, "_WAYLAND", False)
+
+        def fake_run(argv, *a, **kw):
+            if argv == ["xdotool", "getactivewindow"]:
+                return subprocess.CompletedProcess(argv, 0, stdout="12345\n")
+            if argv[:2] == ["xdotool", "getwindowclassname"]:
+                return subprocess.CompletedProcess(argv, 0, stdout="Alacritty\n")
+            return subprocess.CompletedProcess(argv, 0, stdout="")
+
+        monkeypatch.setattr(delivery.subprocess, "run", fake_run)
+        t = delivery.capture_target()
+        assert t.window_id == "12345" and t.wm_class == "Alacritty"
+
+    def test_x11_capture_failure_is_empty(self, monkeypatch):
+        monkeypatch.setattr(delivery, "_WAYLAND", False)
+
+        def boom(*a, **k):
+            raise OSError("no xdotool")
+
+        monkeypatch.setattr(delivery.subprocess, "run", boom)
+        t = delivery.capture_target()
+        assert t.window_id == "" and t.wm_class == ""
+
+    def test_wayland_captures_class_only(self, monkeypatch):
+        monkeypatch.setattr(delivery, "_WAYLAND", True)
+        monkeypatch.setattr(
+            delivery, "_focus_wm_class", lambda timeout=0.5: "Slack|slack"
+        )
+        t = delivery.capture_target()
+        assert t.wm_class == "Slack|slack" and t.window_id == ""
+
+    def test_deliver_accepts_target_object(self, monkeypatch):
+        seen = {}
+        monkeypatch.setattr(delivery, "to_clipboard", lambda _t: None)
+        monkeypatch.setattr(
+            delivery,
+            "_type_into_focus",
+            lambda text, fc="", bp=None: seen.update(fc=fc),
+        )
+        delivery.deliver("hi", delivery.DeliveryTarget(wm_class="kitty", window_id="9"))
+        assert seen["fc"] == "kitty"
 
 
 class TestExecuteCommand:
