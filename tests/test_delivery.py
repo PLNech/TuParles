@@ -9,12 +9,55 @@ from tuparles.delivery import (
     _focus_is_terminal,
     _focus_wm_class,
     _is_terminal,
+    _paste_chunks,
     _should_chunk,
     _should_paste,
     _type_into_focus,
     _wayland_paste,
     capture_focus_class,
+    resolve_newline_mode,
 )
+
+
+class TestNewlineMode:
+    """Target-aware newlines (#5): a pasted lone LF is eaten by submit-on-Enter
+    inputs, so they get a Shift+Enter keystroke instead."""
+
+    def test_auto_is_lf_for_editor_or_terminal(self, monkeypatch):
+        monkeypatch.setattr(delivery.settings, "get", lambda k: "auto")
+        assert resolve_newline_mode("gnome-terminal") == "lf"
+        assert resolve_newline_mode("code") == "lf"
+        assert resolve_newline_mode("") == "lf"
+
+    def test_auto_upgrades_known_chat_apps(self, monkeypatch):
+        monkeypatch.setattr(delivery.settings, "get", lambda k: "auto")
+        assert resolve_newline_mode("Slack|slack") == "shift-enter"
+        assert resolve_newline_mode("discord") == "shift-enter"
+
+    def test_explicit_setting_forces_mode(self, monkeypatch):
+        monkeypatch.setattr(delivery.settings, "get", lambda k: "shift-enter")
+        assert resolve_newline_mode("gnome-terminal") == "shift-enter"
+        monkeypatch.setattr(delivery.settings, "get", lambda k: "lf")
+        assert resolve_newline_mode("slack") == "lf"
+
+    def _capture(self, monkeypatch):
+        sent: list[str] = []
+        clips: list[str] = []
+        monkeypatch.setattr(delivery, "to_clipboard", lambda t: clips.append(t))
+        monkeypatch.setattr(delivery.time, "sleep", lambda *_: None)
+        return sent, clips
+
+    def test_shift_enter_sends_keystroke_not_lf_paste(self, monkeypatch):
+        sent, clips = self._capture(monkeypatch)
+        _paste_chunks("a\nb", "ctrl+v", sent.append, newline_mode="shift-enter")
+        assert "shift+Return" in sent  # the newline went as a keystroke
+        assert "\n" not in clips  # never put a lone LF on the clipboard
+
+    def test_lf_mode_pastes_literal_newline(self, monkeypatch):
+        sent, clips = self._capture(monkeypatch)
+        _paste_chunks("a\nb", "ctrl+v", sent.append, newline_mode="lf")
+        assert "shift+Return" not in sent and "Return" not in sent
+        assert "\n" in clips  # literal LF pasted, as before
 
 
 class TestTerminalDetection:

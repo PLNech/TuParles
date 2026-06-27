@@ -4,6 +4,17 @@
 
 Building toward the DeliveryTarget keystone — and seeding doubt on the way.
 
+### Fixed
+- **Dictated newlines reach submit-on-Enter inputs** (`delivery.py`,
+  `settings.py`, `tests/test_delivery.py`, #5) — "à la ligne" → `\n` was kept in
+  storage but a pasted lone LF is *swallowed* by Claude Code / chat inputs (paste
+  LF = eaten; press Enter = submits). Newline pieces now emit a **keystroke** for
+  non-`lf` modes (layout-blind keyname, never per-char injection — stays clear of
+  the keymap-remap freeze). `newline_mode` setting: `auto` (default — `lf`
+  everywhere except known GUI chat apps, which get Shift+Enter) | `lf` |
+  `shift-enter` | `enter`. A chat-TUI-in-a-terminal (Claude Code) is
+  indistinguishable from a shell by class, so dictating there: set `shift-enter`.
+
 ### Added
 - **Per-word confidence** (`engine.py`, `tests/test_word_confidence.py`, #23) —
   `Transcription` gains `words: list[Word] | None`; the GPU decode now requests
