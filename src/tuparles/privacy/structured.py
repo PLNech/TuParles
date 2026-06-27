@@ -8,11 +8,21 @@ so these MAY block. We rent stdnum rather than hand-roll the FR NIR edge cases.
 from __future__ import annotations
 
 import re
-
-from stdnum import iban, luhn
-from stdnum.fr import nir
+from typing import Any
 
 from tuparles.privacy.core import Finding
+
+_iban: Any
+_luhn: Any
+_nir: Any
+try:
+    from stdnum import iban as _iban
+    from stdnum import luhn as _luhn
+    from stdnum.fr import nir as _nir
+except ImportError:
+    _iban = None
+    _luhn = None
+    _nir = None
 
 _EMAIL = re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b")
 # A candidate token, validated by checksum before it counts. Contiguous (no
@@ -30,7 +40,7 @@ def _is_card(digits: str) -> bool:
     pass Luhn from being masked as an Amex (the #104 eval caught exactly that).
     """
     n = len(digits)
-    if not luhn.is_valid(digits):
+    if _luhn is None or not _luhn.is_valid(digits):
         return False
     if digits[0] == "4":  # Visa
         return n in (13, 16, 19)
@@ -56,9 +66,9 @@ def find_structured(text: str) -> list[Finding]:
     for m in _CANDIDATE.finditer(text):
         raw = m.group()
         compact = raw.replace(" ", "")
-        if iban.is_valid(compact):
+        if _iban is not None and _iban.is_valid(compact):
             findings.append(Finding(m.start(), m.end(), "pii.iban", "block", raw))
-        elif nir.is_valid(compact):
+        elif _nir is not None and _nir.is_valid(compact):
             findings.append(Finding(m.start(), m.end(), "pii.fr_nir", "block", raw))
         elif compact.isdigit() and 12 <= len(compact) <= 19 and _is_card(compact):
             findings.append(Finding(m.start(), m.end(), "pii.card", "block", raw))
