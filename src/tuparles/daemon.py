@@ -673,6 +673,14 @@ def run() -> None:
     app.aboutToQuit.connect(listener.stop)
     print("TuParles daemon up — Right Ctrl + Right Alt to dictate. Ctrl-C quits.")
 
+    # Cross-env capability report (#29): probe what this box can actually do and
+    # log it ONCE, so a gap (an absent xdotool subcommand, no paste tool) is
+    # visible at boot instead of surfacing later as a failed paste. Verbose
+    # per-tool breakdown when dev mode is on (the contributor surface, #8).
+    from tuparles import capability
+
+    print(capability.probe().report(verbose=takes.dev_recording_enabled()))
+
     # Launch reminder (#8): raw-audio capture writes your UNREDACTED voice to
     # disk, so never let it run unannounced. The tray's red dot is the standing
     # indicator; this is the boot-time word for it.

@@ -31,6 +31,18 @@ def app_version() -> str:
         return "?"
 
 
+def _capabilities_line() -> str:
+    """The probed capability fingerprint (#29) — the exact cross-env detail a
+    paste/focus bug needs ("which xdotool? X11 or Wayland? what's missing?"), so
+    we never have to ask. Guarded: a probe failure must not break the report."""
+    try:
+        from tuparles import capability
+
+        return capability.probe().report().removeprefix("capabilities: ")
+    except Exception:
+        return "?"
+
+
 def environment_block() -> str:
     """The markdown an issue needs to be actionable, gathered locally."""
     session = "Wayland" if IS_WAYLAND else "X11"
@@ -41,6 +53,7 @@ def environment_block() -> str:
             f"- Python : {platform.python_version()}",
             f"- OS : {platform.system()} {platform.release()}",
             f"- Session : {session}",
+            f"- Capacités : {_capabilities_line()}",
         ]
     )
 
