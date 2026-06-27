@@ -19,8 +19,14 @@ CHANNELS = 1
 # Spike result: BLAS plateaus at the P-core thread count on the i9-13900H.
 QWEN_THREADS = 14
 
-# Tap window: both keys seen pressed within this span = trigger.
-HOTKEY_DEBOUNCE_S = 0.4
+# Chatter guard: ignore a SECOND combo-engage within this span of the last one.
+# The edge detector (_ComboState._combo_since) already collapses a single
+# physical press to one fire, so this only ever suppresses a distinct re-press —
+# its sole job is mechanical switch chatter on release→re-press (sub-20 ms).
+# It was 0.4 s, which silently ate legitimate rapid toggles (a quick start→stop,
+# or stop→start-next): the "press again doesn't register" gap. 0.12 s clears real
+# chatter while allowing ~8 toggles/s — fast enough to never feel it.
+HOTKEY_DEBOUNCE_S = 0.12
 
 # Combo held at least this long = push-to-talk: releasing stops the take.
 # Shorter = a tap → toggle mode, recording continues until the next tap.
