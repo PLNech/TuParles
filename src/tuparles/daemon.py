@@ -135,6 +135,7 @@ class Controller(QObject):
     @Slot()
     def toggle(self) -> None:
         if self._stopping:
+            print("toggle ignored: recorder still tearing down (_stopping)")
             return  # the recorder is tearing down; ignore until it frees so a
             # fast second press can't race the off-GUI stop() (#10)
         if self._recorder.recording:

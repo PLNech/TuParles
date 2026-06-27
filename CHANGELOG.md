@@ -5,6 +5,15 @@
 Building toward the DeliveryTarget keystone — and seeding doubt on the way.
 
 ### Fixed
+- **Rapid re-press no longer eaten by the chatter guard** (`config.py`,
+  `hotkey.py`, `tests/test_hotkey.py`) — the "press again doesn't register for a
+  second" gap during back-to-back takes. `HOTKEY_DEBOUNCE_S` was **0.4 s**, but
+  the combo edge detector (`_combo_since`) already collapses a single physical
+  press to one fire — so the debounce only ever suppressed a *legitimate*
+  re-press (a quick start→stop, or stop→start-next). Cut to **0.12 s** (clears
+  real switch chatter, allows ~8 toggles/s). A swallowed press now logs
+  `hotkey: press ignored, debounce Ns`, and a `toggle ignored: _stopping` line
+  covers the teardown window — so the next "didn't register" is a measurement.
 - **Window-class detection works across xdotool versions** (`delivery.py`,
   `daemon.py`, `tests/test_delivery.py`) — the *real* "un sur deux" delivery bug:
   `xdotool getwindowclassname` doesn't exist on xdotool 3.x (the box here ships

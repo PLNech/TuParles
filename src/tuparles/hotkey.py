@@ -49,9 +49,16 @@ class _ComboState:
             if self._combo_since is None:
                 now = time.monotonic()
                 self._combo_since = now
-                if now - self._last_fire >= HOTKEY_DEBOUNCE_S:
+                gap = now - self._last_fire
+                if gap >= HOTKEY_DEBOUNCE_S:
                     self._last_fire = now
                     self._on_toggle()
+                else:
+                    # A real re-press swallowed by the chatter guard — the
+                    # "press didn't register" gap. Logged so it's a measurement,
+                    # not a guess; if these show up for legit toggles, the
+                    # debounce is still too long.
+                    print(f"hotkey: press ignored, debounce {gap:.2f}s")
         elif self._combo_since is not None:
             held = time.monotonic() - self._combo_since
             self._combo_since = None
