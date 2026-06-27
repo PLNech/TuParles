@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.util.Log
 import java.io.File
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
@@ -38,16 +39,27 @@ class AudioRecorder {
             AudioFormat.ENCODING_PCM_16BIT,
             bufSize,
         )
+        if (rec.state != AudioRecord.STATE_INITIALIZED) {
+            Log.e(TAG, "AudioRecord NOT initialized (state=${rec.state}); mic denied or busy?")
+        }
         samples.clear()
         record = rec
         recording = true
         rec.startRecording()
+        Log.i(TAG, "mic: recording (recordingState=${rec.recordingState}, minBuf=$minBuf)")
         thread = Thread {
             val chunk = ShortArray(bufSize / 2)
+            var totalRead = 0
             while (recording) {
                 val n = rec.read(chunk, 0, chunk.size)
+                if (n < 0) {
+                    Log.e(TAG, "mic: AudioRecord.read error $n")
+                    break
+                }
                 for (i in 0 until n) samples.add(chunk[i])
+                totalRead += n
             }
+            Log.i(TAG, "mic: reader thread done, $totalRead samples read")
         }.also { it.start() }
     }
 
