@@ -1,0 +1,59 @@
+name: 🐛 Bug report
+description: Something misbehaves — a paste lands wrong, the bubble freezes, a decode fails.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. The single most useful thing you can paste is your
+        **capability line** — it tells us your display server, tool versions, and
+        exactly which delivery path your box uses. Get it with:
+
+        ```bash
+        tuparles diag
+        ```
+
+        (Or run `tuparles report "summary"` to open a pre-filled issue instead.)
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+      placeholder: I dictated into kitty; the text never appeared, though history shows the take.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Focus a terminal (kitty / Claude Code)
+        2. RCtrl+RAlt, say a sentence, release
+        3. Nothing pastes
+    validations:
+      required: true
+  - type: textarea
+    id: capabilities
+    attributes:
+      label: Capability report
+      description: Paste the output of `tuparles diag` (or just the `capabilities:` line from the journal).
+      render: text
+      placeholder: |
+        capabilities: x11 · class=xprop · paste=xsel+xdotool · activate=xdotool-windowactivate · gaps: none
+    validations:
+      required: true
+  - type: input
+    id: distro
+    attributes:
+      label: Distro / desktop
+      placeholder: Ubuntu 24.04, GNOME 46, X11
+    validations:
+      required: false
+  - type: textarea
+    id: journal
+    attributes:
+      label: Relevant logs
+      description: Any lines from `journalctl --user -t tuparles` around the failure (take armed/queued/delivered/miss, GUI stall, etc.).
+      render: text
+    validations:
+      required: false

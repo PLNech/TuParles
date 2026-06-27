@@ -31,6 +31,9 @@ def main() -> None:
     )
     rep.add_argument("title", nargs="*", help="short summary of the issue")
     rep.add_argument("--no-open", action="store_true", help="just print the URL")
+    sub.add_parser(
+        "diag", help="Print this box's capability report (paste into a bug report)"
+    )
     sub.add_parser("update", help="Check GitHub for a newer release (no token)")
     sub.add_parser("whatsnew", help="Show the latest changelog section")
     cs = sub.add_parser(
@@ -59,6 +62,8 @@ def main() -> None:
         _vocab(args)
     elif args.cmd == "report":
         _report(args)
+    elif args.cmd == "diag":
+        _diag()
     elif args.cmd == "update":
         _update()
     elif args.cmd == "whatsnew":
@@ -118,6 +123,18 @@ def _vocab(args) -> None:
         print(f"Ajouté : {', '.join(accepted)} — actif dès la prochaine dictée.")
     else:
         print("Rien ajouté.")
+
+
+def _diag() -> None:
+    """Print the cross-env capability report + environment block — the exact
+    thing a paste/focus bug report needs (#29). Copy-paste it into an issue, or
+    use `tuparles report` to open a prefilled one."""
+    from tuparles import capability
+    from tuparles.bugreport import environment_block
+
+    print(capability.probe().report(verbose=True))
+    print()
+    print(environment_block())
 
 
 def _report(args) -> None:

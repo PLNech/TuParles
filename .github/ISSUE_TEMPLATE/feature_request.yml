@@ -1,0 +1,32 @@
+name: 💡 Feature request
+description: Suggest a new behaviour, a setting, or an improvement.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The need behind the request — we design from the use case, not the solution.
+      placeholder: When I dictate acronyms like SRE, I get "S R I" instead of "SRE".
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Idea (optional)
+      description: How you imagine it working. Remember the house style — "it's a setting" (smart default + toggle), and structural safety over confidence scores.
+    validations:
+      required: false
+  - type: dropdown
+    id: env
+    attributes:
+      label: Where does this matter most?
+      multiple: true
+      options:
+        - X11
+        - Wayland
+        - GPU (turbo)
+        - CPU / laptop on the train
+        - Bilingual / code-switching
+    validations:
+      required: false

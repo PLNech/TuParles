@@ -53,6 +53,15 @@ own its misses, name its fallbacks, and never silently destroy what you'd copied
   restore limited (no type-probe tool)" when `xclip` is absent, tying to #28's
   type guard) instead of after a failed paste. Seeds the build note
   `docs/research/2026-06-27-cross-env-capability-layers.md`.
+- **`tuparles diag` + detailed cross-env docs + issue templates** (`cli.py`,
+  `docs/CROSS_ENV.md`, `.github/ISSUE_TEMPLATE/`, #29) — `tuparles diag` prints
+  the full capability report + environment block to paste into a bug. New
+  **`docs/CROSS_ENV.md`** holds the per-setup tool matrix, the X11/Wayland
+  fallback chains, and fixes by symptom — the README stays lean and links to it
+  (detailed docs in-repo, versioned with the code, not a drifting wiki). GitHub
+  **issue forms** (bug/feature + config) ask for the capability line and point at
+  the cross-env doc, so reports arrive actionable. Closes the loop: probe →
+  report → template.
 
 ### Changed
 - **Softer empty-decode copy** (`daemon.py`, #27) — a lost final with no partial

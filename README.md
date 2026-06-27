@@ -198,6 +198,15 @@ centred and unable to pin to all desktops. The X11 path also works under
 XWayland. If you force native Wayland (`QT_QPA_PLATFORM=wayland`), the daemon
 still runs but the compositor controls the bubble's position and stickiness.
 
+### Compatibility & troubleshooting
+
+TuParles probes what your box can do at boot and logs a one-line capability
+report (`tuparles diag` prints it any time). For the full picture — a per-setup
+tool matrix, the X11/Wayland fallback chains, and fixes by symptom (nothing
+pastes, accented-take freeze, queued take in the wrong window) — see
+**[docs/CROSS_ENV.md](docs/CROSS_ENV.md)**. Hitting a bug? `tuparles report
+"summary"` opens an issue pre-filled with your environment + capability line.
+
 ## Personal glossary
 
 Copy `vocab.example.txt` to `vocab.txt` and put your recurring names and
@@ -221,6 +230,7 @@ tuparles stats            # local telemetry: takes, débit, decode speed, langua
 tuparles vocab suggest    # mine your history for glossary candidates
 tuparles vocab review     # accept/reject them interactively
 tuparles report "bug…"    # open a prefilled GitHub issue (no account data sent)
+tuparles diag             # this box's capability report (paste into a bug report)
 tuparles update           # check GitHub for a newer release (no token)
 tuparles whatsnew         # the latest changelog section
 tuparles cheatsheet       # every voice command & syntax phrase (searchable)
