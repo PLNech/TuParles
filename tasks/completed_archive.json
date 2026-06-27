@@ -448,5 +448,23 @@
     "subject": "Doubled-comma collapse + ellipsis trois petits points (#6,#7)",
     "completedAt": "2026-06-27",
     "learnings": "DOUBLED COMMA: saying 'virgule' makes Whisper ALSO transcribe a prosodic comma for the pause -> 'test, ,'. _tidy collapse is COMMA-ONLY and exact (never merges different marks so '?!' survives, never touches the ellipsis glyph or '...' which have no comma) -- doctrine-clean: only removes a provably-redundant comma. ELLIPSIS: 'trois petits points' is far more ambiguous than the formal 'points de suspension' because it's everyday conversational French; solved structurally with a determiner-shield (les/des/ces trois petits points = mention = text, bare = dictation) mirroring the existing English bare-'point' PROTECTED_PATTERNS. Emits the real U+2026; formal triggers switched to it too. When in doubt, it's text."
+  },
+  {
+    "id": "s21-android-research",
+    "subject": "Android-readiness research + epic (#2 → #3-#8)",
+    "completedAt": "2026-06-27",
+    "learnings": "Postprocess closure is ~2,864 LOC pure-stdlib (not the 912 one agent estimated — count the TRANSITIVE closure incl privacy/*). Central fork (embed CPython vs Kotlin port) resolves to EMBED: the Android storage seam already exists (settings/history honor $XDG_CONFIG_HOME/$XDG_DATA_HOME) and a thick APK is a non-constraint, killing the only port argument; Kotlin port would fork the PII firewall = invisible security drift. Engine reality: NO mobile-size engine proven on FR/EN intra-utterance code-switch (verify downgraded the claim to OVERSTATED) — so a phone spike GATES the epic. whisper.cpp Rank 1 but whisper-jni lacks Word.probability (#2775) → ORT if spans must launch."
+  },
+  {
+    "id": "s21-config-core",
+    "subject": "Portable config_core split + stdnum guard (#4, PR #9)",
+    "completedAt": "2026-06-27",
+    "learnings": "Codex authored it cleanly; the operator value was the REVIEW: it added an out-of-scope pyproject change (excluded notebooks from ruff) because my brief said 'ruff check .' while CI actually runs 'ruff check src tests scripts' — reverted it. Lesson: brief the agent with the EXACT CI command, not a looser superset."
+  },
+  {
+    "id": "s21-ci-green",
+    "subject": "Un-red the CI matrix (#10)",
+    "completedAt": "2026-06-27",
+    "learnings": "main was red for days, unnoticed: one collection error (test_daemon_finish imports Qt-at-module-top via Controller(QObject)) aborts the WHOLE pytest session, masking every downstream failure. Faithful CI repro = FRESH GIT CLONE + clean venv (a clean venv over your tree keeps the gitignored qwen binary → false green). Windows can't reopen an open NamedTemporaryFile → mkstemp+close+unlink. Each fix exposed the next layer (4 waves)."
   }
 ]
