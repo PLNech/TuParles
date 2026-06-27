@@ -11,6 +11,15 @@ Building toward the DeliveryTarget keystone — and seeding doubt on the way.
   per-word `probability` into the model. None on engines that don't expose it
   (qwen runs `--silent`) — the doubt UI degrades to no-dimming, never breaks. The
   cheap foundation the rendered-doubt span work (#16/#24) stands on.
+- **Onset context-carryover** (`engine.py`, `daemon.py`, `settings.py`,
+  `tests/test_carryover.py`, #18) — the first words of a take are the least
+  reliable (no left-context — "on vient" → "rien"). A take starting within
+  `context_carryover_window_s` (25 s) of the last delivery now feeds that tail
+  (capped 160 chars) into the decode's `initial_prompt`, so Whisper has the
+  missing context — exactly what helps a re-dictation after a delete. Advisory
+  only (never forces a decode, like dict-seed bias), default on, opt-out;
+  GPU-only in practice (qwen takes no prompt). Pure `carryover_context()` +
+  `_compose_prompt()` are headless-tested; worth an eval pass on real takes.
 
 ## Sprint 18 — 2026-06-27 · Forensics sur les ratés
 

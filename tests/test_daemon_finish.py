@@ -111,7 +111,7 @@ def test_finish_clears_finishing_flag(monkeypatch):
     """_finishing must reset so the next take isn't blocked forever."""
 
     class _Eng:
-        def transcribe(self, audio):
+        def transcribe(self, audio, context=None):
             return Transcription("bonjour", language="fr", language_prob=1.0)
 
     monkeypatch.setattr(daemon_mod, "deliver", lambda *a, **k: None)
@@ -129,7 +129,7 @@ def test_empty_final_with_partial_recovers(monkeypatch):
     'Rien entendu'."""
 
     class _Eng:
-        def transcribe(self, audio):
+        def transcribe(self, audio, context=None):
             return Transcription("", language=None)
 
     clip = {}
