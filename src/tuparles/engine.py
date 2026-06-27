@@ -181,13 +181,19 @@ class CpuPartialsEngine:
 
         name = model or settings.get("cpu_partials_model") or "base"
         self._model = WhisperModel(name, device="cpu", compute_type="int8")
+        # Last language this model detected on a partial — the qwen final decode
+        # emits no language (it runs --silent), so on CPU this is the only
+        # code-switch signal we have. It's the *partials* model's guess, not
+        # qwen's, so a signal not ground truth; the final engine reads it (#10).
+        self.last_language: str | None = None
+        self.last_language_prob: float | None = None
 
     def transcribe_partial(self, audio: np.ndarray) -> str:
         if audio.size == 0:
             return ""
         pcm = normalize_audio(audio.astype(np.float32) / 32768.0)
         language, multilingual = decode_language_opts(settings.get("languages") or [])
-        segments, _ = self._model.transcribe(
+        segments, info = self._model.transcribe(
             pcm,
             beam_size=1,
             vad_filter=True,
@@ -196,6 +202,8 @@ class CpuPartialsEngine:
             language=language,
             multilingual=multilingual,
         )
+        self.last_language = getattr(info, "language", None)
+        self.last_language_prob = getattr(info, "language_probability", None)
         return sanitize_partial(segments)
 
 
@@ -267,7 +275,14 @@ class QwenCpuEngine:
             )
         if result.returncode != 0:
             raise RuntimeError(f"qwen_asr failed: {result.stderr.strip()[:500]}")
-        return Transcription(result.stdout.strip())
+        # qwen emits no language, so borrow the partials model's last detection
+        # as the take's code-switch signal (None when partials are off). Honest
+        # about provenance: it's the small model's guess, not qwen's (#10).
+        return Transcription(
+            result.stdout.strip(),
+            language=getattr(self._partials, "last_language", None),
+            language_prob=getattr(self._partials, "last_language_prob", None),
+        )
 
 
 class ResilientEngine:

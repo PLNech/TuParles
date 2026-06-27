@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import os
 import wave
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -31,6 +32,9 @@ SAMPLE_RATE = 16_000
 # Bound the disk: int16 @ 16 kHz ≈ 32 KB/s, so 256 MB ≈ ~2 h of speech. Past
 # this, the oldest takes yield (chosen retention: auto-rotate by cap).
 _BYTES_BUDGET = 256 * 1024 * 1024
+# Misses are rarer and individually small (a botched take is usually short), so
+# a tighter budget — ~30 min — is plenty to keep the recent black holes around.
+_MISS_BYTES_BUDGET = 64 * 1024 * 1024
 
 _FALSEY = {"", "0", "false", "no", "off"}
 
@@ -43,6 +47,14 @@ def dev_recording_enabled() -> bool:
 def takes_dir() -> Path:
     """Where take WAVs live: alongside the history DB, never in git."""
     return db_path().parent / "takes"
+
+
+def misses_dir() -> Path:
+    """Where *empty-decode* takes land — the "Rien entendu" black hole made
+    visible (#10). A final decode that yields nothing records no history row and
+    so no id-keyed WAV; without this the one failure you most want to debug is
+    the one with zero trace. Dev-only, like every raw-audio capture."""
+    return takes_dir() / "misses"
 
 
 def save_take(take_id: int, audio: np.ndarray, rate: int = SAMPLE_RATE) -> Path | None:
@@ -62,6 +74,30 @@ def save_take(take_id: int, audio: np.ndarray, rate: int = SAMPLE_RATE) -> Path 
         wav.setframerate(rate)
         wav.writeframes(pcm.tobytes())
     _prune(directory)
+    return path
+
+
+def save_miss(audio: np.ndarray, rate: int = SAMPLE_RATE) -> Path | None:
+    """Write an empty-decode take to ``misses/miss-<ts>.wav`` and prune.
+
+    Keyed by timestamp, not a history id (a miss has no row). No-op when dev
+    capture is off or the audio is empty — same gate as ``save_take``.
+    """
+    if not dev_recording_enabled() or audio is None or audio.size == 0:
+        return None
+    directory = misses_dir()
+    directory.mkdir(parents=True, exist_ok=True)
+    # Microseconds in the name: two misses in the same second must not collide
+    # (each one is evidence; overwriting loses a black hole).
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    path = directory / f"miss-{stamp}.wav"
+    pcm = np.ascontiguousarray(audio, dtype=np.int16)
+    with wave.open(str(path), "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(rate)
+        wav.writeframes(pcm.tobytes())
+    _prune(directory, _MISS_BYTES_BUDGET)
     return path
 
 

@@ -65,3 +65,43 @@ class TestSaveTake:
         assert "4" in survivors
         assert "0" not in survivors
         assert len(survivors) < 5
+
+
+class TestSaveMiss:
+    def test_noop_when_disabled(self, tmp_path, monkeypatch):
+        _isolate(tmp_path, monkeypatch)
+        monkeypatch.delenv("TUPARLES_DEV", raising=False)
+        assert takes.save_miss(_audio()) is None
+        assert not takes.misses_dir().exists()
+
+    def test_noop_on_empty_audio(self, tmp_path, monkeypatch):
+        _isolate(tmp_path, monkeypatch)
+        monkeypatch.setenv("TUPARLES_DEV", "1")
+        assert takes.save_miss(np.array([], dtype=np.int16)) is None
+
+    def test_writes_timestamped_16k_mono_s16(self, tmp_path, monkeypatch):
+        _isolate(tmp_path, monkeypatch)
+        monkeypatch.setenv("TUPARLES_DEV", "1")
+        path = takes.save_miss(_audio(seconds=0.25))
+        assert path is not None
+        assert path.parent == takes.misses_dir()
+        assert path.name.startswith("miss-") and path.suffix == ".wav"
+        with wave.open(str(path), "rb") as w:
+            assert w.getframerate() == 16_000
+            assert w.getnchannels() == 1
+            assert w.getsampwidth() == 2
+
+    def test_misses_live_under_takes_dir(self, tmp_path, monkeypatch):
+        _isolate(tmp_path, monkeypatch)
+        assert takes.misses_dir().parent == takes.takes_dir()
+
+    def test_prune_evicts_oldest_past_budget(self, tmp_path, monkeypatch):
+        _isolate(tmp_path, monkeypatch)
+        monkeypatch.setenv("TUPARLES_DEV", "1")
+        monkeypatch.setattr(takes, "_MISS_BYTES_BUDGET", 40 * 1024)
+        for _ in range(5):
+            takes.save_miss(_audio(seconds=1.0))
+        survivors = list(takes.misses_dir().glob("*.wav"))
+        total = sum(p.stat().st_size for p in survivors)
+        assert total <= 40 * 1024
+        assert len(survivors) < 5

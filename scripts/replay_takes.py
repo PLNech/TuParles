@@ -5,13 +5,19 @@ Re-decodes every ``takes/<id>.wav`` (written when ``TUPARLES_DEV`` was set, see
 ``takes.py``) and diffs the result against the transcript stored for that id in
 the history DB — the "drift vs stored transcript" reference. This is the
 real-audio sibling of ``scripts/measure_seed_ablation.py``: that one runs on
-synthetic TTS, this one on *your* voice. Needs the GPU box.
+synthetic TTS, this one on *your* voice.
+
+Two engines (#10): ``--engine gpu`` (default) sweeps the seed regimes through
+large-v3-turbo and needs the GPU box; ``--engine cpu`` runs the vendored qwen
+binary, so the drift harness works with the card wedged — through the engine
+that actually serves you on a no-GPU day. qwen takes no initial_prompt, so the
+CPU path ignores the seed regimes and just does one decode per take.
 
 The stored transcript is PII-redacted (#115), so masked spans add a little WER
 noise — fine for drift (a regression between engines/regimes shows as a *jump*,
 not an absolute). Run::
 
-    poetry run python scripts/replay_takes.py [--limit N]
+    poetry run python scripts/replay_takes.py [--engine gpu|cpu] [--limit N]
 """
 
 from __future__ import annotations
@@ -51,22 +57,9 @@ def _read_wav(path: Path) -> np.ndarray:
         return np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16)
 
 
-def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--limit", type=int, default=None, help="only the newest N takes")
-    args = ap.parse_args()
-
-    wavs = sorted(takes.takes_dir().glob("*.wav"), key=lambda p: int(p.stem))
-    if args.limit:
-        wavs = wavs[-args.limit :]
-    if not wavs:
-        print(f"no takes in {takes.takes_dir()} — set TUPARLES_DEV=1 and dictate.")
-        return
-
-    transcripts = _stored_transcripts()
+def _replay_gpu(wavs, transcripts) -> None:
     eng = engine.GpuEngine()
     drift: dict[str, list[float]] = {r: [] for r in REGIMES}
-
     for path in wavs:
         take_id = int(path.stem)
         ref = transcripts.get(take_id)
@@ -85,6 +78,50 @@ def main() -> None:
     for regime, ds in drift.items():
         mean = sum(ds) / len(ds) if ds else float("nan")
         print(f"  {regime:8} {mean:.3f}  (n={len(ds)})")
+
+
+def _replay_cpu(wavs, transcripts) -> None:
+    """qwen-CPU, one decode per take (no seed regimes — qwen ignores prompts)."""
+    eng = engine.QwenCpuEngine()
+    drifts: list[float] = []
+    for path in wavs:
+        take_id = int(path.stem)
+        ref = transcripts.get(take_id)
+        if not ref:
+            continue  # take with no surviving history row; skip
+        audio = _read_wav(path)
+        heard = postprocess(eng.transcribe(audio).text)
+        d = wer(ref, heard)
+        drifts.append(d)
+        print(f"\n• take {take_id}  wer={d:.2f}")
+        print(f"  ref:   {ref[:70]!r}")
+        print(f"  heard: {heard[:70]!r}")
+
+    mean = sum(drifts) / len(drifts) if drifts else float("nan")
+    print("\n===== mean drift vs stored transcript (lower = closer) =====")
+    print(f"  qwen-cpu {mean:.3f}  (n={len(drifts)})")
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument(
+        "--engine", choices=("gpu", "cpu"), default="gpu", help="decode backend"
+    )
+    ap.add_argument("--limit", type=int, default=None, help="only the newest N takes")
+    args = ap.parse_args()
+
+    wavs = sorted(takes.takes_dir().glob("*.wav"), key=lambda p: int(p.stem))
+    if args.limit:
+        wavs = wavs[-args.limit :]
+    if not wavs:
+        print(f"no takes in {takes.takes_dir()} — set TUPARLES_DEV=1 and dictate.")
+        return
+
+    transcripts = _stored_transcripts()
+    if args.engine == "cpu":
+        _replay_cpu(wavs, transcripts)
+    else:
+        _replay_gpu(wavs, transcripts)
 
 
 if __name__ == "__main__":
