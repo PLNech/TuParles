@@ -43,7 +43,7 @@ from tuparles.delivery import (
     execute_command,
     to_clipboard,
 )
-from tuparles.engine import load_engine
+from tuparles.engine import carryover_context, load_engine
 from tuparles.pipeline import postprocess
 
 
@@ -82,6 +82,8 @@ class Controller(QObject):
         self._finishing = False  # a take is being stopped/decoded off the GUI
         # thread; blocks re-entry from any of the three stop entry points so a
         # second press can't race the teardown (#10 freeze fix)
+        self._last_delivered = ""  # last delivered text + when, for onset
+        self._last_delivered_t = 0.0  # context-carryover into the next take (#18)
 
     @Slot()
     def toggle_from_hotkey(self) -> None:
@@ -219,11 +221,22 @@ class Controller(QObject):
         try:
             # Acquiring the lock can block behind an in-flight partial decode:
             # measure that wait apart from the decode it gates.
+            # Onset context-carryover (#18): a take starting soon after the last
+            # delivery gets that tail as decode left-context, so the cold-started
+            # first words ("on vient" → "rien") and a re-dictation after a delete
+            # decode better. Bias-only; GPU-only in practice (qwen ignores it).
+            context = carryover_context(
+                self._last_delivered,
+                time.monotonic() - self._last_delivered_t,
+                enabled=bool(settings.get("context_carryover")),
+                window_s=float(settings.get("context_carryover_window_s")),
+                max_chars=int(settings.get("context_carryover_max_chars")),
+            )
             t_lock = time.monotonic()
             with self._engine_lock:
                 lock_wait_s = time.monotonic() - t_lock
                 t_decode = time.monotonic()
-                result = self._engine.transcribe(audio)
+                result = self._engine.transcribe(audio, context)
                 decode_s = time.monotonic() - t_decode
             t_post = time.monotonic()
             text = postprocess(
@@ -253,6 +266,9 @@ class Controller(QObject):
                     before_paste=self._hide_bubble_for_paste if IS_WAYLAND else None,
                 )
                 deliver_s = time.monotonic() - t1
+                # Remember for the next take's onset carryover (#18).
+                self._last_delivered = text
+                self._last_delivered_t = time.monotonic()
                 audio_s = audio.size / SAMPLE_RATE
                 # Full per-step breakdown: stop (GUI thread) + lock-wait +
                 # decode + post-process + deliver. The dominant term names

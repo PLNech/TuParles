@@ -60,7 +60,7 @@ def test_resilient_uses_cpu_partials_after_sticky_fallback(tmp_path, monkeypatch
     class DeadGpu:
         supports_partials = True
 
-        def transcribe(self, audio):
+        def transcribe(self, audio, context=None):
             raise RuntimeError("CUDA failed with error out of memory")
 
         def transcribe_partial(self, audio):
@@ -98,7 +98,7 @@ def test_resilient_window_follows_live_backend(tmp_path, monkeypatch):
     class DeadGpu:
         supports_partials = True
 
-        def transcribe(self, audio):
+        def transcribe(self, audio, context=None):
             raise RuntimeError("CUDA failed with error unknown error")
 
         def transcribe_partial(self, audio):
@@ -162,7 +162,7 @@ def test_gpu_partials_untouched_by_cpu_setting(tmp_path, monkeypatch):
     class LiveGpu:
         supports_partials = True
 
-        def transcribe(self, audio):
+        def transcribe(self, audio, context=None):
             return Transcription("gpu")
 
         def transcribe_partial(self, audio):

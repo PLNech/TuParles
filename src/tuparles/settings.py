@@ -85,6 +85,16 @@ _DEFAULTS: dict[str, object] = {
     # (large-v3-turbo handles code-switch). Tune to taste; the captured-take
     # replay (#7) is how we settle the value on real audio.
     "cpu_partials_window_s": 6,
+    # Onset context-carryover (#18): the first words of a take are the least
+    # reliable (beam search has no left-context at the start — "on vient" →
+    # "rien"). When a new take starts soon after the previous one landed, feed
+    # that tail into the decode's initial_prompt so Whisper has the missing
+    # left-context — exactly what helps a re-dictation after a delete. Advisory
+    # only (never forces a decode, like dict-seed bias), so default on; GPU-only
+    # in practice (qwen takes no prompt). Tune the recency window + cap.
+    "context_carryover": True,
+    "context_carryover_window_s": 25,
+    "context_carryover_max_chars": 160,
 }
 
 

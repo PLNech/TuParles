@@ -105,6 +105,30 @@ def _vocab_prompt() -> str | None:
     return seed_prompt.initial_prompt()
 
 
+def carryover_context(
+    last_text: str, age_s: float, *, enabled: bool, window_s: float, max_chars: int
+) -> str | None:
+    """The decode context to carry from the previous take, or None (#18).
+
+    A recent delivery's tail gives Whisper the left-context a cold-started take
+    lacks — the fix for "on vient" → "rien" and for a re-dictation after a
+    delete. None when disabled, stale (older than the recency window), or empty.
+    Bias-only: the caller appends this to initial_prompt, which only nudges.
+    """
+    if not enabled or not last_text or age_s > window_s:
+        return None
+    return last_text[-max_chars:].strip() or None
+
+
+def _compose_prompt(vocab_prompt: str | None, context: str | None) -> str | None:
+    """Glossary/dict-seed prompt + carryover context at the TAIL (closest to the
+    decode = strongest bias; Whisper keeps the last 224 tokens). Either may be
+    None."""
+    if not context:
+        return vocab_prompt
+    return f"{vocab_prompt} {context}" if vocab_prompt else context
+
+
 def _preload_cuda_libs() -> None:
     """CT2 dlopens cuBLAS/cuDNN at runtime; the pip wheels aren't on the
     loader path, so map them in explicitly before faster_whisper imports."""
@@ -142,8 +166,11 @@ class GpuEngine:
         # frozen after a long dictation" bug); on short takes it's a no-op.
         self._batched = BatchedInferencePipeline(model=self._model)
 
-    def transcribe(self, audio: np.ndarray) -> Transcription:
-        """int16 mono 16 kHz → full-quality beam decode, batched."""
+    def transcribe(
+        self, audio: np.ndarray, context: str | None = None
+    ) -> Transcription:
+        """int16 mono 16 kHz → full-quality beam decode, batched. `context` is
+        the previous take's tail, carried in for onset left-context (#18)."""
         if audio.size == 0:
             return Transcription("")
         pcm = normalize_audio(audio.astype(np.float32) / 32768.0)
@@ -154,8 +181,9 @@ class GpuEngine:
             beam_size=5,
             vad_filter=True,
             # Re-read per decode: `tuparles vocab add` applies to the next
-            # take, no restart (like the language setting).
-            initial_prompt=_vocab_prompt(),
+            # take, no restart (like the language setting). Carryover context
+            # rides the tail (#18).
+            initial_prompt=_compose_prompt(_vocab_prompt(), context),
             language=language,
             multilingual=multilingual,
             # Per-word confidence for the rendered-doubt span model (#23). Modest
@@ -298,7 +326,11 @@ class QwenCpuEngine:
                 return ""
         return self._partials.transcribe_partial(audio)
 
-    def transcribe(self, audio: np.ndarray) -> Transcription:
+    def transcribe(
+        self, audio: np.ndarray, context: str | None = None
+    ) -> Transcription:
+        # context is GPU-only (the qwen binary takes no prompt); accepted for a
+        # uniform engine interface, ignored here (#18).
         if audio.size == 0:
             return Transcription("")
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as tmp:
@@ -385,20 +417,22 @@ class ResilientEngine:
             return self._cpu_engine().partial_window_s
         return PARTIAL_WINDOW_S
 
-    def transcribe(self, audio: np.ndarray) -> Transcription:
+    def transcribe(
+        self, audio: np.ndarray, context: str | None = None
+    ) -> Transcription:
         if self._on_cpu:
-            return self._cpu_engine().transcribe(audio)
+            return self._cpu_engine().transcribe(audio, context)
         try:
-            return self._gpu.transcribe(audio)
+            return self._gpu.transcribe(audio, context)
         except Exception as exc:
             print(f"GPU decode failed ({str(exc)[:120]}); rebuilding CUDA context")
             if self._rebuild_gpu():
                 try:
-                    return self._gpu.transcribe(audio)
+                    return self._gpu.transcribe(audio, context)
                 except Exception as exc2:
                     print(f"GPU still failing ({str(exc2)[:120]}); CPU fallback")
             self._on_cpu = True
-            return self._cpu_engine().transcribe(audio)
+            return self._cpu_engine().transcribe(audio, context)
 
     def transcribe_partial(self, audio: np.ndarray) -> str:
         # Partials are frequent and best-effort: never rebuild on one (it would

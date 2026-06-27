@@ -21,7 +21,7 @@ class FakeGpu:
         self._left = dies_after
         self._partial = partial
 
-    def transcribe(self, audio):
+    def transcribe(self, audio, context=None):
         if self._left <= 0:
             raise RuntimeError("CUDA failed with error out of memory")
         self._left -= 1
@@ -36,7 +36,7 @@ class FakeGpu:
 class FakeCpu:
     supports_partials = False
 
-    def transcribe(self, audio):
+    def transcribe(self, audio, context=None):
         return Transcription("cpu")
 
 
