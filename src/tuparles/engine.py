@@ -28,12 +28,52 @@ from tuparles.preprocess import normalize_audio
 
 
 @dataclass
+class Word:
+    """One decoded word + the model's confidence in it (#23). `probability` is
+    faster-whisper's per-word score in [0, 1]; lower = the model was less sure.
+    Feeds the rendered-doubt span model (#16/#24) — we show the uncertainty,
+    never silently rewrite it."""
+
+    text: str
+    probability: float
+    start: float | None = None
+    end: float | None = None
+
+
+@dataclass
 class Transcription:
     """Final-decode result: text + the metadata engines used to discard."""
 
     text: str
     language: str | None = None
     language_prob: float | None = None
+    # Per-word confidence when the engine exposes it (GPU/faster-whisper with
+    # word_timestamps); None on engines that don't (qwen runs --silent). The
+    # doubt UI degrades to no-dimming when absent — GPU-or-CPU, never GPU-or-nothing.
+    words: list[Word] | None = None
+
+
+def words_from_segments(segments) -> list[Word]:
+    """faster-whisper segments → flat [Word]. Reads fields defensively so a
+    plain test namedtuple works, and skips segments without word timings (the
+    list is empty, not an error, when word_timestamps was off). Pure + headless-
+    testable, like `sanitize_partial` — the GPU path can't run with no card."""
+    words: list[Word] = []
+    for seg in segments:
+        for w in getattr(seg, "words", None) or []:
+            text = getattr(w, "word", None)
+            if text is None:
+                continue
+            prob = getattr(w, "probability", None)
+            words.append(
+                Word(
+                    text=text,
+                    probability=1.0 if prob is None else float(prob),
+                    start=getattr(w, "start", None),
+                    end=getattr(w, "end", None),
+                )
+            )
+    return words
 
 
 def decode_language_opts(selected: list[str]) -> tuple[str | None, bool]:
@@ -118,12 +158,17 @@ class GpuEngine:
             initial_prompt=_vocab_prompt(),
             language=language,
             multilingual=multilingual,
+            # Per-word confidence for the rendered-doubt span model (#23). Modest
+            # alignment cost on turbo; gate via a setting if it ever bites.
+            word_timestamps=True,
         )
-        text = " ".join(s.text.strip() for s in segments).strip()
+        segs = list(segments)  # consume once: needed for both text and words
+        text = " ".join(s.text.strip() for s in segs).strip()
         return Transcription(
             text,
             language=getattr(info, "language", None),
             language_prob=getattr(info, "language_probability", None),
+            words=words_from_segments(segs),
         )
 
     def _decode_language_opts(self) -> tuple[str | None, bool]:
