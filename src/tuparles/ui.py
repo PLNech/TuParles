@@ -141,6 +141,26 @@ def _brighten(color: QColor, t: float = 0.4) -> QColor:
     )
 
 
+# ── queue chips (#15) ───────────────────────────────────────────────────────
+# A take in flight is "decoding" (the live backend hue); the instant it lands it
+# flashes "delivered" (the same hue brightened — landed-is-brighter, never a hue
+# switch, matching the main bubble's flash) then fades. Pure so the colour
+# decision is headless-tested without a paint pass.
+
+CHIP_D = 12  # chip diameter (px)
+CHIP_GAP = 7  # between chips
+CHIP_PAD = 11  # chip-strip inner padding
+CHIP_H = 26  # strip height
+CHIP_GAP_ABOVE = 10  # gap between the strip and the main bubble below it
+
+
+def chip_color(state: str, base: QColor) -> QColor:
+    """A queue chip's colour: the live backend hue while decoding, brightened
+    toward white the moment it's delivered (same hue, brighter — so green never
+    stops meaning GPU). Any unknown state reads as still-decoding."""
+    return _brighten(base, 0.5) if state == "delivered" else base
+
+
 class Bubble(QWidget):
     def __init__(
         self,
@@ -483,6 +503,151 @@ class Bubble(QWidget):
         return "…" + " ".join(words[lo:])
 
 
+class QueueChips(QWidget):
+    """A small row of pills above the main bubble — one per take still in the
+    decode queue (#15).
+
+    The queue (#14) lets takes overlap: the main bubble shows the take you're
+    speaking now, while earlier takes finish decoding behind it. These chips make
+    that backlog visible — how many are still cooking — and flash each one as it
+    lands (a brighter pulse of the backend hue, then it fades). Cosmetic and
+    opt-out (`queue_chips`): the queue behaves identically with the strip hidden.
+
+    Never takes focus (it sits over the user's window like the bubble). All
+    methods assume the GUI thread — the daemon wires `queued`/`delivered` through
+    queued signal connections, same as the bubble."""
+
+    def __init__(
+        self,
+        backend_source: Callable[[], str] | None = None,
+        screen_source: Callable[[], object] | None = None,
+    ) -> None:
+        super().__init__(
+            None,
+            Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool,
+        )
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
+        self.setFocusPolicy(Qt.NoFocus)
+        self._backend_source = backend_source or (lambda: "gpu")
+        self._screen_source = screen_source
+        # Ordered [seq, state] pairs; state is "decoding" | "delivered". A list
+        # of lists (not a dict) so paint order matches arrival order, oldest left.
+        self._chips: list[list] = []
+        self._phase = 0.0  # drives the gentle breathing of decoding chips
+        self._timer = QTimer(self)
+        self._timer.setInterval(FPS_MS)
+        self._timer.timeout.connect(self._tick)
+
+    # ── model (pure-ish, headless-testable) ─────────────────────────────────
+
+    def on_queued(self, seq: int) -> None:
+        """A take entered the decode queue: add a decoding chip, show the strip."""
+        if not settings.get("queue_chips"):
+            return
+        if any(c[0] == seq for c in self._chips):
+            return  # idempotent — a duplicate signal must not double-add
+        self._chips.append([seq, "decoding"])
+        self._reflow()
+        if not self.isVisible():
+            self.show()
+            self._make_sticky()
+        if not self._timer.isActive():
+            self._timer.start()
+        self.update()
+
+    def on_delivered(self, seq: int) -> None:
+        """That take landed: flash the chip, then drop it after a short beat."""
+        for chip in self._chips:
+            if chip[0] == seq:
+                chip[1] = "delivered"
+                QTimer.singleShot(700, lambda s=seq: self._remove(s))
+                break
+        self.update()
+
+    def _remove(self, seq: int) -> None:
+        self._chips = [c for c in self._chips if c[0] != seq]
+        if not self._chips:
+            self._timer.stop()
+            self.hide()
+        else:
+            self._reflow()
+        self.update()
+
+    # ── geometry / placement ────────────────────────────────────────────────
+
+    def _content_width(self) -> int:
+        n = max(1, len(self._chips))
+        return CHIP_PAD * 2 + n * CHIP_D + (n - 1) * CHIP_GAP
+
+    def _target_screen(self):
+        if self._screen_source is not None:
+            return self._screen_source() or QApplication.primaryScreen()
+        return resolve_screen(settings.get("bubble_screen"))
+
+    def _reflow(self) -> None:
+        """Resize to the chip count and re-anchor just above the main bubble,
+        bottom-centred on the same screen."""
+        w = self._content_width()
+        self.setFixedSize(w, CHIP_H)
+        screen = self._target_screen()
+        geo = screen.availableGeometry()
+        x = geo.center().x() - w // 2
+        y = geo.bottom() - MARGIN_BOTTOM - HEIGHT - CHIP_GAP_ABOVE - CHIP_H
+        self.move(QPoint(x, y))
+
+    def _make_sticky(self) -> None:
+        # Pin to all desktops like the bubble; X11 only (Wayland compositor owns
+        # placement). Fire-and-forget cosmetic.
+        if QApplication.platformName() != "xcb":
+            return
+        subprocess.Popen(
+            [
+                "xprop",
+                "-id",
+                str(int(self.winId())),
+                "-f",
+                "_NET_WM_DESKTOP",
+                "32c",
+                "-set",
+                "_NET_WM_DESKTOP",
+                "0xFFFFFFFF",
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+    # ── paint ────────────────────────────────────────────────────────────────
+
+    def _tick(self) -> None:
+        self._phase += 0.16
+        self.update()
+
+    def _engine_color(self) -> QColor:
+        return _GPU if self._backend_source() == "gpu" else _CPU
+
+    def paintEvent(self, event) -> None:
+        if not self._chips:
+            return
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.setPen(Qt.NoPen)
+        p.setBrush(_BG)
+        p.drawRoundedRect(QRectF(self.rect()), CHIP_H / 2, CHIP_H / 2)
+        base = self._engine_color()
+        cy = self.height() / 2
+        x = float(CHIP_PAD)
+        for _seq, state in self._chips:
+            color = QColor(chip_color(state, base))
+            if state == "decoding":
+                # Gentle breathing so "still working" reads as alive, not stalled.
+                color.setAlpha(round(150 + 80 * (0.5 + 0.5 * math.sin(self._phase))))
+            p.setBrush(color)
+            p.drawEllipse(QRectF(x, cy - CHIP_D / 2, CHIP_D, CHIP_D))
+            x += CHIP_D + CHIP_GAP
+        p.end()
+
+
 class BubbleGroup(QObject):
     """The daemon's face when it may span several monitors.
 
@@ -515,6 +680,10 @@ class BubbleGroup(QObject):
         self._backend_source = backend_source
         self._pool: dict[str, Bubble] = {}  # by QScreen.name(), reused
         self._active: list[Bubble] = []  # lit for the current take
+        # The queue-chip strip (#15), created lazily on the first queued take so
+        # single-take users never instantiate it. One strip, on the resolved
+        # bubble screen — a queue indicator, not per-monitor content.
+        self._chips: QueueChips | None = None
 
     def _bubble_for(self, screen) -> Bubble:
         """The pooled Bubble pinned to `screen`, created on first use. The pin
@@ -581,3 +750,22 @@ class BubbleGroup(QObject):
     def hide(self) -> None:
         for bubble in self._active:
             bubble.hide()
+
+    # ── queue chips (#15) ────────────────────────────────────────────────────
+
+    def _chip_strip(self) -> "QueueChips":
+        if self._chips is None:
+            self._chips = QueueChips(
+                backend_source=self._backend_source,
+                screen_source=lambda: resolve_screen(settings.get("bubble_screen")),
+            )
+        return self._chips
+
+    @Slot(int)
+    def on_queued(self, seq: int) -> None:
+        self._chip_strip().on_queued(seq)
+
+    @Slot(int)
+    def on_delivered(self, seq: int) -> None:
+        if self._chips is not None:
+            self._chips.on_delivered(seq)
