@@ -38,6 +38,22 @@ own its misses, name its fallbacks, and never silently destroy what you'd copied
   tooltip spells it out, plus a boot-time reminder line — so it can never run
   silently. `TUPARLES_DEV` stays as the override (set = wins, either way).
 
+### Infra
+- **Cross-env capability probe + explicit fallback chains** (`capability.py`,
+  `daemon.py`, #29) — the xdotool-3.x miss showed we *assume* tool capabilities
+  instead of probing them. New `capability.probe()` detects, once at boot, what
+  this box can actually do — xdotool version + which **subcommands** it supports
+  (the exact gap that bit us), xprop/xsel/xclip/wl-copy/wl-paste/ydotool/gdbus,
+  X11 vs Wayland — and logs a one-line report (`capabilities: x11 · class=xprop ·
+  paste=xsel+xdotool · activate=… · gaps: …`), verbose per-tool in dev mode. The
+  detection/fallback CHAINS (window-class, paste, window-activate) are now
+  explicit, server-aware, native-layer-first data — each with a *documented*
+  fallback, never a silent no-op — and pinned by tests so the formal description
+  can't drift from `delivery.py`. Surfaces real gaps immediately (e.g. "clipboard
+  restore limited (no type-probe tool)" when `xclip` is absent, tying to #28's
+  type guard) instead of after a failed paste. Seeds the build note
+  `docs/research/2026-06-27-cross-env-capability-layers.md`.
+
 ### Changed
 - **Softer empty-decode copy** (`daemon.py`, #27) — a lost final with no partial
   to salvage now says *"Je n'ai pas bien saisi"* instead of *"Rien entendu."* The
