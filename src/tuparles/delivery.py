@@ -17,6 +17,7 @@ import string
 import subprocess
 import time
 
+from tuparles import settings
 from tuparles.config import IS_WAYLAND as _WAYLAND
 
 # Every modifier the stop-tap (RCtrl+RAlt/AltGr) or a hasty hand might hold
@@ -184,6 +185,46 @@ def _paste_combo(is_terminal: bool) -> str:
     return "ctrl+shift+v" if is_terminal else "ctrl+v"
 
 
+# GUI apps that SUBMIT on Enter and insert a newline on Shift+Enter — a pasted
+# lone LF is swallowed by their input, so we send Shift+Enter instead (#5).
+# Matched against the window class. Terminals are deliberately absent: a shell
+# needs a literal newline, and we can't tell a chat-TUI-in-a-terminal (Claude
+# Code) from a shell by class alone — that case is the explicit setting override.
+_SUBMIT_ON_ENTER = {
+    "slack",
+    "discord",
+    "telegram",
+    "telegramdesktop",
+    "signal",
+    "element",
+    "whatsapp",
+    "teams",
+    "microsoft teams",
+}
+
+
+def resolve_newline_mode(wm_class: str) -> str:
+    """How to emit a dictated newline into this target (#5). The `newline_mode`
+    setting: 'auto' (smart default) | 'lf' (paste literal — editors/terminals/
+    shells) | 'shift-enter' (soft newline — submit-on-Enter inputs) | 'enter'.
+    In 'auto' we upgrade to shift-enter only for known GUI chat apps; everything
+    else stays lf (today's safe behaviour). Dictating into Claude Code? A
+    chat-TUI in a terminal is indistinguishable from a shell by class — set
+    'shift-enter' explicitly."""
+    mode = settings.get("newline_mode") or "auto"
+    if mode != "auto":
+        return mode
+    parts = [p.strip().casefold() for p in wm_class.split("|") if p.strip()]
+    return "shift-enter" if any(p in _SUBMIT_ON_ENTER for p in parts) else "lf"
+
+
+def _emit_newline(send, mode: str) -> None:
+    """Send a newline as a KEYSTROKE (layout-blind keyname, never per-char
+    injection — stays clear of the keymap-remap freeze). lf is handled by the
+    caller (pasted literal), so this only fires for shift-enter/enter/crlf."""
+    send("shift+Return" if mode == "shift-enter" else "Return")
+
+
 # The focuswindow@tuparles.local GNOME extension publishes the focused
 # window's class here — Wayland's only way for a client to read it.
 _FOCUS_DEST = "org.tuparles.FocusWindow"
@@ -271,18 +312,18 @@ def _x11_paste_key(combo: str) -> None:
 # 0.1.8 doesn't); scripts/setup_wayland.sh sets up the daemon to match.
 _YDOTOOL_MODERN = shutil.which("ydotoold") is not None
 
-# linux/input-event-codes.h — only the keys our paste chords use.
-_EVDEV_CODES = {"ctrl": 29, "shift": 42, "v": 47}
+# linux/input-event-codes.h — only the keys our paste/newline chords use.
+_EVDEV_CODES = {"ctrl": 29, "shift": 42, "v": 47, "return": 28}
 
 
 def _ydotool_key_argv(combo: str) -> list[str]:
-    """The `ydotool key …` argv for `combo` ("ctrl+v", "ctrl+shift+v"), in the
-    syntax this host's ydotool understands."""
+    """The `ydotool key …` argv for `combo` ("ctrl+v", "ctrl+shift+v",
+    "shift+Return"), in the syntax this host's ydotool understands."""
     if not _YDOTOOL_MODERN:
         # --delay gives 0.1.8's freshly created uinput keyboard time to be
         # recognized before the keys fire.
         return ["ydotool", "key", "--delay", "200", combo]
-    codes = [_EVDEV_CODES[k] for k in combo.split("+")]
+    codes = [_EVDEV_CODES[k.casefold()] for k in combo.split("+")]
     # press in order, release in reverse — a real chord.
     seq = [f"{c}:1" for c in codes] + [f"{c}:0" for c in reversed(codes)]
     return ["ydotool", "key", *seq]
@@ -295,20 +336,32 @@ def _wayland_paste_key(combo: str) -> None:
         pass
 
 
-def _paste_chunks(text: str, combo: str, send, label: str = "") -> None:
+def _paste_chunks(
+    text: str, combo: str, send, label: str = "", newline_mode: str = "lf"
+) -> None:
     """Paste `text` as several small pieces (see _chunk_for_paste), each set on
     the clipboard then pasted via `send` (the backend's paste-key sender),
     paced so the editor keeps every piece visible instead of folding the lot
     into "[Pasted text]". Restores the FULL text to the clipboard at the end,
-    so the manual-paste backup still gives the whole take."""
+    so the manual-paste backup still gives the whole take.
+
+    Newline pieces ("\\n") are emitted as a KEYSTROKE for non-lf modes (#5):
+    a pasted lone LF is swallowed by submit-on-Enter inputs, so Shift+Enter is
+    the only newline they keep."""
     chunks = _chunk_for_paste(text)
     for chunk in chunks:
+        if chunk == "\n" and newline_mode != "lf":
+            _emit_newline(send, newline_mode)
+            time.sleep(_CHUNK_PASTE_GAP)
+            continue
         to_clipboard(chunk)
         time.sleep(_CHUNK_CLIP_SETTLE)
         send(combo)
         time.sleep(_CHUNK_PASTE_GAP)
     to_clipboard(text)
-    print(f"paste chunked: {len(chunks)} pieces, {combo} {label}".rstrip())
+    print(
+        f"paste chunked: {len(chunks)} pieces, {combo} nl={newline_mode} {label}".rstrip()
+    )
 
 
 def _wayland_combo(focus_class: str = "") -> str:
@@ -401,6 +454,7 @@ def _type_into_focus(text: str, focus_class: str = "", before_paste=None) -> Non
                 _wayland_combo(focus_class),
                 _wayland_paste_key,
                 label="(wayland)",
+                newline_mode=resolve_newline_mode(focus_class),
             )
         else:
             _wayland_paste(focus_class, before_paste)
@@ -417,6 +471,7 @@ def _type_into_focus(text: str, focus_class: str = "", before_paste=None) -> Non
                 combo,
                 _x11_paste_key,
                 label=f"into '{wm_class.strip() or '?'}'",
+                newline_mode=resolve_newline_mode(wm_class),
             )
         else:
             _paste_into_focus(focus_class)

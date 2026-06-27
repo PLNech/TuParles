@@ -95,6 +95,15 @@ _DEFAULTS: dict[str, object] = {
     "context_carryover": True,
     "context_carryover_window_s": 25,
     "context_carryover_max_chars": 160,
+    # How a dictated newline ("à la ligne") reaches the target (#5). A pasted
+    # lone LF is SWALLOWED by submit-on-Enter inputs (Claude Code, chat apps) —
+    # we said the line break, none appears. "auto" (default) pastes literal LF
+    # everywhere except known GUI chat apps (which get Shift+Enter); "lf" forces
+    # literal (editors/terminals/shells); "shift-enter" forces a soft newline;
+    # "enter" sends Return. We can't tell a chat-TUI-in-a-terminal (Claude Code)
+    # from a shell by window class — so dictating into Claude Code, set
+    # "shift-enter" here. It's a setting: safe default, total override.
+    "newline_mode": "auto",
 }
 
 
