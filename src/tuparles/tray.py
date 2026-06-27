@@ -14,13 +14,16 @@ from PySide6.QtCore import QObject, QRectF, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QColor, QDesktopServices, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import QMenu, QSystemTrayIcon
 
-from tuparles import history, settings
+from tuparles import history, settings, takes
 from tuparles.delivery import to_clipboard
 
 _IDLE = QColor(205, 214, 244)
 # Recording/processing tint by engine, matching the bubble: green=GPU, blue=CPU.
 _GPU = QColor(122, 199, 130)
 _CPU = QColor(122, 162, 247)
+# Dev raw-audio capture indicator: a steady red dot on the glyph the whole time
+# it's armed, so "your unredacted voice is being written to disk" is never silent.
+_DEV_DOT = QColor(243, 139, 168)
 
 _REST_HEIGHTS = (0.45, 0.85, 0.60)  # the glyph's pose when not animating
 _TRAY_FPS_MS = 100  # ~10 Hz: a gentle breath without hammering the DBus tray
@@ -29,9 +32,13 @@ _LABEL_CHARS = 46
 _README_URL = "https://github.com/PLNech/TuParles#readme"
 
 
-def _glyph(color: QColor, heights=_REST_HEIGHTS, lift: float = 0.0) -> QIcon:
+def _glyph(
+    color: QColor, heights=_REST_HEIGHTS, lift: float = 0.0, dev_dot: bool = False
+) -> QIcon:
     """Three rounded bars in `color`. `heights` (0..1 each) and `lift` (a small
-    vertical bob, in px) are what the breathing animation modulates per frame."""
+    vertical bob, in px) are what the breathing animation modulates per frame.
+    `dev_dot` overlays a steady red dot (top-right) while raw-audio capture is
+    armed — a persistent, unmissable "recording your voice to disk" badge (#8)."""
     pm = QPixmap(22, 22)
     pm.fill(Qt.transparent)
     p = QPainter(pm)
@@ -45,6 +52,9 @@ def _glyph(color: QColor, heights=_REST_HEIGHTS, lift: float = 0.0) -> QIcon:
         half = min(0.95, max(0.0, h)) * 9
         p.drawRoundedRect(QRectF(x, cy - half, bar_w, half * 2), 2, 2)
         x += bar_w + gap
+    if dev_dot:
+        p.setBrush(_DEV_DOT)
+        p.drawEllipse(QRectF(15.0, 1.0, 6.0, 6.0))  # top-right, clear of the bars
     p.end()
     return QIcon(pm)
 
@@ -106,8 +116,8 @@ class Tray(QObject):
         self._menu.addAction("Quitter").triggered.connect(self.quit_requested.emit)
 
         self._tray = QSystemTrayIcon(self._compose_icon(), self)
-        self._tray.setToolTip("TuParles — Ctrl droit + Alt droit pour dicter")
         self._tray.setContextMenu(self._menu)
+        self._refresh_tooltip()
         self._tray.show()
 
         # The breath: one timer advances the phase and repaints the glyph. Only
@@ -161,7 +171,17 @@ class Tray(QObject):
 
     def _compose_icon(self) -> QIcon:
         heights, lift = self._pose()
-        return _glyph(self._state_color(), heights, lift)
+        return _glyph(
+            self._state_color(), heights, lift, dev_dot=takes.dev_recording_enabled()
+        )
+
+    def _refresh_tooltip(self) -> None:
+        """Spell out dev capture in the tooltip whenever it's armed, so the red
+        dot has words next to it on hover."""
+        base = "TuParles — Ctrl droit + Alt droit pour dicter"
+        if takes.dev_recording_enabled():
+            base += "\n⚠ Mode dev : audio brut (non masqué) enregistré sur le disque"
+        self._tray.setToolTip(base)
 
     def _tick(self) -> None:
         self._phase += 0.2  # advance the breath
@@ -189,6 +209,7 @@ class Tray(QObject):
             self._timer.start()
         elif not self._animate and self._timer.isActive():
             self._timer.stop()
+        self._refresh_tooltip()  # dev capture may have just been toggled
         self._tray.setIcon(self._compose_icon())  # reflect the change at once
 
     def _open_settings(self) -> None:

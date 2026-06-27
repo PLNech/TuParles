@@ -31,6 +31,45 @@ class TestGate:
             assert takes.dev_recording_enabled(), val
 
 
+class TestGateSettingFallback:
+    """#8: with TUPARLES_DEV unset, the Réglages `dev_recording` setting decides;
+    the env var, when SET, overrides it either way."""
+
+    def _iso(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+        monkeypatch.delenv("TUPARLES_DEV", raising=False)
+
+    def test_setting_off_is_off(self, tmp_path, monkeypatch):
+        self._iso(tmp_path, monkeypatch)
+        from tuparles import settings
+
+        settings.put("dev_recording", False)
+        assert not takes.dev_recording_enabled()
+
+    def test_setting_on_turns_on(self, tmp_path, monkeypatch):
+        self._iso(tmp_path, monkeypatch)
+        from tuparles import settings
+
+        settings.put("dev_recording", True)
+        assert takes.dev_recording_enabled()
+
+    def test_env_falsey_overrides_setting_on(self, tmp_path, monkeypatch):
+        self._iso(tmp_path, monkeypatch)
+        from tuparles import settings
+
+        settings.put("dev_recording", True)
+        monkeypatch.setenv("TUPARLES_DEV", "0")  # env present → it wins → off
+        assert not takes.dev_recording_enabled()
+
+    def test_env_truthy_overrides_setting_off(self, tmp_path, monkeypatch):
+        self._iso(tmp_path, monkeypatch)
+        from tuparles import settings
+
+        settings.put("dev_recording", False)
+        monkeypatch.setenv("TUPARLES_DEV", "1")  # env present → it wins → on
+        assert takes.dev_recording_enabled()
+
+
 class TestSaveTake:
     def test_noop_when_disabled(self, tmp_path, monkeypatch):
         _isolate(tmp_path, monkeypatch)

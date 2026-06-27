@@ -9,8 +9,13 @@ survives *some* acoustics; real captured takes prove it survives *yours*.
 This is your voice on disk, **unredacted** — unlike the stored transcript, which
 strips block-tier PII (#115). So it is:
 
-* OFF unless ``TUPARLES_DEV`` is truthy — chosen over a Réglages toggle on
-  purpose: raw voice on disk must not be flippable by accident.
+* OFF by default, behind a Réglages toggle (``dev_recording``) AND the
+  ``TUPARLES_DEV`` env override (#8). The earlier env-only gate kept it from being
+  "flippable by accident"; we keep that safety differently now — the toggle is
+  off by default, carries an explicit raw-audio warning, and (the real guard)
+  the tray shows a steady red dot the whole time it's armed, so it can never run
+  silently. The env var stays as the override: set, it wins (truthy on / falsey
+  off); unset, the setting decides.
 * local-only (same XDG store as the history DB, never synced), and
 * self-pruning: oldest takes are deleted once the directory passes a byte
   budget, so a dev convenience can never silently fill a disk.
@@ -25,6 +30,7 @@ from pathlib import Path
 
 import numpy as np
 
+from tuparles import settings
 from tuparles.history import db_path
 
 SAMPLE_RATE = 16_000
@@ -40,8 +46,14 @@ _FALSEY = {"", "0", "false", "no", "off"}
 
 
 def dev_recording_enabled() -> bool:
-    """True iff ``TUPARLES_DEV`` is set to a truthy value — the only gate."""
-    return os.environ.get("TUPARLES_DEV", "").strip().lower() not in _FALSEY
+    """True iff dev raw-audio capture is on. ``TUPARLES_DEV``, when SET, is the
+    override (truthy = on, falsey = off); when unset, the ``dev_recording``
+    Réglages setting decides (default OFF). Raw *unredacted* voice on disk, so the
+    default is off and the active state is always visible in the tray (#8)."""
+    env = os.environ.get("TUPARLES_DEV")
+    if env is not None:
+        return env.strip().lower() not in _FALSEY
+    return bool(settings.get("dev_recording"))
 
 
 def takes_dir() -> Path:

@@ -141,6 +141,13 @@ _DEFAULTS: dict[str, object] = {
     # and never risks the core paste. It's a setting: opt in if you copy-paste
     # heavily between takes.
     "clipboard_restore": False,
+    # Dev raw-audio capture (#8): write every take's UNREDACTED audio to disk
+    # (takes/<id>.wav) so a fix can be replayed across engines/seeds — forensics
+    # as infra. This is your literal voice on disk, not the PII-stripped
+    # transcript, so it is OFF by default and, while armed, the tray shows a
+    # steady red dot so it never runs silently. The TUPARLES_DEV env var
+    # overrides this (set = wins). Local-only, self-pruning by byte budget.
+    "dev_recording": False,
 }
 
 
