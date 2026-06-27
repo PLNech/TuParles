@@ -104,6 +104,21 @@ _DEFAULTS: dict[str, object] = {
     # from a shell by window class — so dictating into Claude Code, set
     # "shift-enter" here. It's a setting: safe default, total override.
     "newline_mode": "auto",
+    # Where a take pastes once decode runs off the capture thread (#14). With the
+    # FIFO queue a take can finish decoding AFTER focus moved on (you spoke into
+    # A, switched to B, A's decode lands). "origin" (default) refocuses the
+    # window the take was dictated into, pastes, then returns focus to where you
+    # were — so each take lands where it was spoken without stranding you.
+    # "current" pastes into whatever holds focus at delivery (the pre-queue
+    # behaviour). The dance only fires when focus ACTUALLY moved; a take with no
+    # overlap pastes in place either way. X11 only — Wayland clients can't be
+    # refocused by id. It's a setting: safe default, total override.
+    "deliver_to": "origin",
+    # How many takes may be decoding/queued before a new take is refused with a
+    # toast (#14). The structural backstop: a wedged engine can't pile up audio
+    # buffers unbounded. Five is generous for back-to-back dictation; raise it if
+    # you routinely out-run the decoder.
+    "queue_depth_cap": 5,
 }
 
 

@@ -568,6 +568,48 @@ class TestCaptureTarget:
         assert seen["fc"] == "kitty"
 
 
+class TestOriginFocus:
+    """X11 refocus-by-id helpers for origin-window delivery (#14)."""
+
+    def test_current_window_id_reads_active(self, monkeypatch):
+        monkeypatch.setattr(delivery, "_WAYLAND", False)
+        monkeypatch.setattr(
+            delivery.subprocess,
+            "run",
+            lambda *a, **k: subprocess.CompletedProcess([], 0, stdout="98765\n"),
+        )
+        assert delivery.current_window_id() == "98765"
+
+    def test_current_window_id_empty_on_wayland(self, monkeypatch):
+        monkeypatch.setattr(delivery, "_WAYLAND", True)
+        assert delivery.current_window_id() == ""
+
+    def test_activate_window_calls_xdotool_sync(self, monkeypatch):
+        monkeypatch.setattr(delivery, "_WAYLAND", False)
+        calls = []
+        monkeypatch.setattr(
+            delivery.subprocess,
+            "run",
+            lambda argv, *a, **k: calls.append(argv)
+            or subprocess.CompletedProcess(argv, 0),
+        )
+        assert delivery.activate_window("42") is True
+        assert calls == [["xdotool", "windowactivate", "--sync", "42"]]
+
+    def test_activate_window_noop_without_id(self, monkeypatch):
+        monkeypatch.setattr(delivery, "_WAYLAND", False)
+        called = []
+        monkeypatch.setattr(
+            delivery.subprocess, "run", lambda *a, **k: called.append(a)
+        )
+        assert delivery.activate_window("") is False
+        assert called == []
+
+    def test_activate_window_false_on_wayland(self, monkeypatch):
+        monkeypatch.setattr(delivery, "_WAYLAND", True)
+        assert delivery.activate_window("42") is False
+
+
 class TestExecuteCommand:
     """Voice edits send the right keystrokes and NEVER type text. Backend is
     X11 here (dev machine); _send_key dispatches to xdotool, captured below."""

@@ -16,6 +16,20 @@ Building toward the DeliveryTarget keystone — and seeding doubt on the way.
   indistinguishable from a shell by class, so dictating there: set `shift-enter`.
 
 ### Added
+- **FIFO decode queue — capture and decode, decoupled** (`daemon.py`,
+  `delivery.py`, `settings.py`, `tests/test_daemon_finish.py`,
+  `tests/test_delivery.py`, #14) — a toggle-stop no longer holds the next take
+  hostage to the decode. `stop()` now runs off the GUI thread, ENQUEUES a
+  `_QueuedTake` (its own audio + `DeliveryTarget` + partial), and frees the
+  recorder the instant it returns; one persistent worker drains the queue in
+  order. So: *speak, send, speak again* — the next take starts while the last is
+  still decoding. Each take delivers to its **origin window** (`deliver_to:
+  origin`, X11): if focus actually moved since you spoke, it refocuses the
+  dictation window, pastes, then hands focus back where you are — no overlap, no
+  dance. Structural depth cap (`queue_depth_cap: 5`): a wedged engine can't pile
+  up audio; the cap-th take is refused with a "File pleine" toast, never a silent
+  drop. Onset-carryover (#18) still works — better, even, decodes being strictly
+  sequential now. Mini-bubbles (#15) ride the new `queued`/`delivered` signals.
 - **`DeliveryTarget` — capture-time destination** (`delivery.py`, `daemon.py`,
   `tests/test_delivery.py`, #13) — the window a take was dictated into, snapshotted
   at take-START: `wm_class` (paste combo + newline mode) and, on X11, `window_id`.

@@ -88,6 +88,43 @@ def capture_target() -> DeliveryTarget:
     return DeliveryTarget(wm_class=cls, window_id=wid)
 
 
+def current_window_id() -> str:
+    """The focused X11 window's id right now, or '' (unreadable / Wayland). Used
+    to remember where the user is before a queued take steals focus to its origin
+    window, so we can hand focus back afterward (#14). Short-capped, best-effort."""
+    if _WAYLAND:
+        return ""
+    try:
+        return subprocess.run(
+            ["xdotool", "getactivewindow"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=1,
+        ).stdout.strip()
+    except (subprocess.SubprocessError, OSError):
+        return ""
+
+
+def activate_window(window_id: str) -> bool:
+    """Best-effort raise+focus of an X11 window by id, so a queued take pastes
+    back where it was dictated even after focus moved on (#14). --sync waits for
+    the activation to take so the paste that follows lands in the right window.
+    Wayland has no client-facing "activate by id", so this is X11-only; a missing
+    id or a since-closed window just leaves focus where it is (graceful)."""
+    if _WAYLAND or not window_id:
+        return False
+    try:
+        subprocess.run(
+            ["xdotool", "windowactivate", "--sync", window_id],
+            check=False,
+            timeout=2,
+        )
+        return True
+    except (subprocess.SubprocessError, OSError):
+        return False
+
+
 def deliver(
     text: str, target: "DeliveryTarget | str | None" = None, before_paste=None
 ) -> None:
