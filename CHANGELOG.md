@@ -1,5 +1,42 @@
 # Changelog
 
+## Sprint 22 — 2026-06-27 · Le POC qui parle dans la poche
+
+The Android spike went from "research epic" to **a working app on a Fairphone 6**
+in one sitting: mic → native whisper.cpp → embedded-CPython `postprocess()` → text,
+one shared core with the desktop. Shipped as a public experimental APK.
+
+### Added
+- **Android experimental POC** (#2) — laddered spike (Rung 0 hello-world → 1
+  Chaquopy embed → 2 whisper.cpp JNI → 3 full loop), all verified on-device.
+  A 12→15-prompt FR/EN code-switch capture harness (diverse: beatmaking, rap,
+  cuisine, gaming, skate, danse…), saving `{wav, raw, cleaned}` per take.
+- **Toggles** (it's-a-setting): *Langue* auto/fr/en, *Postprocess* on/off.
+- **Local email export** — `📧 dev@nech.pl` via `ACTION_SEND_MULTIPLE` + FileProvider,
+  no INTERNET permission.
+- **Self-contained APK** — base model bundled in assets (fetched, gitignored);
+  prefers a pushed larger model if present. Published as Release `android-poc-0.1`.
+
+### Fixed
+- **Native `-O3`** — debug APKs compiled `ggml-cpu`/`ggml-base` at `-O0`, ~50×
+  too slow (88s→1.5s for base). Forced `-O3` on every ggml target.
+- **`language=auto`** — the grafted JNI hardcoded `params.language="en"`, which
+  *translated* French to English. Threaded a language param through; default auto.
+  Validated offline with whisper-cli on real recordings.
+
+### Infra
+- Recreation-safe model (process-scoped `Engine` singleton + `configChanges` +
+  portrait lock); in-decode progress logging; 90s decode timeout.
+- Vendored whisper.cpp trimmed to the CPU backend (20MB → 6.2MB).
+
+### Doctrine
+- **Measure before you trust** paid twice: the `-O0` slowness and the `en`
+  mistranslation were both invisible until instrumented + reproduced (offline
+  whisper-cli on the device's own recordings).
+- **Every feature degrades** — bundled base for OOTB speed, large-v3-turbo for
+  flawless quality; the user picks via a pushed model. GPU-or-CPU, here it's
+  fast-or-accurate, runtime choice.
+
 ## Sprint 21 — 2026-06-27 · Le cap Android, et la maison d'aplomb
 
 Two strands: chart the course to TuParles-on-Android (research + a
