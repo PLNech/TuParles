@@ -9,11 +9,14 @@ A single engine lock serializes GPU calls so an in-flight partial can
 never race the final beam decode.
 """
 
+import queue
 import signal
 import sys
 import threading
 import time
+from dataclasses import dataclass, field
 
+import numpy as np
 from PySide6.QtCore import QMetaObject, QObject, Qt, QTimer, Signal, Slot
 from PySide6.QtWidgets import QApplication
 
@@ -39,13 +42,30 @@ from tuparles.config import (
 )
 from tuparles.delivery import (
     DeliveryTarget,
+    activate_window,
     capture_target,
+    current_window_id,
     deliver,
     execute_command,
     to_clipboard,
 )
 from tuparles.engine import carryover_context, load_engine
 from tuparles.pipeline import postprocess
+
+
+@dataclass
+class _QueuedTake:
+    """One stopped take waiting to be decoded + delivered, off the capture
+    thread (#14). Carries everything the decode worker needs so an overlapping
+    next take can't clobber it: its own audio, the window it was dictated into
+    (`target`), the last partial shown (recovery forensics), the stop timing,
+    and a monotonic seq (the mini-bubble's identity, #15)."""
+
+    seq: int
+    audio: np.ndarray  # int16 mono, the raw take
+    target: DeliveryTarget = field(default_factory=DeliveryTarget)
+    partial: str = ""
+    stop_s: float = 0.0
 
 
 class Bridge(QObject):
@@ -59,6 +79,8 @@ class Bridge(QObject):
     command = Signal(str)  # a voice edit ran — short label for the toast
     error = Signal(str)
     state = Signal(str)  # idle | recording | processing — tray glyph follows
+    queued = Signal(int)  # a take entered the decode queue (seq) — mini-bubble (#15)
+    delivered = Signal(int)  # that take landed (seq) — mini-bubble clears (#15)
 
 
 class Controller(QObject):
@@ -80,11 +102,21 @@ class Controller(QObject):
         self._entry_source = "hotkey"  # how the current take was started (telemetry)
         self._last_partial = ""  # most recent partial shown — forensics for an
         # empty final decode ("partials showed text, then Rien entendu"; #10)
-        self._finishing = False  # a take is being stopped/decoded off the GUI
-        # thread; blocks re-entry from any of the three stop entry points so a
-        # second press can't race the teardown (#10 freeze fix)
+        self._stopping = False  # the recorder is being torn down off the GUI
+        # thread; blocks a second toggle from racing stop() (#10 freeze fix).
+        # Held only for the (usually fast) teardown — decode runs on the queue
+        # worker, so the next take starts the moment stop() returns (#14).
         self._last_delivered = ""  # last delivered text + when, for onset
         self._last_delivered_t = 0.0  # context-carryover into the next take (#18)
+        # The decode queue (#14): stop() enqueues a _QueuedTake and re-arms
+        # capture immediately; one persistent worker drains it in order so each
+        # take's decode + delivery can lag behind the next take's capture — the
+        # "speak, send, speak again, never blocked" flow. Depth is bounded at
+        # start time (queue_depth_cap) so a wedged engine can't pile up audio.
+        self._decode_q: queue.Queue[_QueuedTake | None] = queue.Queue()
+        self._seq = 0  # monotonic take id, the mini-bubble's identity (#15)
+        self._pending = 0  # takes enqueued or in-flight, not yet delivered
+        self._pending_lock = threading.Lock()
 
     @Slot()
     def toggle_from_hotkey(self) -> None:
@@ -98,22 +130,35 @@ class Controller(QObject):
 
     @Slot()
     def toggle(self) -> None:
-        if self._finishing:
-            return  # a take is being stopped/decoded; ignore until it lands so
-            # a fast second press can't race the off-GUI teardown (#10)
+        if self._stopping:
+            return  # the recorder is tearing down; ignore until it frees so a
+            # fast second press can't race the off-GUI stop() (#10)
         if self._recorder.recording:
             self._press_started_take = False
-            self._finishing = True
+            self._stopping = True
             self._stop_partials.set()
             # stop() drains/closes the PortAudio stream and once stalled 65 s
             # (id 162). It used to run HERE on the GUI thread → whole-UI freeze.
-            # Now the stop AND the decode run on the worker; the GUI thread only
-            # flips state and returns, so the bubble stays live through a stall
-            # (#10). The _finishing guard above serializes re-entry.
+            # Now stop() runs on a worker and ENQUEUES the take for decode; the
+            # GUI thread only flips state and returns, and _stopping clears the
+            # moment the recorder frees — so the NEXT take can start while this
+            # one is still decoding (#14). The guard serializes only the (fast)
+            # teardown, not the decode.
+            partial, target = self._last_partial, self._target
             self._bubble.start_processing()
             self._bridge.state.emit("processing")
-            threading.Thread(target=self._stop_and_finish, daemon=True).start()
+            threading.Thread(
+                target=self._stop_and_enqueue, args=(target, partial), daemon=True
+            ).start()
         else:
+            # Structural depth cap (#14): if decodes have stacked up to the cap a
+            # wedged engine would otherwise grow RAM unbounded — refuse the new
+            # take with a toast rather than pile on another audio buffer. Never a
+            # silent drop; the user is told to wait.
+            cap = int(settings.get("queue_depth_cap"))
+            if self._pending >= cap:
+                self._bridge.error.emit(f"File pleine ({self._pending}) — patiente")
+                return
             self._press_started_take = True
             self._last_partial = ""  # fresh take, no preview shown yet (#10)
             # Snapshot the destination window NOW, while it still has focus and
@@ -136,22 +181,24 @@ class Controller(QObject):
         """Esc: abort the current take. Stop the recorder and DISCARD its
         audio — no decode, no delivery, nothing recorded. No-op when idle so
         a global Esc never does anything except dismiss a live take."""
-        if not self._recorder.recording or self._finishing:
+        if not self._recorder.recording or self._stopping:
             return
         self._press_started_take = False
-        self._finishing = True  # block re-entry while the stream tears down
+        self._stopping = True  # block re-entry while the stream tears down
         self._stop_partials.set()
         self._bubble.cancel()
-        self._bridge.state.emit("idle")
+        self._emit_state()
         print("take cancelled (Esc)")
 
         def _drain() -> None:
             # stop() off the GUI thread — Esc on a long take could stall in the
             # same 65 s PortAudio teardown and freeze the UI otherwise (#10).
+            # Cancel DISCARDS the audio: no enqueue, no decode, no delivery.
             try:
                 self._recorder.stop()  # return value dropped on purpose
             finally:
-                self._finishing = False
+                self._stopping = False
+                self._emit_state()
 
         threading.Thread(target=_drain, daemon=True).start()
 
@@ -209,15 +256,87 @@ class Controller(QObject):
             elapsed = time.monotonic() - started
             self._stop_partials.wait(max(0.1, PARTIAL_PERIOD_S - elapsed))
 
-    def _stop_and_finish(self) -> None:
-        """Worker entry: drain the recorder (was on the GUI thread, the freeze)
-        then decode+deliver. The whole slow path is now off the GUI thread."""
-        t_stop = time.monotonic()
-        audio = self._recorder.stop()
-        stop_s = time.monotonic() - t_stop
-        self._finish(audio, stop_s)
+    def start(self) -> None:
+        """Spawn the persistent decode worker. Called once from run(); kept out
+        of __init__ so a Controller built in a test never spawns a thread that
+        would block on an empty queue."""
+        threading.Thread(target=self._decode_worker, daemon=True).start()
 
-    def _finish(self, audio, stop_s: float = 0.0) -> None:
+    def _emit_state(self) -> None:
+        """The tray glyph reflects the whole pipeline, not just one take:
+        recording while the mic is live, processing while any take is still
+        decoding/queued, idle only when nothing is in flight (#14)."""
+        if self._recorder.recording:
+            state = "recording"
+        elif self._pending > 0 or self._stopping:
+            state = "processing"
+        else:
+            state = "idle"
+        self._bridge.state.emit(state)
+
+    def _stop_and_enqueue(self, target: DeliveryTarget, partial: str) -> None:
+        """Worker entry for a toggle-stop: drain the recorder (the 65 s freeze
+        risk, off the GUI thread) then ENQUEUE the take for decode. Clearing
+        _stopping the instant stop() returns frees the recorder so the next take
+        starts immediately — capture and decode are now decoupled (#14)."""
+        t_stop = time.monotonic()
+        try:
+            audio = self._recorder.stop()
+            stop_s = time.monotonic() - t_stop
+            self._seq += 1
+            take = _QueuedTake(
+                seq=self._seq,
+                audio=audio,
+                target=target,
+                partial=partial,
+                stop_s=stop_s,
+            )
+            with self._pending_lock:
+                self._pending += 1
+            self._decode_q.put(take)
+            self._bridge.queued.emit(take.seq)
+        finally:
+            self._stopping = False  # recorder freed — the next take may start
+            self._emit_state()
+
+    def _decode_worker(self) -> None:
+        """Drain the decode queue in order, one take at a time. Sequential by
+        design: a single engine, and onset-carryover (#18) reads the previous
+        delivery, so order matters. A None is the shutdown sentinel."""
+        while True:
+            take = self._decode_q.get()
+            try:
+                if take is None:
+                    return
+                self._finish(take)
+            except Exception:  # _finish has its own belt; never kill the worker
+                pass
+            finally:
+                self._decode_q.task_done()
+
+    def _deliver(self, text: str, target: DeliveryTarget) -> None:
+        """Route delivery to the take's origin window when asked (#14).
+
+        Wayland keeps the bubble-hide path (no refocus-by-id there). On X11 in
+        "origin" mode, if focus has ACTUALLY moved since the take was spoken,
+        refocus the dictation window, paste, then hand focus back to where the
+        user is now — so a queued take lands where it belongs without stranding
+        them. No overlap (focus unchanged) → a plain paste in place, unchanged."""
+        if IS_WAYLAND:
+            deliver(text, target, before_paste=self._hide_bubble_for_paste)
+            return
+        origin = target.window_id
+        if settings.get("deliver_to") == "origin" and origin:
+            here = current_window_id()
+            if here and here != origin:
+                activate_window(origin)
+                deliver(text, target)
+                activate_window(here)  # polite: return the user where they were
+                return
+        deliver(text, target)
+
+    def _finish(self, take: _QueuedTake) -> None:
+        audio, stop_s = take.audio, take.stop_s
         try:
             # Acquiring the lock can block behind an in-flight partial decode:
             # measure that wait apart from the decode it gates.
@@ -260,11 +379,7 @@ class Controller(QObject):
                 text = expansion
             if text:
                 t1 = time.monotonic()
-                deliver(
-                    text,
-                    self._target,
-                    before_paste=self._hide_bubble_for_paste if IS_WAYLAND else None,
-                )
+                self._deliver(text, take.target)
                 deliver_s = time.monotonic() - t1
                 # Remember for the next take's onset carryover (#18).
                 self._last_delivered = text
@@ -314,27 +429,29 @@ class Controller(QObject):
                 miss_path = takes.save_miss(audio)
                 print(
                     f"miss: {audio_s:.1f}s audio, empty final | "
-                    f"raw={result.text!r}, last_partial={self._last_partial!r} | "
+                    f"raw={result.text!r}, last_partial={take.partial!r} | "
                     f"decode {decode_s:.2f}s"
                     + (f" | saved {miss_path}" if miss_path else "")
                 )
-                if not self._recover_with_partial("Rien entendu"):
+                if not self._recover_with_partial("Rien entendu", take.partial):
                     self._bridge.error.emit("Rien entendu")
         except Exception as exc:  # surface in the bubble, never crash
-            if not self._recover_with_partial("Décodage raté"):
+            if not self._recover_with_partial("Décodage raté", take.partial):
                 self._bridge.error.emit(str(exc)[:120])
         finally:
-            self._finishing = False  # teardown done — re-entry allowed again
-            self._bridge.state.emit("idle")
+            with self._pending_lock:
+                self._pending -= 1
+            self._bridge.delivered.emit(take.seq)  # mini-bubble clears (#15)
+            self._emit_state()
 
-    def _recover_with_partial(self, reason: str) -> bool:
+    def _recover_with_partial(self, reason: str, partial: str = "") -> bool:
         """Recovery belt (#10): when the final decode is lost — an exception, or
-        empty while a partial was visibly painted — salvage the last partial by
-        copying it to the clipboard (NEVER auto-paste a provisional; the final
-        is the truth and this isn't it) and telling the user it's there. The
-        screenshot freeze (id 162) landed fine, so this is a net for true losses
-        and crashes, not the freeze fix. Returns True iff a partial was saved."""
-        partial = self._last_partial.strip()
+        empty while a partial was visibly painted — salvage that take's last
+        partial by copying it to the clipboard (NEVER auto-paste a provisional;
+        the final is the truth and this isn't it) and telling the user it's
+        there. Takes the partial per-take (#14: an overlapping next take may have
+        already reset the live one). Returns True iff a partial was saved."""
+        partial = partial.strip()
         if not partial:
             return False
         try:
@@ -453,6 +570,7 @@ def run() -> None:
         backend_source=backend_source,
     )
     controller = Controller(engine, recorder, bubble, bridge)
+    controller.start()  # spin up the decode-queue worker (#14)
 
     bridge.toggled.connect(controller.toggle_from_hotkey)
     bridge.combo_released.connect(controller.on_combo_release)
