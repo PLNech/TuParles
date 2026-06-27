@@ -110,6 +110,42 @@ def test_stop_and_enqueue_drains_recorder_and_queues(monkeypatch):
     assert bridge.queued.emits == [(1,)]  # mini-bubble notified (#15)
 
 
+def test_enqueue_records_mode(monkeypatch):
+    """The take carries how it ended (hold vs toggle) for the journal."""
+    c = _controller(SimpleNamespace(), _Recorder(recording=True), _Bridge())
+    c._stop_and_enqueue(DeliveryTarget(), "", "hold")
+    assert c._decode_q.get_nowait().mode == "hold"
+
+
+def test_combo_release_marks_hold_then_stops(monkeypatch):
+    """A push-to-talk release flags the stop as 'hold' and the enqueued take
+    inherits it; a plain toggle stays 'toggle'."""
+    from tuparles.config import HOTKEY_HOLD_S
+
+    rec = _Recorder(recording=True)
+    c = _controller(SimpleNamespace(), rec, _Bridge())
+    captured = {}
+    monkeypatch.setattr(
+        c,
+        "_stop_and_enqueue",
+        lambda target, partial, mode="toggle": captured.update(mode=mode),
+    )
+
+    # Run the spawned worker inline so the assert isn't racing the thread.
+    class _Inline:
+        def __init__(self, target, args=(), daemon=False):
+            self._t, self._a = target, args
+
+        def start(self):
+            self._t(*self._a)
+
+    monkeypatch.setattr(daemon_mod.threading, "Thread", _Inline)
+    c._press_started_take = True
+    c.on_combo_release(HOTKEY_HOLD_S + 0.1)  # held long enough → release ends it
+    assert captured["mode"] == "hold"
+    assert c._ending_via_hold is False  # consumed, not left armed for the next
+
+
 def test_depth_cap_refuses_new_take_with_toast(monkeypatch):
     """At the queue depth cap a new take is refused with a toast, never a silent
     drop and never another audio buffer piled on (#14)."""

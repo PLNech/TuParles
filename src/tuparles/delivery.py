@@ -73,19 +73,9 @@ def capture_target() -> DeliveryTarget:
         ).stdout.strip()
     except (subprocess.SubprocessError, OSError):
         wid = ""
-    cls = ""
-    if wid:
-        try:
-            cls = subprocess.run(
-                ["xdotool", "getwindowclassname", wid],
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=1,
-            ).stdout.strip()
-        except (subprocess.SubprocessError, OSError):
-            cls = ""
-    return DeliveryTarget(wm_class=cls, window_id=wid)
+    # Class via xprop, NOT xdotool getwindowclassname (absent on xdotool 3.x —
+    # the long-standing "everything pastes Ctrl+V even into terminals" bug).
+    return DeliveryTarget(wm_class=_x11_wm_class(wid), window_id=wid)
 
 
 def current_window_id() -> str:
@@ -104,6 +94,34 @@ def current_window_id() -> str:
         ).stdout.strip()
     except (subprocess.SubprocessError, OSError):
         return ""
+
+
+def _x11_wm_class(window_id: str) -> str:
+    """The WM_CLASS of an X11 window as "instance|class", via xprop.
+
+    The cross-version-reliable path: xdotool only grew `getwindowclassname` in
+    later releases (the box here ships 3.20160805 — `Unknown command`), so every
+    class read through it silently returned '' and terminals fell back to plain
+    Ctrl+V (a no-op control char in a tty — the "nothing pasted" misses). xprop
+    is part of base X11 and has always exposed WM_CLASS, so it works everywhere
+    this daemon can run. '' when unreadable (no id, window gone, xprop absent) —
+    delivery then assumes not-a-terminal, the safe default. Both halves are kept
+    ("kitty|kitty") so terminal/chat detection can match either."""
+    if not window_id:
+        return ""
+    try:
+        out = subprocess.run(
+            ["xprop", "-id", window_id, "WM_CLASS"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=1,
+        ).stdout
+    except (subprocess.SubprocessError, OSError):
+        return ""
+    # WM_CLASS(STRING) = "instance", "class"  → keep both, pipe-joined.
+    vals = re.findall(r'"((?:[^"\\]|\\.)*)"', out)
+    return "|".join(vals) if vals else ""
 
 
 def activate_window(window_id: str) -> bool:
@@ -472,16 +490,9 @@ def _x11_focus_combo(focus_class: str = "") -> tuple[str, str]:
     over a live read, which can race a window switch between stop and paste."""
     wm_class = focus_class
     if not wm_class:
-        try:
-            wm_class = subprocess.run(
-                ["xdotool", "getactivewindow", "getwindowclassname"],
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=2,
-            ).stdout
-        except subprocess.SubprocessError:
-            wm_class = ""  # unknown focus → assume not a terminal, plain Ctrl+V
+        # Live re-read via xprop (xdotool 3.x has no getwindowclassname); a window
+        # switch between stop and paste is rare on the synchronous path.
+        wm_class = _x11_wm_class(current_window_id())
     return wm_class, _paste_combo(_pair_is_terminal(wm_class))
 
 
