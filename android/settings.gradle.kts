@@ -17,3 +17,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "TuParles"
 include(":app")
+include(":whisper")
