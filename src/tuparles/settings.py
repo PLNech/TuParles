@@ -119,6 +119,12 @@ _DEFAULTS: dict[str, object] = {
     # buffers unbounded. Five is generous for back-to-back dictation; raise it if
     # you routinely out-run the decoder.
     "queue_depth_cap": 5,
+    # Show a small row of chips above the bubble, one per take still decoding in
+    # the queue (#15) — so when takes overlap (#14) you can see how many are
+    # still cooking and watch each flash as it lands. Cosmetic; the queue works
+    # the same with them off. It's a setting: on by default, hide if you find the
+    # extra motion noisy.
+    "queue_chips": True,
 }
 
 

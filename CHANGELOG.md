@@ -16,6 +16,15 @@ Building toward the DeliveryTarget keystone — and seeding doubt on the way.
   indistinguishable from a shell by class, so dictating there: set `shift-enter`.
 
 ### Added
+- **Queue chips — the backlog made visible** (`ui.py`, `daemon.py`,
+  `settings.py`, `tests/test_queue_chips.py`, #15) — a small strip of pills above
+  the bubble, one per take still decoding in the queue (#14). The main bubble
+  shows the take you're speaking now; these show how many earlier takes are still
+  cooking and flash each as it lands (a brighter pulse of the backend hue — green
+  stays GPU — then it fades). Rides the new `queued`/`delivered` signals; lazily
+  built (single-take users never instantiate it); opt-out (`queue_chips`). The
+  colour decision is a pure `chip_color()`, headless-tested; the strip's model is
+  tested offscreen. Rendering wants your eyes on a live overlap to confirm.
 - **FIFO decode queue — capture and decode, decoupled** (`daemon.py`,
   `delivery.py`, `settings.py`, `tests/test_daemon_finish.py`,
   `tests/test_delivery.py`, #14) — a toggle-stop no longer holds the next take

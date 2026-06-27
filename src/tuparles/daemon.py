@@ -579,6 +579,8 @@ def run() -> None:
     bridge.final.connect(bubble.show_final)
     bridge.command.connect(bubble.show_final)  # edit confirmation toast
     bridge.error.connect(bubble.show_error)
+    bridge.queued.connect(bubble.on_queued)  # queue chips (#15)
+    bridge.delivered.connect(bubble.on_delivered)
 
     tray = Tray(backend_source=backend_source)
     bridge.state.connect(tray.set_state)
