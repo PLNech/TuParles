@@ -4,6 +4,9 @@ These layers carry block authority, so they must be precise: a checksum either
 validates or it doesn't; a denylist matches whole tokens or not at all.
 """
 
+import builtins
+import importlib
+import sys
 from collections import Counter
 
 from tuparles import privacy
@@ -54,6 +57,37 @@ class TestStructured:
         # a 15-digit number with a wrong NIR control key must NOT be flagged
         text = "numero 295057524500158 pas valide"
         assert all(f.kind != "pii.fr_nir" for f in privacy.find_structured(text))
+
+    def test_stdnum_absent_degrades_checksums_only(self, monkeypatch):
+        real_import = builtins.__import__
+
+        def blocked_import(name, globals=None, locals=None, fromlist=(), level=0):
+            if name == "stdnum" or name.startswith("stdnum."):
+                raise ImportError("stdnum blocked for optional-dependency test")
+            return real_import(name, globals, locals, fromlist, level)
+
+        monkeypatch.setattr(builtins, "__import__", blocked_import)
+        for name in list(sys.modules):
+            if name == "stdnum" or name.startswith("stdnum."):
+                monkeypatch.delitem(sys.modules, name, raising=False)
+        monkeypatch.delitem(sys.modules, "tuparles.privacy.structured", raising=False)
+        monkeypatch.delitem(sys.modules, "tuparles.privacy.redact", raising=False)
+        monkeypatch.setattr(privacy, "redact", privacy.redact)
+
+        structured = importlib.import_module("tuparles.privacy.structured")
+        checksum_text = f"iban {VALID_IBAN} nir {VALID_NIR} carte {VALID_CARD}"
+        assert structured.find_structured(checksum_text) == []
+        assert {f.kind for f in structured.find_structured("mail a@b.com")} == {
+            "pii.email"
+        }
+
+        redact_mod = importlib.import_module("tuparles.privacy.redact")
+        dl = Denylist.from_terms(block=["Ascensio"])
+        text = f"client Ascensio key AKIA1234567890ABCDEF iban {VALID_IBAN}"
+        out = redact_mod.redact(text, denylist=dl)
+        assert "<DENYLIST>" in out
+        assert "<SECRET.AWS_KEY>" in out
+        assert VALID_IBAN in out
 
 
 class TestDenylist:
