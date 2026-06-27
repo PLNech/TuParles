@@ -382,5 +382,47 @@
     "subject": "Recalibrate mic meter to a quiet laptop mic",
     "completedAt": "2026-06-26",
     "learnings": "Level constants are per-machine. FULL_SCALE=3000/floor=80 (XPS22 desktop mic) left the quiet 4080-laptop mic's normal speech (~80-100 RMS) UNDER the floor -> flat bars. A meter calibrated above the mic's speech floor is indistinguishable from a broken one. Forensics (pavucontrol + RMS probe) before theory."
+  },
+  {
+    "id": "s18-miss-capture",
+    "subject": "Capture empty-decode misses (audio + forensic log)",
+    "completedAt": "2026-06-27",
+    "learnings": "'Rien entendu' while partials showed text was a TRIPLE black hole: history.record() returns None on empty text -> no row -> no id-keyed WAV, and the forensic print only reached the launching terminal (the daemon is started from a shell, not journald, when run manually). The failure most worth debugging left zero trace. Fix: takes.save_miss() writes empty-final audio to takes/misses/miss-<ts>.wav (microsecond-stamped so two misses/sec can't collide; own 64MB self-pruning budget) + daemon prints a miss: line (raw decode, last_partial, timings). DOCTRINE: instrumentation bias should be INVERTED -- a clean landed take is self-evident, a miss is a mystery, so it deserves MORE trace not none."
+  },
+  {
+    "id": "s18-cpu-language",
+    "subject": "Stamp CPU take language from the partials engine",
+    "completedAt": "2026-06-27",
+    "learnings": "qwen runs --silent and emits NO language, so every CPU take had blank lang/lang_prob -- the code-switch signal that is the whole point of the tool went dark on the fallback path. The CpuPartialsEngine (whisper base) DOES detect language and we threw it away. Fix: CpuPartialsEngine keeps last_language/last_language_prob; QwenCpuEngine.transcribe borrows it. Honest about provenance: it's the small partials model's guess, a signal not ground truth; None when partials are off."
+  },
+  {
+    "id": "s18-replay-cpu",
+    "subject": "replay_takes.py --engine cpu",
+    "completedAt": "2026-06-27",
+    "learnings": "The drift harness hardcoded GpuEngine(), so it was useless with the card wedged. --engine cpu runs the vendored qwen binary so real takes replay through the engine that actually served you. qwen takes no initial_prompt, so the CPU path skips the seed regimes entirely (one decode per take). Replay goes through the ENGINE, not the recorder -- so it can reproduce transliteration errors from a WAV but NOT recorder-teardown stalls."
+  },
+  {
+    "id": "s18-freeze",
+    "subject": "Long-take freeze: move stop()+decode off the GUI thread (#9,#10)",
+    "completedAt": "2026-06-27",
+    "learnings": "ROOT CAUSE via the new stop_s forensic: recorder.stop() blocked the GUI thread 65s while the decode was 1s -- an EPISODIC PortAudio teardown stall. Critically NOT length-driven: take 157 (40.7s, LONGER) stopped in 0.03s; take 162 (38.9s) took 65s. That falsified my own snapshot-O(n2) theory with the data table -- DON'T THEORIZE PAST YOUR DATA. Fix: stop()+decode now run on the worker thread (GUI only flips state + spawns), with a _finishing bool guarding all THREE stop entry points (toggle/Esc/combo-release) against a re-entry race. Shipped the sub-timing diagnostic (pa_stop/pa_close/concat, prints only when >0.5s) FIRST and alone, because the stall is episodic + not reproducible from a WAV (replay bypasses the recorder) -- instrument, then wait, then refactor."
+  },
+  {
+    "id": "s18-recovery-belt",
+    "subject": "Partial recovery belt (#11)",
+    "completedAt": "2026-06-27",
+    "learnings": "On a lost final decode (exception OR empty-while-a-partial-was-painted), copy the last partial to the clipboard + toast 'partiel copié (Ctrl+V)' -- NEVER auto-paste a provisional (the final is the truth and this isn't it). Key distinction surfaced by forensics: the screenshot 'freeze' take actually LANDED fine (876 chars in history), so the belt is a net for true crashes, NOT the freeze fix -- told the user plainly rather than letting the belt masquerade as the cure."
+  },
+  {
+    "id": "s18-heartbeat",
+    "subject": "Persistent heartbeat watchdog (#10)",
+    "completedAt": "2026-06-27",
+    "learnings": "The existing GUI-stall QTimer only logs once the main thread RESUMES, so a whole-system freeze that ends in a reboot kills the process before it ever fires -- useless for the user's actual case. A plain-thread hb: beat every 15s into journald SURVIVES reboots: the last beat dates when we went silent, and gui_lag (now - the GUI thread's last tick) separates a GUI-only hang (beats flow, lag high = OUR bug) from a whole-box freeze (beats stop cold = not us). FREEZE VERDICT: likely NOT TuParles -- Optimus laptop (Intel iGPU drives the display, the 4080 is compute-only, so our CUDA is on a different GPU than the compositor), no OOM in any boot, daemon exited cleanly; the real GPU errors were nvidia-drm 'Failed to grab modeset ownership' = the classic Optimus display-handoff DRIVER bug."
+  },
+  {
+    "id": "s18-punctuation",
+    "subject": "Doubled-comma collapse + ellipsis trois petits points (#6,#7)",
+    "completedAt": "2026-06-27",
+    "learnings": "DOUBLED COMMA: saying 'virgule' makes Whisper ALSO transcribe a prosodic comma for the pause -> 'test, ,'. _tidy collapse is COMMA-ONLY and exact (never merges different marks so '?!' survives, never touches the ellipsis glyph or '...' which have no comma) -- doctrine-clean: only removes a provably-redundant comma. ELLIPSIS: 'trois petits points' is far more ambiguous than the formal 'points de suspension' because it's everyday conversational French; solved structurally with a determiner-shield (les/des/ces trois petits points = mention = text, bare = dictation) mirroring the existing English bare-'point' PROTECTED_PATTERNS. Emits the real U+2026; formal triggers switched to it too. When in doubt, it's text."
   }
 ]
