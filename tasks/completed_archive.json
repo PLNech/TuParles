@@ -466,5 +466,47 @@
     "subject": "Un-red the CI matrix (#10)",
     "completedAt": "2026-06-27",
     "learnings": "main was red for days, unnoticed: one collection error (test_daemon_finish imports Qt-at-module-top via Controller(QObject)) aborts the WHOLE pytest session, masking every downstream failure. Faithful CI repro = FRESH GIT CLONE + clean venv (a clean venv over your tree keeps the gitignored qwen binary → false green). Windows can't reopen an open NamedTemporaryFile → mkstemp+close+unlink. Each fix exposed the next layer (4 waves)."
+  },
+  {
+    "id": "s22-android-rungs",
+    "subject": "Android laddered spike Rung 0-3 on Fairphone 6",
+    "completedAt": "2026-06-27",
+    "learnings": "Ladder a device build (hello-world→Chaquopy embed→whisper.cpp JNI→full loop) so each rung is a shippable result; the embed chain (pipeline→casing/lexicon/punctuation/repeats/syntax→config_core) is pure-stdlib, so Chaquopy bundles src/ via srcDir(../../src) with ZERO pip deps and heavy desktop modules ship as dead bytecode."
+  },
+  {
+    "id": "s22-android-o3",
+    "subject": "Fix catastrophic on-device decode speed (-O3)",
+    "completedAt": "2026-06-27",
+    "learnings": "A debug Android APK compiles ggml at -O0 → ~50x slower (88s vs 1.5s for base/4s clip). MUST force -O3, and on the RIGHT targets: ggml-cpu/ggml-base (the FetchContent sub-targets where GEMM lives), NOT just the thin `ggml` meta-target. CPU pegged at ~360% = computing-not-hung; that distinction (top) is the key diagnostic."
+  },
+  {
+    "id": "s22-android-langauto",
+    "subject": "Fix FR→EN mistranslation (language=auto)",
+    "completedAt": "2026-06-27",
+    "learnings": "The whisper.android JNI hardcodes params.language=\"en\" → it TRANSLATES French to English regardless of model size (even large-v3). Fix = thread a language param (auto|fr|en) through JNI+Kotlin, default auto. Validate engine-param fixes OFFLINE: build whisper-cli from the vendored source and decode the device's own recorded WAVs (en vs auto) — no phone needed, proves it in seconds."
+  },
+  {
+    "id": "s22-android-recreation",
+    "subject": "Recreation-safe heavyweight model",
+    "completedAt": "2026-06-27",
+    "learnings": "A multi-hundred-MB model must live in a process-scoped singleton (mutex-guarded), NOT the Activity — rotation/uiMode recreation else reloads it (seconds). Belt+suspenders: configChanges + portrait lock so recreation doesn't even fire. Verify by firing a uiMode toggle and asserting 0 new 'Displayed' + no reload chatter."
+  },
+  {
+    "id": "s22-android-selfcontained",
+    "subject": "Self-contained experimental APK + bundled model",
+    "completedAt": "2026-06-27",
+    "learnings": "No INTERNET permission ⇒ model must bundle in assets (uncompressed via noCompress 'bin' so it mmap-loads ~1s). It's >100MB so it CAN'T go in git (GitHub 100MB file limit) — gitignore it + fetch script; the release APK is built locally and uploaded to GitHub Releases (2GB limit). loadModel: prefer a pushed model in external files, else the bundled asset (dev gets large, fresh install gets base)."
+  },
+  {
+    "id": "s22-android-export",
+    "subject": "Local email export of captures",
+    "completedAt": "2026-06-27",
+    "learnings": "Export from a no-network app via ACTION_SEND_MULTIPLE + FileProvider (content:// URIs, grantUriPermission) to a fixed address — the user's email app does the send, so we keep zero INTERNET permission and the privacy story holds."
+  },
+  {
+    "id": "s22-android-release",
+    "subject": "Ship experimental.apk + merge to main",
+    "completedAt": "2026-06-27",
+    "learnings": "Trim vendored whisper.cpp before merging: the ggml backends (cuda/vulkan/metal/sycl/...) are add_subdirectory-gated on GGML_<BACKEND> (default OFF) so deleting them is safe for a CPU build — 20MB→6.2MB, rebuild stays green. Fairphone aggressively suspends USB when idle → adb drops mid-command; the app runs independently and captures persist on-device, so pull-on-demand beats a fragile live logcat stream."
   }
 ]
