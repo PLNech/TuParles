@@ -37,7 +37,12 @@ from tuparles.config import (
     PARTIAL_WINDOW_S,
     SAMPLE_RATE,
 )
-from tuparles.delivery import capture_focus_class, deliver, execute_command
+from tuparles.delivery import (
+    capture_focus_class,
+    deliver,
+    execute_command,
+    to_clipboard,
+)
 from tuparles.engine import load_engine
 from tuparles.pipeline import postprocess
 
@@ -74,6 +79,9 @@ class Controller(QObject):
         self._entry_source = "hotkey"  # how the current take was started (telemetry)
         self._last_partial = ""  # most recent partial shown — forensics for an
         # empty final decode ("partials showed text, then Rien entendu"; #10)
+        self._finishing = False  # a take is being stopped/decoded off the GUI
+        # thread; blocks re-entry from any of the three stop entry points so a
+        # second press can't race the teardown (#10 freeze fix)
 
     @Slot()
     def toggle_from_hotkey(self) -> None:
@@ -87,20 +95,21 @@ class Controller(QObject):
 
     @Slot()
     def toggle(self) -> None:
+        if self._finishing:
+            return  # a take is being stopped/decoded; ignore until it lands so
+            # a fast second press can't race the off-GUI teardown (#10)
         if self._recorder.recording:
             self._press_started_take = False
+            self._finishing = True
             self._stop_partials.set()
-            # stop() drains and closes the PortAudio stream on the GUI thread —
-            # if it ever blocks, the whole UI freezes here, before any decode.
-            # Time it so a freeze accuses the right step instead of "decode".
-            t_stop = time.monotonic()
-            audio = self._recorder.stop()
-            stop_s = time.monotonic() - t_stop
+            # stop() drains/closes the PortAudio stream and once stalled 65 s
+            # (id 162). It used to run HERE on the GUI thread → whole-UI freeze.
+            # Now the stop AND the decode run on the worker; the GUI thread only
+            # flips state and returns, so the bubble stays live through a stall
+            # (#10). The _finishing guard above serializes re-entry.
             self._bubble.start_processing()
             self._bridge.state.emit("processing")
-            threading.Thread(
-                target=self._finish, args=(audio, stop_s), daemon=True
-            ).start()
+            threading.Thread(target=self._stop_and_finish, daemon=True).start()
         else:
             self._press_started_take = True
             self._last_partial = ""  # fresh take, no preview shown yet (#10)
@@ -125,14 +134,24 @@ class Controller(QObject):
         """Esc: abort the current take. Stop the recorder and DISCARD its
         audio — no decode, no delivery, nothing recorded. No-op when idle so
         a global Esc never does anything except dismiss a live take."""
-        if not self._recorder.recording:
+        if not self._recorder.recording or self._finishing:
             return
         self._press_started_take = False
+        self._finishing = True  # block re-entry while the stream tears down
         self._stop_partials.set()
-        self._recorder.stop()  # return value dropped on purpose
         self._bubble.cancel()
         self._bridge.state.emit("idle")
         print("take cancelled (Esc)")
+
+        def _drain() -> None:
+            # stop() off the GUI thread — Esc on a long take could stall in the
+            # same 65 s PortAudio teardown and freeze the UI otherwise (#10).
+            try:
+                self._recorder.stop()  # return value dropped on purpose
+            finally:
+                self._finishing = False
+
+        threading.Thread(target=_drain, daemon=True).start()
 
     @Slot(float)
     def on_combo_release(self, held_s: float) -> None:
@@ -187,6 +206,14 @@ class Controller(QObject):
                     self._bridge.partial.emit(text)
             elapsed = time.monotonic() - started
             self._stop_partials.wait(max(0.1, PARTIAL_PERIOD_S - elapsed))
+
+    def _stop_and_finish(self) -> None:
+        """Worker entry: drain the recorder (was on the GUI thread, the freeze)
+        then decode+deliver. The whole slow path is now off the GUI thread."""
+        t_stop = time.monotonic()
+        audio = self._recorder.stop()
+        stop_s = time.monotonic() - t_stop
+        self._finish(audio, stop_s)
 
     def _finish(self, audio, stop_s: float = 0.0) -> None:
         try:
@@ -275,11 +302,32 @@ class Controller(QObject):
                     f"decode {decode_s:.2f}s"
                     + (f" | saved {miss_path}" if miss_path else "")
                 )
-                self._bridge.error.emit("Rien entendu")
+                if not self._recover_with_partial("Rien entendu"):
+                    self._bridge.error.emit("Rien entendu")
         except Exception as exc:  # surface in the bubble, never crash
-            self._bridge.error.emit(str(exc)[:120])
+            if not self._recover_with_partial("Décodage raté"):
+                self._bridge.error.emit(str(exc)[:120])
         finally:
+            self._finishing = False  # teardown done — re-entry allowed again
             self._bridge.state.emit("idle")
+
+    def _recover_with_partial(self, reason: str) -> bool:
+        """Recovery belt (#10): when the final decode is lost — an exception, or
+        empty while a partial was visibly painted — salvage the last partial by
+        copying it to the clipboard (NEVER auto-paste a provisional; the final
+        is the truth and this isn't it) and telling the user it's there. The
+        screenshot freeze (id 162) landed fine, so this is a net for true losses
+        and crashes, not the freeze fix. Returns True iff a partial was saved."""
+        partial = self._last_partial.strip()
+        if not partial:
+            return False
+        try:
+            to_clipboard(partial)
+        except Exception:
+            return False
+        print(f"recovery: {reason}; partial copied ({len(partial)} chars)")
+        self._bridge.error.emit(f"{reason} — partiel copié (Ctrl+V)")
+        return True
 
     def _resolve_nudge(self, cmd: Command) -> Command | None:
         """'un peu plus' = one more unit of the last edit; 'un peu moins' = undo

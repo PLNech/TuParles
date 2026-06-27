@@ -29,6 +29,28 @@ ratés observable.
   initial_prompt, so the CPU path skips the seed regimes and does one decode per
   take.
 
+### Fixed
+- **Long-take freeze: stop() off the GUI thread** (`daemon.py`, `audio.py`,
+  `tests/test_daemon_finish.py`, #10) — a long take froze the whole UI (bars
+  and partials stuck) then paste-dumped seconds later. Forensics (the new
+  `stop_s`) caught `recorder.stop()` blocking the GUI thread 65 s while the
+  decode was 1 s — an *episodic* PortAudio teardown stall (NOT length-driven: a
+  longer take stopped in 0.03 s). The stop AND the decode now run on the worker
+  thread; the GUI only flips state and returns, so the bubble stays live through
+  a stall. A `_finishing` guard serializes the three stop entry points
+  (toggle/Esc/combo-release) so a fast second press can't race the teardown.
+  `recorder.stop()` is sub-timed (pa_stop/pa_close/concat) and shouts the
+  breakdown only when slow, to fingerprint the next stall — it can't be
+  reproduced from a captured WAV (replay bypasses the recorder).
+
+### Added (cont.)
+- **Partial recovery belt** (`daemon.py`, #10) — when the final decode is *lost*
+  (an exception, or empty while a partial was visibly painted), the last partial
+  is copied to the clipboard with a toast (`Ctrl+V`), never auto-pasted — the
+  final is the truth and a provisional isn't it. A net for true crashes; the
+  screenshot freeze actually landed fine, so this is belt *and* braces, not the
+  freeze fix.
+
 ### Doctrine
 - **The failure you record least is the one you most need.** Instrumentation
   bias should be inverted: a clean landed take is self-evident; a miss is a
