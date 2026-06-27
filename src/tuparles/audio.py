@@ -11,6 +11,7 @@ disconnected mid-session) we fall back to the default rather than kill a take.
 """
 
 import threading
+import time
 
 import numpy as np
 
@@ -145,15 +146,35 @@ class Recorder:
             return np.concatenate(self._chunks).reshape(-1)
 
     def stop(self) -> np.ndarray:
-        """Stop capture and return the whole take as int16 mono."""
+        """Stop capture and return the whole take as int16 mono.
+
+        The daemon times the whole call as ``stop_s``; once (id 162) it took
+        65 s while the decode was 1 s — an *episodic* PortAudio teardown stall
+        (NOT length-driven: a longer take, id 157, stopped in 0.03 s). It can't
+        be reproduced from a captured WAV (replay bypasses the recorder), so we
+        instrument the three sub-steps and shout the breakdown only when the
+        call is slow — silent on every normal take, a fingerprint on the stall.
+        """
         if self._stream is None:
             return np.zeros(0, dtype=np.int16)
+        t0 = time.monotonic()
         self._stream.stop()
+        t_stop = time.monotonic()
         self._stream.close()
+        t_close = time.monotonic()
         self._stream = None
         with self._lock:
-            if not self._chunks:
-                return np.zeros(0, dtype=np.int16)
-            audio = np.concatenate(self._chunks).reshape(-1)
+            audio = (
+                np.concatenate(self._chunks).reshape(-1)
+                if self._chunks
+                else np.zeros(0, dtype=np.int16)
+            )
             self._chunks = []
+        t_concat = time.monotonic()
+        if t_concat - t0 > 0.5:  # a normal stop is ~milliseconds; this is a stall
+            print(
+                f"recorder.stop slow: pa_stop {t_stop - t0:.2f}s, "
+                f"pa_close {t_close - t_stop:.2f}s, "
+                f"concat {t_concat - t_close:.2f}s"
+            )
         return audio
