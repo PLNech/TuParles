@@ -66,6 +66,7 @@ class _QueuedTake:
     target: DeliveryTarget = field(default_factory=DeliveryTarget)
     partial: str = ""
     stop_s: float = 0.0
+    mode: str = "toggle"  # how the take ended: "hold" (combo released) | "toggle"
 
 
 class Bridge(QObject):
@@ -117,6 +118,9 @@ class Controller(QObject):
         self._seq = 0  # monotonic take id, the mini-bubble's identity (#15)
         self._pending = 0  # takes enqueued or in-flight, not yet delivered
         self._pending_lock = threading.Lock()
+        self._ending_via_hold = False  # the next stop came from a combo RELEASE
+        # (push-to-talk), not a second press (toggle) — recorded per take so the
+        # journal tells the two apart when a delivery goes wrong
 
     @Slot()
     def toggle_from_hotkey(self) -> None:
@@ -145,10 +149,14 @@ class Controller(QObject):
             # one is still decoding (#14). The guard serializes only the (fast)
             # teardown, not the decode.
             partial, target = self._last_partial, self._target
+            mode = "hold" if self._ending_via_hold else "toggle"
+            self._ending_via_hold = False
             self._bubble.start_processing()
             self._bridge.state.emit("processing")
             threading.Thread(
-                target=self._stop_and_enqueue, args=(target, partial), daemon=True
+                target=self._stop_and_enqueue,
+                args=(target, partial, mode),
+                daemon=True,
             ).start()
         else:
             # Structural depth cap (#14): if decodes have stacked up to the cap a
@@ -170,6 +178,13 @@ class Controller(QObject):
             self._recorder.start()
             cue.play_start()  # opt-in soft tick: capture is live, speak now
             telemetry.event("entry.dictation", source=self._entry_source)
+            # Lifecycle forensics (#14): one line per ARMED take (a request), so
+            # the journal pairs requests with the `take #N delivered` lines below
+            # — a missing pair is a delivery that was lost, not a decode that was.
+            print(
+                f"take armed: src={self._entry_source} "
+                f"target={self._target.wm_class or '?'!r} @{self._target.window_id or '?'}"
+            )
             self._bubble.start_recording()
             self._bridge.state.emit("recording")
             if getattr(self._engine, "supports_partials", False):
@@ -211,6 +226,7 @@ class Controller(QObject):
             and self._recorder.recording
             and self._press_started_take
         ):
+            self._ending_via_hold = True  # this stop is a push-to-talk release
             self.toggle()
 
     def _hide_bubble_for_paste(self) -> None:
@@ -274,7 +290,9 @@ class Controller(QObject):
             state = "idle"
         self._bridge.state.emit(state)
 
-    def _stop_and_enqueue(self, target: DeliveryTarget, partial: str) -> None:
+    def _stop_and_enqueue(
+        self, target: DeliveryTarget, partial: str, mode: str = "toggle"
+    ) -> None:
         """Worker entry for a toggle-stop: drain the recorder (the 65 s freeze
         risk, off the GUI thread) then ENQUEUE the take for decode. Clearing
         _stopping the instant stop() returns frees the recorder so the next take
@@ -290,11 +308,16 @@ class Controller(QObject):
                 target=target,
                 partial=partial,
                 stop_s=stop_s,
+                mode=mode,
             )
             with self._pending_lock:
                 self._pending += 1
             self._decode_q.put(take)
             self._bridge.queued.emit(take.seq)
+            print(
+                f"take #{take.seq} queued: {audio.size / SAMPLE_RATE:.1f}s, "
+                f"mode={mode}, pending={self._pending}"
+            )
         finally:
             self._stopping = False  # recorder freed — the next take may start
             self._emit_state()
@@ -389,10 +412,20 @@ class Controller(QObject):
                 # decode + post-process + deliver. The dominant term names
                 # the freeze; total ≈ perceived stop→paste latency.
                 print(
-                    f"take: {audio_s:.0f}s audio, {len(text)} chars, "
-                    f"lang={result.language} | stop {stop_s:.2f}s, "
+                    f"take #{take.seq} delivered: {audio_s:.0f}s audio, "
+                    f"{len(text)} chars, lang={result.language}, mode={take.mode}, "
+                    f"→{take.target.wm_class or '?'!r} | stop {stop_s:.2f}s, "
                     f"lock {lock_wait_s:.2f}s, decode {decode_s:.2f}s, "
                     f"post {post_s:.2f}s, deliver {deliver_s:.2f}s"
+                )
+                # A success event to pair against entry.dictation (the request):
+                # requests minus deliveries = the deliveries that went missing.
+                telemetry.event(
+                    "deliver.done",
+                    seq=take.seq,
+                    mode=take.mode,
+                    chars=len(text),
+                    wm_class=take.target.wm_class,
                 )
                 try:
                     # Minimize before persist: the verbatim text was just
@@ -427,10 +460,11 @@ class Controller(QObject):
                 # in dev mode, stash the audio under misses/ for replay (#10).
                 audio_s = audio.size / SAMPLE_RATE
                 miss_path = takes.save_miss(audio)
+                telemetry.event("take.miss", seq=take.seq, mode=take.mode)
                 print(
-                    f"miss: {audio_s:.1f}s audio, empty final | "
-                    f"raw={result.text!r}, last_partial={take.partial!r} | "
-                    f"decode {decode_s:.2f}s"
+                    f"take #{take.seq} miss: {audio_s:.1f}s audio, empty final, "
+                    f"mode={take.mode} | raw={result.text!r}, "
+                    f"last_partial={take.partial!r} | decode {decode_s:.2f}s"
                     + (f" | saved {miss_path}" if miss_path else "")
                 )
                 if not self._recover_with_partial("Rien entendu", take.partial):

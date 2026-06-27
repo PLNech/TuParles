@@ -5,6 +5,22 @@
 Building toward the DeliveryTarget keystone — and seeding doubt on the way.
 
 ### Fixed
+- **Window-class detection works across xdotool versions** (`delivery.py`,
+  `daemon.py`, `tests/test_delivery.py`) — the *real* "un sur deux" delivery bug:
+  `xdotool getwindowclassname` doesn't exist on xdotool 3.x (the box here ships
+  3.20160805 → `Unknown command`), so *every* class read silently returned empty
+  and **terminals got plain Ctrl+V** — a no-op control char in a tty, the
+  "nothing pasted" misses. Class now reads via **`xprop -id <id> WM_CLASS`** (base
+  X11, present everywhere), so kitty/gnome-terminal/Claude-Code are detected and
+  get Ctrl+Shift+V. Not a queue regression — a long-standing latent assumption,
+  surfaced by the new forensics. `window_id` was always fine (`getactivewindow`).
+- **Delivery lifecycle forensics** (`daemon.py`) — one journal line per take from
+  *armed* (the request: source + target window/class) → *queued* (audio, mode,
+  pending depth) → *delivered* (chars, lang, mode, target) or *miss*. Plus
+  `deliver.done` / `take.miss` telemetry events: `entry.dictation` minus
+  `deliver.done` = the deliveries that went missing, by mode. Records **push-to-
+  talk (hold) vs toggle** per take, so the next delivery failure is a measurement,
+  not a guess.
 - **Dictated newlines reach submit-on-Enter inputs** (`delivery.py`,
   `settings.py`, `tests/test_delivery.py`, #5) — "à la ligne" → `\n` was kept in
   storage but a pasted lone LF is *swallowed* by Claude Code / chat inputs (paste

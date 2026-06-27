@@ -530,13 +530,16 @@ class TestCaptureTarget:
         def fake_run(argv, *a, **kw):
             if argv == ["xdotool", "getactivewindow"]:
                 return subprocess.CompletedProcess(argv, 0, stdout="12345\n")
-            if argv[:2] == ["xdotool", "getwindowclassname"]:
-                return subprocess.CompletedProcess(argv, 0, stdout="Alacritty\n")
+            if argv[:2] == ["xprop", "-id"]:
+                # The reliable path: xdotool 3.x has no getwindowclassname.
+                return subprocess.CompletedProcess(
+                    argv, 0, stdout='WM_CLASS(STRING) = "alacritty", "Alacritty"\n'
+                )
             return subprocess.CompletedProcess(argv, 0, stdout="")
 
         monkeypatch.setattr(delivery.subprocess, "run", fake_run)
         t = delivery.capture_target()
-        assert t.window_id == "12345" and t.wm_class == "Alacritty"
+        assert t.window_id == "12345" and t.wm_class == "alacritty|Alacritty"
 
     def test_x11_capture_failure_is_empty(self, monkeypatch):
         monkeypatch.setattr(delivery, "_WAYLAND", False)
@@ -608,6 +611,48 @@ class TestOriginFocus:
     def test_activate_window_false_on_wayland(self, monkeypatch):
         monkeypatch.setattr(delivery, "_WAYLAND", True)
         assert delivery.activate_window("42") is False
+
+
+class TestWmClass:
+    """Cross-version window class via xprop (xdotool 3.x lacks
+    getwindowclassname → the silent 'everything pastes Ctrl+V' bug)."""
+
+    def _xprop(self, monkeypatch, stdout="", raises=None):
+        def fake_run(argv, *a, **kw):
+            if raises is not None:
+                raise raises
+            return subprocess.CompletedProcess(argv, 0, stdout=stdout)
+
+        monkeypatch.setattr(delivery.subprocess, "run", fake_run)
+
+    def test_parses_both_halves(self, monkeypatch):
+        self._xprop(monkeypatch, stdout='WM_CLASS(STRING) = "kitty", "kitty"\n')
+        assert delivery._x11_wm_class("42") == "kitty|kitty"
+
+    def test_distinct_instance_and_class(self, monkeypatch):
+        self._xprop(
+            monkeypatch,
+            stdout='WM_CLASS(STRING) = "gnome-terminal-server", "Gnome-terminal"\n',
+        )
+        out = delivery._x11_wm_class("42")
+        assert out == "gnome-terminal-server|Gnome-terminal"
+        assert delivery._pair_is_terminal(out)  # the whole point: now detected
+
+    def test_empty_without_id(self, monkeypatch):
+        called = []
+        monkeypatch.setattr(
+            delivery.subprocess, "run", lambda *a, **k: called.append(a)
+        )
+        assert delivery._x11_wm_class("") == ""
+        assert called == []  # no id → no xprop call
+
+    def test_empty_when_xprop_absent(self, monkeypatch):
+        self._xprop(monkeypatch, raises=FileNotFoundError("xprop"))
+        assert delivery._x11_wm_class("42") == ""
+
+    def test_empty_on_unset_property(self, monkeypatch):
+        self._xprop(monkeypatch, stdout="WM_CLASS:  not found.\n")
+        assert delivery._x11_wm_class("42") == ""
 
 
 class TestExecuteCommand:
