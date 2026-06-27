@@ -10,11 +10,17 @@ fakes — no Qt event loop, no real audio, no engine.
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
+
+from tuparles.delivery import DeliveryTarget
+from tuparles.engine import Transcription
+
+# daemon.py imports Qt at module load (Controller is a QObject); skip the whole
+# module where Qt is absent (CI's light install), like the other Qt-coupled tests.
+pytest.importorskip("PySide6")
 
 from tuparles import daemon as daemon_mod
 from tuparles.daemon import Controller, _QueuedTake, backend_shift_message
-from tuparles.delivery import DeliveryTarget
-from tuparles.engine import Transcription
 
 
 def _take(audio=None, target=None, partial="", seq=1):

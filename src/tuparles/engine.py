@@ -7,6 +7,7 @@ unavailable (driver issues, VRAM pressure).
 """
 
 import ctypes
+import os
 import subprocess
 import tempfile
 import wave
@@ -333,15 +334,22 @@ class QwenCpuEngine:
         # uniform engine interface, ignored here (#18).
         if audio.size == 0:
             return Transcription("")
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=True) as tmp:
-            _write_wav(Path(tmp.name), audio)
+        # Close the temp file before writing/reading it by name: Windows forbids
+        # reopening a temp file whose handle is still open (PermissionError), so
+        # mkstemp + close the fd, then write the WAV and hand the path to qwen,
+        # and clean up by hand. Identical behaviour on Linux/macOS.
+        fd, tmp_name = tempfile.mkstemp(suffix=".wav")
+        os.close(fd)
+        tmp_path = Path(tmp_name)
+        try:
+            _write_wav(tmp_path, audio)
             result = subprocess.run(
                 [
                     str(QWEN_BINARY),
                     "-d",
                     str(QWEN_MODEL_DIR),
                     "-i",
-                    tmp.name,
+                    str(tmp_path),
                     "-t",
                     str(QWEN_THREADS),
                     "--silent",
@@ -350,6 +358,8 @@ class QwenCpuEngine:
                 text=True,
                 timeout=120,
             )
+        finally:
+            tmp_path.unlink(missing_ok=True)
         if result.returncode != 0:
             raise RuntimeError(f"qwen_asr failed: {result.stderr.strip()[:500]}")
         # qwen emits no language, so borrow the partials model's last detection

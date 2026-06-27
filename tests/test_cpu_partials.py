@@ -68,6 +68,11 @@ def test_resilient_uses_cpu_partials_after_sticky_fallback(tmp_path, monkeypatch
 
     cpu = QwenCpuEngine(partials_factory=FakePartials)
     eng = ResilientEngine(gpu_factory=DeadGpu, cpu_factory=lambda: cpu)
+    # CPU decode shells out to the qwen binary, absent in CI — fake it so the
+    # fallback path is exercised without the vendored binary.
+    from tuparles import engine as engine_mod
+
+    monkeypatch.setattr(engine_mod.subprocess, "run", lambda *a, **k: _FakeProc())
     eng.transcribe(AUDIO)  # GPU dead + rebuild dead → sticky CPU
     assert eng.active_backend == "cpu"
     assert eng.supports_partials is True  # CPU now streams (was False pre-#127)
@@ -107,6 +112,10 @@ def test_resilient_window_follows_live_backend(tmp_path, monkeypatch):
     cpu = QwenCpuEngine(partials_factory=FakePartials)
     eng = ResilientEngine(gpu_factory=DeadGpu, cpu_factory=lambda: cpu)
     assert eng.partial_window_s == PARTIAL_WINDOW_S  # GPU still presumed live → long
+    # CPU decode shells out to the qwen binary, absent in CI — fake it.
+    from tuparles import engine as engine_mod
+
+    monkeypatch.setattr(engine_mod.subprocess, "run", lambda *a, **k: _FakeProc())
     eng.transcribe(AUDIO)  # GPU dies → sticky CPU
     assert eng.active_backend == "cpu"
     assert eng.partial_window_s == 6  # now follows the CPU engine's short window
