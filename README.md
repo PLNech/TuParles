@@ -139,6 +139,47 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
   only drops to the CPU fallback if that also fails. A take never silently
   yields nothing.
 
+## Mobile (experimental)
+
+TuParles runs on Android too — the same privacy story, on the phone in your
+pocket. The whole loop is local: **mic → native whisper.cpp → embedded CPython
+`postprocess()` → text**, sharing *one* Python core with the desktop (no Kotlin
+re-port, no dual-maintenance tax). No `INTERNET` permission is declared; the OS
+itself denies any socket.
+
+**👉 [Download the experimental APK](https://github.com/PLNech/TuParles/releases/tag/android-poc-0.1)**
+(`android-poc-0.1`, ~212 MB — model bundled, installable today on arm64). It's a
+proof of concept: a capture harness that records FR/EN code-switch prompts, runs
+the desktop pipeline on-device, and lets you export takes to `dev@nech.pl` via a
+local intent. Toggles for language (auto/fr/en) and postprocess (on/off). Build
+and model-swap notes in [`android/README.md`](android/README.md).
+
+### The plan
+
+The embed path (CPython via Chaquopy + whisper.cpp via JNI) was chosen over a
+Kotlin port after a research fan-out — see `docs/research/2026-06-27-android-*`.
+It ships as a phased epic:
+
+| Phase | Issue | Status |
+|---|---|---|
+| Portable core: split `config_core` | [#4](https://github.com/PLNech/TuParles/issues/4) | ✅ ([PR #9](https://github.com/PLNech/TuParles/pull/9)) |
+| Externalise postprocess tables to JSON | [#5](https://github.com/PLNech/TuParles/issues/5) | ✅ ([PR #11](https://github.com/PLNech/TuParles/pull/11)) |
+| On-device engine + packaging | [#3](https://github.com/PLNech/TuParles/issues/3), [#6](https://github.com/PLNech/TuParles/issues/6)–[#8](https://github.com/PLNech/TuParles/issues/8) | 🧪 POC shipped, productionisation open |
+
+Epic: [#2](https://github.com/PLNech/TuParles/issues/2). The spike (commits
+`e10ac02..f87d70b`) merged to `main` as `bc12fc4`; CI un-redding landed in
+[PR #10](https://github.com/PLNech/TuParles/pull/10).
+
+### Honest status
+
+A POC, not a daily driver yet. The bundled `base` model is fast (~1.5 s/clip)
+and keeps French as French, but fumbles some loanwords; `large-v3-turbo` is
+flawless but ~30 s/clip on a mid-range phone (push it manually — see the Android
+README). Two findings cost the most to learn: the native build **must** be `-O3`
+(a debug `ggml` build is ~50× slower), and whisper's language **must** be `auto`
+(a hardcoded `"en"` silently translated French to English). Tested on a
+Fairphone 6; other devices unverified.
+
 ## Install
 
 One-liner (Linux — apt / pacman / dnf / zypper, X11; needs git + poetry.
