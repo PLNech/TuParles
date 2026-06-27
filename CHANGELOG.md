@@ -1,5 +1,48 @@
 # Changelog
 
+## Sprint 20 — 2026-06-27 · Le visage honnête
+
+A convenience sprint: small, visible polish that makes the tool *read* honestly —
+own its misses, name its fallbacks, and never silently destroy what you'd copied.
+
+### Added
+- **Never recant a salvaged partial** (`daemon.py`, `ui.py`, #27) — when a final
+  decode is lost but a partial was visibly painted, the bubble no longer red-flips
+  to a failure. A new amber **`recovered`** state dissolves the *dimmed partial
+  itself* — the words you saw stay on screen — with a `Ctrl+V` badge (it was
+  copied) and a longer dwell. Held, not failed. Rides its own `recovered` signal,
+  not the red `error` channel.
+- **Backend-shift toast** (`daemon.py`, `settings.py`, #27) — the first time a
+  decode falls back GPU→CPU mid-session, one toast: *"Passé sur CPU — un peu plus
+  lent."* The bars go green→blue regardless; this names it so the change reads as
+  honest, not a bug. Sticky (the fallback is) — said once. Setting `backend_toast`
+  (default on).
+- **Decode-elapsed counter** (`ui.py`, #28) — a decode running past 3 s shows a
+  dim `(Ns)` badge in the pill, so a long CPU take reads as *working (12s)*, not
+  *frozen?* Injected clock → headless-tested, no sleeps.
+- **Clipboard preserve/restore** (`delivery.py`, `settings.py`, #28) — TuParles
+  pastes via the clipboard, clobbering whatever you'd copied. With
+  `clipboard_restore` on (default **off**), we snapshot the clipboard before
+  delivery and put it back after the paste settles — **but only when it's
+  genuinely text.** The clipboard is typed: an image or a file list snapshot via a
+  text tool is empty, and writing *that* back would destroy the payload. So a
+  non-text clipboard is left alone (our pasted text stays) rather than nuked.
+  `is_text_clipboard()` rejects image/files/app types (and `text/uri-list`, a file
+  list wearing a `text/` prefix) before any text match.
+
+### Changed
+- **Softer empty-decode copy** (`daemon.py`, #27) — a lost final with no partial
+  to salvage now says *"Je n'ai pas bien saisi"* instead of *"Rien entendu."* The
+  miss is ours to own, not the user's voice to blame.
+- **Réglages** (`settings_ui.py`) — two new toggles with tooltips: *Prévenir au
+  passage GPU → CPU* and *Préserver le presse-papiers* (incl. its re-paste
+  tradeoff). It's a setting: smart default, total override.
+
+### Deferred
+- #28's **first-audio pulse** (the live waveform already *is* the "it's listening"
+  cue) and **device-switch toast** (more plumbing, a rare event) — left in the
+  backlog rather than gilded.
+
 ## Sprint 19 — 2026-06-27 · Le doute, le flux, la cible
 
 Building toward the DeliveryTarget keystone — and seeding doubt on the way.

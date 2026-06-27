@@ -154,10 +154,17 @@ def deliver(
     elif target is None:
         target = DeliveryTarget()
     t0 = time.monotonic()
+    # Snapshot the user's clipboard first, when asked AND it's safely text (#28).
+    restore = from_clipboard() if settings.get("clipboard_restore") else None
     to_clipboard(text)
     t1 = time.monotonic()
     _type_into_focus(text, target.wm_class, before_paste)
     t2 = time.monotonic()
+    if restore is not None:
+        time.sleep(
+            _CLIPBOARD_RESTORE_SETTLE
+        )  # let the paste land before we put it back
+        to_clipboard(restore)
     # Pastes have clocked at ~3 s where ~0.3 s is expected — when delivery
     # drags, say which leg (clipboard vs xdotool) so the journal can tell.
     # Skip the warning for a chunked delivery: its pacing is deliberate
@@ -722,3 +729,88 @@ def to_clipboard(text: str) -> None:
         check=True,
         timeout=10,
     )
+
+
+# Clipboard preserve/restore (#28). Pasting clobbers whatever the user had
+# copied; with `clipboard_restore` on we snapshot it first and put it back after
+# the paste settles. The clipboard is TYPED, though — it can hold an image or
+# files, not just text. A text-only snapshot of an image is empty, and writing
+# that back would DESTROY the image (implicit data loss). So we only ever
+# snapshot+restore when the clipboard is genuinely text; anything else, we leave
+# our pasted text in place rather than nuke a payload we can't faithfully hold.
+
+# Let the target app actually consume the paste (Ctrl+V) before we hand the old
+# clipboard back — otherwise a late-reading app could paste the restored value
+# instead of the dictation. Generous: the decode worker is sequential, so a beat
+# here costs nothing the next take would notice.
+_CLIPBOARD_RESTORE_SETTLE = 0.4
+
+# X11 selection targets that mean "plain text" (xclip TARGETS / wl-paste types).
+_TEXT_TARGETS = {"UTF8_STRING", "STRING", "TEXT", "COMPOUND_TEXT"}
+
+
+def is_text_clipboard(targets: "list[str] | None") -> bool:
+    """True iff the clipboard's advertised types are safe to snapshot+restore as
+    text. None/empty (we couldn't tell) → False: when unsure, don't risk
+    clobbering a non-text payload. An image/files/app type → False. Pure —
+    headless-tested, no subprocess."""
+    if not targets:
+        return False
+    saw_text = False
+    for t in targets:
+        tl = t.lower()
+        # Reject FIRST: a non-text payload bails before any text/* match, so
+        # "text/uri-list" (a FILE list, not plain text) is caught, not mistaken
+        # for text by its "text/" prefix.
+        if (
+            tl.startswith(("image/", "application/", "x-special/", "audio/", "video/"))
+            or "uri-list" in tl
+        ):
+            return False  # a richer payload a text-only restore would destroy
+        if t in _TEXT_TARGETS or tl.startswith("text/"):
+            saw_text = True
+    return saw_text
+
+
+def _clipboard_targets() -> "list[str] | None":
+    """The types currently on the clipboard, or None if we can't enumerate them
+    (tool missing / error). Wayland via `wl-paste --list-types`; X11 via `xclip
+    -t TARGETS` when present (xsel can't list targets, so no xclip → None → we
+    skip restore rather than guess)."""
+    if _WAYLAND:
+        cmd = ["wl-paste", "--list-types"]
+    elif shutil.which("xclip"):
+        cmd = ["xclip", "-selection", "clipboard", "-o", "-t", "TARGETS"]
+    else:
+        return None
+    try:
+        out = subprocess.run(cmd, capture_output=True, check=False, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if out.returncode != 0:
+        return None
+    return [
+        ln.strip()
+        for ln in out.stdout.decode(errors="replace").splitlines()
+        if ln.strip()
+    ]
+
+
+def from_clipboard() -> "str | None":
+    """The current clipboard text to restore later, or None when it isn't safely
+    text (image/files/unknown) or can't be read — in which case deliver() leaves
+    the clipboard alone rather than destroy a non-text payload (#28)."""
+    if not is_text_clipboard(_clipboard_targets()):
+        return None
+    read = (
+        ["wl-paste", "--no-newline"]
+        if _WAYLAND
+        else ["xsel", "--clipboard", "--output"]
+    )
+    try:
+        out = subprocess.run(read, capture_output=True, check=False, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if out.returncode != 0:
+        return None
+    return out.stdout.decode(errors="replace")

@@ -158,6 +158,26 @@ class SettingsDialog(QDialog):
         self._cpu_partials.setChecked(bool(settings.get("cpu_partials_enabled")))
         layout.addWidget(self._cpu_partials)
 
+        self._backend_toast = QCheckBox("Prévenir au passage GPU → CPU")
+        self._backend_toast.setToolTip(
+            "Si le GPU lâche en cours de session, une note te le dit une fois "
+            "(« Passé sur CPU — un peu plus lent »). Les barres passent de vert "
+            "à bleu de toute façon ; ceci explique pourquoi."
+        )
+        self._backend_toast.setChecked(bool(settings.get("backend_toast")))
+        layout.addWidget(self._backend_toast)
+
+        self._clipboard_restore = QCheckBox("Préserver le presse-papiers")
+        self._clipboard_restore.setToolTip(
+            "TuParles colle via le presse-papiers, ce qui écrase ce que tu avais "
+            "copié. Coché, on le sauvegarde et on le remet après le collage — "
+            "uniquement s'il s'agit de texte (jamais une image ou des fichiers, "
+            "qu'un retour en texte détruirait). Contrepartie : le texte dicté "
+            "n'est plus laissé dans le presse-papiers pour un re-collage manuel."
+        )
+        self._clipboard_restore.setChecked(bool(settings.get("clipboard_restore")))
+        layout.addWidget(self._clipboard_restore)
+
         layout.addWidget(QLabel("<b>Écran de la bulle</b>"))
         screen_hint = QLabel(
             "Sur quel écran la bulle s'affiche. « Écran principal » par défaut ; "
@@ -316,6 +336,8 @@ class SettingsDialog(QDialog):
         settings.put("start_cue_sound", self._start_sound.isChecked())
         settings.put("tray_animation", self._tray_anim.isChecked())
         settings.put("cpu_partials_enabled", self._cpu_partials.isChecked())
+        settings.put("backend_toast", self._backend_toast.isChecked())
+        settings.put("clipboard_restore", self._clipboard_restore.isChecked())
         settings.put("bubble_screen", self._screen.currentData())
         telemetry.set_enabled(self._telemetry.isChecked())
         settings.put("pii_redact_history", self._redact.isChecked())

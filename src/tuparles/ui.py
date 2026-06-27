@@ -12,6 +12,7 @@ queued signal connections, see daemon.py).
 
 import math
 import subprocess
+import time
 from collections import deque
 from collections.abc import Callable
 
@@ -52,6 +53,13 @@ _GPU = QColor(122, 199, 130)  # GPU active
 _CPU = QColor(122, 162, 247)  # CPU/qwen fallback
 _ACCENT = _CPU  # legacy alias: the pre-engine-colour default accent
 _ERR = QColor(247, 118, 142)
+# Amber: a lost final whose partial we salvaged (#27). Warmer than error red —
+# "held, not failed" — so a recovery never reads as the hard red flip of a crash.
+_AMBER = QColor(250, 179, 135)
+
+# Once a decode runs longer than this, the bubble shows an elapsed counter so a
+# slow CPU take reads as "working (12s)", not "frozen?" (#28).
+DECODE_COUNTER_AFTER_S = 3.0
 
 _PLACEHOLDER = "Je t'écoute…"
 
@@ -154,6 +162,15 @@ CHIP_H = 26  # strip height
 CHIP_GAP_ABOVE = 10  # gap between the strip and the main bubble below it
 
 
+def decode_counter_text(elapsed_s: float) -> str:
+    """The elapsed-counter badge for a slow decode (#28): "" until the take has
+    run past DECODE_COUNTER_AFTER_S, then "(Ns)" so a long CPU decode reads as
+    working, not frozen. Pure — headless-tested, no paint pass needed."""
+    if elapsed_s < DECODE_COUNTER_AFTER_S:
+        return ""
+    return f"({int(elapsed_s)}s)"
+
+
 def chip_color(state: str, base: QColor) -> QColor:
     """A queue chip's colour: the live backend hue while decoding, brightened
     toward white the moment it's delivered (same hue, brighter — so green never
@@ -168,6 +185,7 @@ class Bubble(QWidget):
         view: str = "minimal",
         backend_source: Callable[[], str] | None = None,
         screen_source: Callable[[], object] | None = None,
+        clock: Callable[[], float] | None = None,
     ) -> None:
         super().__init__(
             None,
@@ -196,10 +214,15 @@ class Bubble(QWidget):
         # the setting drives placement (the standalone single-bubble path).
         self._screen_source = screen_source
         self._levels: deque[float] = deque([0.0] * BAR_COUNT, maxlen=BAR_COUNT)
-        self._state = "idle"  # idle | recording | processing | final | error
+        # idle | recording | processing | final | error | recovered | cancelled
+        self._state = "idle"
         self._view = view  # minimal (one eliding line) | full (wrapped, grows)
         self._text = ""
         self._phase = 0.0  # drives the breathing wave while processing
+        # Wall clock (injectable for tests). _processing_since stamps when the
+        # current decode began, so a long take can show an elapsed counter (#28).
+        self._clock = clock or time.monotonic
+        self._processing_since: float | None = None
 
         self._timer = QTimer(self)
         self._timer.setInterval(FPS_MS)
@@ -229,6 +252,7 @@ class Bubble(QWidget):
             self._set(text=text)
 
     def start_processing(self) -> None:
+        self._processing_since = self._clock()
         self._set(state="processing")
 
     def show_final(self, text: str) -> None:
@@ -250,6 +274,20 @@ class Bubble(QWidget):
             self.show()  # a Wayland paste error fires after the bubble-hide
         self._hide_timer.start(2500)
 
+    def show_recovered(self, partial: str) -> None:
+        """Never recant (#27): the final decode was lost but a partial was
+        visibly painted — keep those words on screen, dimmed and tinted amber
+        with a 'Ctrl+V' hint (the partial was copied), and dwell a beat longer.
+        A salvage reads as 'held for you', not the hard red flip of a failure.
+        Defers to a live recording, like show_final/show_error — the clipboard
+        copy already happened on the worker; this is only the face of it."""
+        if self._state == "recording":
+            return
+        self._set(state="recovered", text=partial)
+        if not self.isVisible():
+            self.show()
+        self._hide_timer.start(2800)
+
     def cancel(self) -> None:
         """Aborted take: freeze the waveform, flash 'Annulé', fade out.
         Forces dismissal from any state (unlike show_final/show_error, which
@@ -260,6 +298,8 @@ class Bubble(QWidget):
 
     def _set(self, state: str | None = None, text: str | None = None) -> None:
         if state is not None:
+            if state != "processing":
+                self._processing_since = None  # counter only runs during a decode
             self._state = state
         if text is not None:
             self._text = text
@@ -404,12 +444,15 @@ class Bubble(QWidget):
         return _GPU if self._backend_source() == "gpu" else _CPU
 
     def _bar_color(self) -> QColor:
-        """The bar colour for the current state. Every state but error keeps the
-        live backend hue: idle/recording/processing use it as-is, the final
-        "landed" flash brightens it toward white (brighter, not a different
-        colour — so green never means anything but GPU). Error is red."""
+        """The bar colour for the current state. Every state but error/recovered
+        keeps the live backend hue: idle/recording/processing use it as-is, the
+        final "landed" flash brightens it toward white (brighter, not a different
+        colour — so green never means anything but GPU). Error is red; a recovered
+        partial is amber (held, not failed)."""
         if self._state == "error":
             return _ERR
+        if self._state == "recovered":
+            return _AMBER
         if self._state == "final":
             return _brighten(self._engine_color())
         return self._engine_color()
@@ -440,6 +483,18 @@ class Bubble(QWidget):
             p.drawRoundedRect(QRectF(x, cy - half, BAR_W, half * 2), 1.5, 1.5)
             x += BAR_W + BAR_GAP
 
+    def _badge(self) -> tuple[str, QColor] | None:
+        """A small right-aligned tag for the minimal pill: an amber 'Ctrl+V' hint
+        on a recovered partial (#27), or a dim '(Ns)' elapsed counter once a
+        decode runs long (#28). None when neither applies."""
+        if self._state == "recovered":
+            return ("Ctrl+V", _AMBER)
+        if self._state == "processing" and self._processing_since is not None:
+            txt = decode_counter_text(self._clock() - self._processing_since)
+            if txt:
+                return (txt, _TEXT_DIM)
+        return None
+
     def _paint_text(self, p: QPainter) -> None:
         text = self._text or (_PLACEHOLDER if self._state == "recording" else "…")
         color = {
@@ -447,6 +502,7 @@ class Bubble(QWidget):
             "processing": _TEXT_DIM,
             "final": _TEXT_LIVE,
             "error": _ERR,
+            "recovered": _TEXT_DIM,
         }.get(self._state, _TEXT_DIM)
 
         bars_end = 24 + BAR_COUNT * (BAR_W + BAR_GAP)
@@ -464,10 +520,21 @@ class Bubble(QWidget):
             return
 
         rect = self.rect().adjusted(bars_end + 14, 0, -24, 0)
+        fm = QFontMetrics(self.font())
+        # Right-aligned badge ('Ctrl+V' / '(Ns)'): paint it first and reserve its
+        # width so the main text elides clear of it instead of overlapping.
+        badge = self._badge()
+        if badge is not None:
+            btext, bcolor = badge
+            bw = fm.horizontalAdvance(btext)
+            p.setPen(bcolor)
+            p.drawText(rect, Qt.AlignVCenter | Qt.AlignRight, btext)
+            p.setPen(color)
+            rect = rect.adjusted(0, 0, -(bw + 10), 0)
         # Live speech: elide left so the freshest words stay visible.
         # Final flash: elide right — it reads as "this is what landed".
         mode = Qt.ElideRight if self._state == "final" else Qt.ElideLeft
-        elided = QFontMetrics(self.font()).elidedText(text, mode, rect.width())
+        elided = fm.elidedText(text, mode, rect.width())
         p.drawText(rect, Qt.AlignVCenter | Qt.AlignLeft, elided)
 
     def _trim_to_fit(self, text: str, rect) -> str:
@@ -734,6 +801,10 @@ class BubbleGroup(QObject):
     def show_error(self, msg: str) -> None:
         for bubble in self._active:
             bubble.show_error(msg)
+
+    def show_recovered(self, partial: str) -> None:
+        for bubble in self._active:
+            bubble.show_recovered(partial)
 
     def cancel(self) -> None:
         for bubble in self._active:
