@@ -21,12 +21,14 @@ class TestDecodeCounterText:
     """Pure: '' until the decode runs past the threshold, then '(Ns)'."""
 
     def test_under_threshold_is_blank(self):
+        pytest.importorskip("PySide6")  # ui.py imports Qt at module load
         from tuparles.ui import decode_counter_text
 
         assert decode_counter_text(0.0) == ""
         assert decode_counter_text(2.9) == ""
 
     def test_at_and_past_threshold_counts_whole_seconds(self):
+        pytest.importorskip("PySide6")  # ui.py imports Qt at module load
         from tuparles.ui import DECODE_COUNTER_AFTER_S, decode_counter_text
 
         assert decode_counter_text(DECODE_COUNTER_AFTER_S) == "(3s)"
@@ -44,6 +46,7 @@ class TestRecoveredState:
         return Bubble(level_source=lambda: 0.0, clock=clock or (lambda: 0.0))
 
     def test_recovered_shows_partial_in_amber(self, tmp_path, monkeypatch):
+        pytest.importorskip("PySide6")  # ui.py imports Qt at module load
         from tuparles.ui import _AMBER, _ERR
 
         b = self._bubble(tmp_path, monkeypatch)
