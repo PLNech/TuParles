@@ -291,6 +291,27 @@ class SettingsDialog(QDialog):
         denylist_btn.clicked.connect(self._open_privacy)
         layout.addWidget(denylist_btn)
 
+        dev_hint = QLabel(
+            "Le <b>mode dev</b> enregistre l'<b>audio brut non masqué</b> de "
+            "chaque dictée sur le disque (local, jamais synchronisé) pour rejouer "
+            "un correctif. C'est ta <b>voix réelle</b>, pas le texte nettoyé — "
+            "laisse décoché sauf si tu déboggues. Quand c'est actif, un point "
+            "rouge reste affiché dans la barre des tâches."
+        )
+        dev_hint.setWordWrap(True)
+        layout.addWidget(dev_hint)
+        self._dev_recording = QCheckBox("Mode dev — enregistrer l'audio brut")
+        self._dev_recording.setToolTip(
+            "Enregistre ta voix non masquée localement (takes/<id>.wav), pour "
+            "rejouer un correctif. La variable TUPARLES_DEV reste prioritaire."
+        )
+        # Reflect the EFFECTIVE state (env override may force it on/off), but the
+        # checkbox writes only the setting — the env var is the dev's own lever.
+        from tuparles import takes
+
+        self._dev_recording.setChecked(takes.dev_recording_enabled())
+        layout.addWidget(self._dev_recording)
+
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
@@ -341,4 +362,5 @@ class SettingsDialog(QDialog):
         settings.put("bubble_screen", self._screen.currentData())
         telemetry.set_enabled(self._telemetry.isChecked())
         settings.put("pii_redact_history", self._redact.isChecked())
+        settings.put("dev_recording", self._dev_recording.isChecked())
         self.accept()

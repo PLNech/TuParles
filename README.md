@@ -98,6 +98,10 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
   can be kept from surfacing. A *Pare-feu PII* editor adds your own terms
   in two tiers — **block** (masked, for confidential project/client names)
   and **alert** (surfaced, never auto-erased) — case- and accent-insensitive.
+  A **dev-capture** toggle (off by default, *Réglages › Confidentialité*) can
+  save each take's *raw, unredacted* audio locally for replaying a fix — and
+  while it's on, the tray shows a **steady red dot** so it never records you
+  silently (`TUPARLES_DEV` overrides the toggle either way).
 
 ## Architecture
 

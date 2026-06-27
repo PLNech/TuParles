@@ -673,6 +673,17 @@ def run() -> None:
     app.aboutToQuit.connect(listener.stop)
     print("TuParles daemon up — Right Ctrl + Right Alt to dictate. Ctrl-C quits.")
 
+    # Launch reminder (#8): raw-audio capture writes your UNREDACTED voice to
+    # disk, so never let it run unannounced. The tray's red dot is the standing
+    # indicator; this is the boot-time word for it.
+    if takes.dev_recording_enabled():
+        src = (
+            "TUPARLES_DEV" if os.environ.get("TUPARLES_DEV") is not None else "Réglages"
+        )
+        print(
+            f"⚠ Mode dev actif ({src}) — l'audio brut non masqué est enregistré sur le disque."
+        )
+
     # First launch (or a release that added an axis): point at the personalization
     # walkthrough. The Qt carousel (#80 view) will surface this inline; until then
     # this nudge is the no-Qt path, gated by should_show() so it stops once done.

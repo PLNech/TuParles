@@ -29,6 +29,14 @@ own its misses, name its fallbacks, and never silently destroy what you'd copied
   non-text clipboard is left alone (our pasted text stays) rather than nuked.
   `is_text_clipboard()` rejects image/files/app types (and `text/uri-list`, a file
   list wearing a `text/` prefix) before any text match.
+- **Dev raw-audio capture as a visible toggle** (`takes.py`, `settings.py`,
+  `settings_ui.py`, `tray.py`, `daemon.py`, #8) — the replay capture
+  (`takes/<id>.wav`, *unredacted* voice) is now a Réglages toggle
+  (`dev_recording`, default off) with an explicit raw-audio warning, not env-only.
+  The earlier "env-only so it can't be flipped by accident" safety is kept
+  *differently*: while armed, the tray glyph shows a **steady red dot** and the
+  tooltip spells it out, plus a boot-time reminder line — so it can never run
+  silently. `TUPARLES_DEV` stays as the override (set = wins, either way).
 
 ### Changed
 - **Softer empty-decode copy** (`daemon.py`, #27) — a lost final with no partial
