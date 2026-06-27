@@ -737,3 +737,75 @@ class TestExecuteCommand:
         monkeypatch.setattr(delivery.shutil, "which", lambda _name: None)
         label = delivery.execute_command(Command("open_terminal"))
         assert label == "terminal indisponible"
+
+
+class TestIsTextClipboard:
+    """Type-aware guard (#28): only plain text is safe to snapshot+restore.
+    Anything richer (image, files, app data) must bail so we never destroy it
+    by writing a text-only value back."""
+
+    def test_plain_text_targets_are_ok(self):
+        assert delivery.is_text_clipboard(["UTF8_STRING", "STRING", "TARGETS"])
+        assert delivery.is_text_clipboard(["text/plain;charset=utf-8"])
+
+    def test_html_alongside_plain_text_is_still_text(self):
+        # Rich text — restoring UTF8 loses formatting, but it's still text, not a
+        # binary payload; acceptable.
+        assert delivery.is_text_clipboard(["text/html", "text/plain", "UTF8_STRING"])
+
+    def test_image_is_not_text(self):
+        assert not delivery.is_text_clipboard(["image/png", "image/bmp", "TARGETS"])
+
+    def test_image_with_a_text_target_is_still_rejected(self):
+        # An image that also offers a text representation: a text-only restore
+        # would drop the image. Bail — leave the clipboard alone.
+        assert not delivery.is_text_clipboard(["text/plain", "image/png"])
+
+    def test_file_list_is_not_text(self):
+        # text/uri-list is a FILE list — its "text/" prefix must not fool us.
+        assert not delivery.is_text_clipboard(
+            ["text/uri-list", "x-special/gnome-copied-files"]
+        )
+
+    def test_unknown_or_meta_only_is_not_text(self):
+        assert not delivery.is_text_clipboard(None)
+        assert not delivery.is_text_clipboard([])
+        assert not delivery.is_text_clipboard(["TARGETS", "TIMESTAMP", "MULTIPLE"])
+
+
+class TestClipboardRestore:
+    """deliver() preserves the user's clipboard around a paste — but only when
+    asked AND it's safely text. The pasted text always lands first; the restore
+    (if any) follows after the settle."""
+
+    def _wire(self, monkeypatch, *, restore_setting, snapshot):
+        settings_map = {"newline_mode": "auto", "clipboard_restore": restore_setting}
+        monkeypatch.setattr(delivery.settings, "get", lambda k: settings_map.get(k))
+        clips: list[str] = []
+        monkeypatch.setattr(delivery, "to_clipboard", lambda t: clips.append(t))
+        monkeypatch.setattr(delivery, "from_clipboard", lambda: snapshot)
+        monkeypatch.setattr(delivery, "_type_into_focus", lambda *a, **k: None)
+        monkeypatch.setattr(delivery.time, "sleep", lambda *_: None)
+        return clips
+
+    def test_restores_old_text_after_paste(self, monkeypatch):
+        clips = self._wire(monkeypatch, restore_setting=True, snapshot="OLD")
+        delivery.deliver("dictée", "code")
+        assert clips == ["dictée", "OLD"]  # paste lands, then the old text returns
+
+    def test_skips_restore_when_not_text(self, monkeypatch):
+        # from_clipboard() returns None for an image/files/unknown payload — we
+        # leave our pasted text rather than nuke what we can't faithfully hold.
+        clips = self._wire(monkeypatch, restore_setting=True, snapshot=None)
+        delivery.deliver("dictée", "code")
+        assert clips == ["dictée"]
+
+    def test_no_snapshot_when_disabled(self, monkeypatch):
+        called: list[bool] = []
+        settings_map = {"newline_mode": "auto", "clipboard_restore": False}
+        monkeypatch.setattr(delivery.settings, "get", lambda k: settings_map.get(k))
+        monkeypatch.setattr(delivery, "from_clipboard", lambda: called.append(True))
+        monkeypatch.setattr(delivery, "to_clipboard", lambda t: None)
+        monkeypatch.setattr(delivery, "_type_into_focus", lambda *a, **k: None)
+        delivery.deliver("dictée", "code")
+        assert called == []  # setting off → the clipboard is never even read

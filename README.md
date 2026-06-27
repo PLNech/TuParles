@@ -39,7 +39,13 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
   *minimal* pill in the tray or *Réglages*). The **tray glyph breathes** —
   calm at rest, livelier while recording, a travelling pulse while decoding, in
   the engine colour (toggle off in *Réglages*). Optional soft **start tick**
-  (*Réglages*, off by default) confirms recording has begun. On multi-monitor,
+  (*Réglages*, off by default) confirms recording has begun. A slow decode
+  (past ~3 s) shows a quiet **`(Ns)` counter** so it reads as *working*, not
+  frozen; and if a final is ever lost after a preview was shown, the bubble
+  **never recants** — it holds the salvaged words in **amber** with a `Ctrl+V`
+  hint (it was copied) instead of red-flashing a failure. If the GPU drops to
+  CPU mid-session, a one-time note says so (the bars go green→blue anyway).
+  On multi-monitor,
   pick which screen the bubble uses in *Réglages* — pin it to a monitor
   (default: primary), follow the mouse, follow the active window (where your
   text lands; on Wayland, where the focused window isn't queryable, it falls
@@ -55,7 +61,10 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
   window (X11 xdotool, modifier-safe); long ones are pasted (Ctrl+V, or
   Ctrl+Shift+V in terminals). On Wayland (GNOME) everything is pasted via
   ydotool (never typed — ydotool assumes a US keymap). The clipboard is
-  always set as backup.
+  always set as backup — and *Réglages* can **preserve and restore** it around
+  a take (off by default), so a dictation doesn't clobber what you'd copied. It
+  only ever restores genuine text: an image or file list on the clipboard is
+  left untouched rather than destroyed by a text-only write-back.
 - **Cleanup that knows its place** — spoken punctuation ("virgule",
   "point", "new line") in both languages, a personal lexicon for your
   jargon, and deterministic collapse of Whisper repetition loops. No AI

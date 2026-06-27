@@ -82,6 +82,18 @@ class Bridge(QObject):
     state = Signal(str)  # idle | recording | processing — tray glyph follows
     queued = Signal(int)  # a take entered the decode queue (seq) — mini-bubble (#15)
     delivered = Signal(int)  # that take landed (seq) — mini-bubble clears (#15)
+    recovered = Signal(str)  # final lost, the painted partial salvaged (#27) —
+    # the bubble dissolves the dimmed partial in amber, never a red recant
+
+
+def backend_shift_message(backend: str, already_announced: bool) -> str | None:
+    """The one-time backend-shift toast (#27): the first time a decode lands on
+    CPU after the GPU has given up mid-session, name the fallback so the bubble
+    going green→blue reads as honest rather than broken. Returns None while still
+    on GPU or once already announced. Pure — headless-tested."""
+    if backend == "cpu" and not already_announced:
+        return "Passé sur CPU — un peu plus lent"
+    return None
 
 
 class Controller(QObject):
@@ -121,6 +133,7 @@ class Controller(QObject):
         self._ending_via_hold = False  # the next stop came from a combo RELEASE
         # (push-to-talk), not a second press (toggle) — recorded per take so the
         # journal tells the two apart when a delivery goes wrong
+        self._backend_announced = False  # the one-time GPU→CPU toast has fired (#27)
 
     @Slot()
     def toggle_from_hotkey(self) -> None:
@@ -453,6 +466,16 @@ class Controller(QObject):
                 except Exception:
                     pass  # a lost history row must never cost a delivery
                 self._bridge.final.emit(text)
+                # Backend-shift toast (#27): if THIS decode is the one that fell
+                # back to CPU, say so once — emitted after the final flash so the
+                # notice wins the bubble (the text already landed in the window).
+                msg = backend_shift_message(
+                    getattr(self._engine, "active_backend", "gpu"),
+                    self._backend_announced,
+                )
+                if msg and settings.get("backend_toast"):
+                    self._backend_announced = True
+                    self._bridge.command.emit(msg)
             else:
                 # Empty final decode — the "Rien entendu" black hole. It records
                 # no history row (and so no id-keyed WAV), so without this the
@@ -469,7 +492,9 @@ class Controller(QObject):
                     + (f" | saved {miss_path}" if miss_path else "")
                 )
                 if not self._recover_with_partial("Rien entendu", take.partial):
-                    self._bridge.error.emit("Rien entendu")
+                    # Softer copy (#27): a lost final isn't the user's fault — don't
+                    # blame their voice ("Rien entendu"), own the miss instead.
+                    self._bridge.error.emit("Je n'ai pas bien saisi")
         except Exception as exc:  # surface in the bubble, never crash
             if not self._recover_with_partial("Décodage raté", take.partial):
                 self._bridge.error.emit(str(exc)[:120])
@@ -494,7 +519,10 @@ class Controller(QObject):
         except Exception:
             return False
         print(f"recovery: {reason}; partial copied ({len(partial)} chars)")
-        self._bridge.error.emit(f"{reason} — partiel copié (Ctrl+V)")
+        # Never recant (#27): show the salvaged partial itself, dimmed and amber
+        # with a 'Ctrl+V' badge — the words you saw stay on screen instead of
+        # red-flipping to a failure. The reason stays in the journal for forensics.
+        self._bridge.recovered.emit(partial)
         return True
 
     def _resolve_nudge(self, cmd: Command) -> Command | None:
@@ -614,6 +642,7 @@ def run() -> None:
     bridge.final.connect(bubble.show_final)
     bridge.command.connect(bubble.show_final)  # edit confirmation toast
     bridge.error.connect(bubble.show_error)
+    bridge.recovered.connect(bubble.show_recovered)  # never-recant salvage (#27)
     bridge.queued.connect(bubble.on_queued)  # queue chips (#15)
     bridge.delivered.connect(bubble.on_delivered)
 

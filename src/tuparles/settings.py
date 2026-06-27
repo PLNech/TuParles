@@ -125,6 +125,22 @@ _DEFAULTS: dict[str, object] = {
     # the same with them off. It's a setting: on by default, hide if you find the
     # extra motion noisy.
     "queue_chips": True,
+    # One-time toast "Passé sur CPU — un peu plus lent" the first time the engine
+    # falls back from GPU to CPU mid-session (#27). The bars already go green→blue,
+    # but a colour shift alone can read as a bug; this names it so the change reads
+    # as honest, not broken. Sticky for the session (the fallback is), shown once.
+    # It's a setting: on by default, silence it if you know what blue means.
+    "backend_toast": True,
+    # Preserve and restore the user's clipboard around a take (#28). TuParles
+    # pastes via the clipboard, which clobbers whatever you had copied. With this
+    # on, we snapshot the clipboard before delivery and put it back after the paste
+    # settles — your copy buffer survives a dictation. The tradeoff: the dictated
+    # text is no longer left on the clipboard for a manual re-paste (and an app
+    # that reads the clipboard unusually late could, rarely, paste the restored
+    # value). Default OFF — the safe choice keeps the current re-paste behaviour
+    # and never risks the core paste. It's a setting: opt in if you copy-paste
+    # heavily between takes.
+    "clipboard_restore": False,
 }
 
 

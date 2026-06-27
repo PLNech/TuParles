@@ -12,7 +12,7 @@ from types import SimpleNamespace
 import numpy as np
 
 from tuparles import daemon as daemon_mod
-from tuparles.daemon import Controller, _QueuedTake
+from tuparles.daemon import Controller, _QueuedTake, backend_shift_message
 from tuparles.delivery import DeliveryTarget
 from tuparles.engine import Transcription
 
@@ -43,6 +43,7 @@ class _Bridge:
             "final",
             "command",
             "error",
+            "recovered",
             "state",
             "queued",
             "delivered",
@@ -168,8 +169,10 @@ def test_recover_with_partial_copies_to_clipboard(monkeypatch):
     c = _controller(SimpleNamespace(), _Recorder(), bridge)
     assert c._recover_with_partial("Rien entendu", "  un partiel sauvé  ") is True
     assert clip["text"] == "un partiel sauvé"  # stripped, never auto-pasted
-    assert bridge.error.emits  # user told where it is
-    assert "Ctrl+V" in bridge.error.emits[-1][0]
+    # Never recant (#27): the salvage rides the amber `recovered` channel carrying
+    # the partial itself, NOT a red error flip. The 'Ctrl+V' hint is the badge now.
+    assert bridge.recovered.emits == [("un partiel sauvé",)]
+    assert not bridge.error.emits
 
 
 def test_recover_with_partial_noop_without_partial(monkeypatch):
@@ -216,7 +219,60 @@ def test_empty_final_with_partial_recovers(monkeypatch):
     c = _controller(_Eng(), _Recorder(recording=False), bridge)
     c._finish(_take(partial="le partiel visible"))
     assert clip["text"] == "le partiel visible"
-    assert any("partiel copié" in e[0] for e in bridge.error.emits)
+    # Recovery rides the amber `recovered` channel (the partial), not a red error.
+    assert bridge.recovered.emits == [("le partiel visible",)]
+
+
+# ── backend-shift toast (#27) ───────────────────────────────────────────────
+
+
+def test_backend_shift_message_pure():
+    assert backend_shift_message("gpu", False) is None  # still on GPU, nothing to say
+    assert backend_shift_message("cpu", True) is None  # already announced this session
+    assert backend_shift_message("cpu", False) == "Passé sur CPU — un peu plus lent"
+
+
+def test_finish_announces_cpu_fallback_once(monkeypatch):
+    """The first decode that lands on CPU emits the toast once; later takes stay
+    quiet (the fallback is sticky — say it once, not every take)."""
+
+    class _Eng:
+        active_backend = "cpu"
+
+        def transcribe(self, audio, context=None):
+            return Transcription("salut", language="fr", language_prob=1.0)
+
+    monkeypatch.setattr(daemon_mod, "deliver", lambda *a, **k: None)
+    monkeypatch.setattr(daemon_mod.history, "record", lambda *a, **k: None)
+    monkeypatch.setattr(daemon_mod.takes, "save_take", lambda *a, **k: None)
+    monkeypatch.setattr(daemon_mod, "postprocess", lambda text, **k: text)
+    bridge = _Bridge()
+    c = _controller(_Eng(), _Recorder(recording=False), bridge)
+    c._finish(_take(seq=1))
+    c._finish(_take(seq=2))
+    toasts = [e[0] for e in bridge.command.emits if "CPU" in e[0]]
+    assert toasts == ["Passé sur CPU — un peu plus lent"]
+    assert c._backend_announced is True
+
+
+def test_finish_no_toast_on_gpu(monkeypatch):
+    """A healthy GPU decode never fires the backend toast."""
+
+    class _Eng:
+        active_backend = "gpu"
+
+        def transcribe(self, audio, context=None):
+            return Transcription("salut", language="fr", language_prob=1.0)
+
+    monkeypatch.setattr(daemon_mod, "deliver", lambda *a, **k: None)
+    monkeypatch.setattr(daemon_mod.history, "record", lambda *a, **k: None)
+    monkeypatch.setattr(daemon_mod.takes, "save_take", lambda *a, **k: None)
+    monkeypatch.setattr(daemon_mod, "postprocess", lambda text, **k: text)
+    bridge = _Bridge()
+    c = _controller(_Eng(), _Recorder(recording=False), bridge)
+    c._finish(_take(seq=1))
+    assert not any("CPU" in e[0] for e in bridge.command.emits)
+    assert c._backend_announced is False
 
 
 # ── origin-window delivery routing (#14) ────────────────────────────────────
