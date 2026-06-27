@@ -39,6 +39,16 @@ own its misses, name its fallbacks, and never silently destroy what you'd copied
   silently. `TUPARLES_DEV` stays as the override (set = wins, either way).
 
 ### Infra
+- **Span token-stream model — the doubt-rendering keystone** (`spans.py`, #21) —
+  a take's text as a list of `Span` (word/punct/space/newline), each carrying
+  `confidence` (None/1.0 = certain), `origin` (decoded/inserted/rewritten/cased/
+  collapsed) and `original` (pre-rewrite surface, for never-hide reveal). The
+  room a flat string never had for "how sure?" and "what was this before?".
+  Load-bearing invariant `flatten(tokenize(t)) == t` is pinned byte-for-byte
+  against the code-switch corpus, so the span layer is a lossless *view* — delivery
+  and storage (which flatten back to a string) are untouched. Foundation only, no
+  user-visible change yet; unblocks the span pipeline (#22) and per-word doubt
+  rendering (#16/#24/#26).
 - **Cross-env capability probe + explicit fallback chains** (`capability.py`,
   `daemon.py`, #29) — the xdotool-3.x miss showed we *assume* tool capabilities
   instead of probing them. New `capability.probe()` detects, once at boot, what
