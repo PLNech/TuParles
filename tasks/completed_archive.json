@@ -1,5 +1,29 @@
 [
   {
+    "id": "s19-queue",
+    "subject": "FIFO decode queue — decouple capture from decode (#14)",
+    "completedAt": "2026-06-27",
+    "learnings": "The unlock wasn't parallelism, it was MOVING THE DECODE OFF THE STOP PATH: stop() (fast, ~0.02s) enqueues a _QueuedTake and frees the recorder; a persistent worker drains the queue so decode+deliver lag behind the next capture. The old _finishing flag (held through the whole decode) became _stopping (held only through teardown). Per-take state (target, partial, stop_s, mode) MUST live on the _QueuedTake, not the controller — an overlapping next take resets the live fields. Decodes stay strictly sequential (one GPU + onset-carryover reads the previous delivery), which is a feature not a limit. Live finding: with fast decodes (~0.4s) pending never exceeded 1 — real overlap is rarer than expected, so the queue mostly future-proofs."
+  },
+  {
+    "id": "s19-chips",
+    "subject": "Per-take queue chips (#15)",
+    "completedAt": "2026-06-27",
+    "learnings": "A strip of pills above the bubble, one per in-flight take, lazily built (single-take users never instantiate it), opt-out. Colour decision extracted to a pure chip_color() (headless-tested without a paint pass); the widget model tested offscreen (QT_QPA_PLATFORM=offscreen + importorskip). decoding=backend hue breathing, delivered=brightened flash then fade — landed-is-brighter, never a hue switch (green never stops meaning GPU). Caveat: because real overlap is rare (see s19-queue), the chips seldom show more than one — their value is latent until decodes get slower (CPU/mobile)."
+  },
+  {
+    "id": "s19-xprop-class",
+    "subject": "Window class via xprop, not the absent xdotool getwindowclassname",
+    "completedAt": "2026-06-27",
+    "learnings": "THE 'un sur deux' DELIVERY BUG, and a textbook cross-env trap: xdotool 3.20160805 (2016) has NO getwindowclassname subcommand — every class read silently returned '' for who-knows-how-long, so terminals (kitty/Claude Code) got plain Ctrl+V = a no-op control char in a tty. window_id was always fine (getactivewindow exists). Fixed by reading WM_CLASS via `xprop -id <id>` (base X11, present everywhere). Localised by FORENSICS not theory: history showed all takes recorded (decode fine) + every paste logged into '?' (class empty) + a manual xdotool test in the daemon's exact env returned 'Unknown command'. Lesson: don't assume a tool's subcommands — probe (seeds #29)."
+  },
+  {
+    "id": "s19-debounce",
+    "subject": "Hotkey chatter guard 0.4s→0.12s (rapid re-press registers)",
+    "completedAt": "2026-06-27",
+    "learnings": "The 'press again doesn't register' gap. DOUBLE-GUARD smell: the combo edge-detector (_combo_since None→set) already collapses one physical press to one fire, so HOTKEY_DEBOUNCE_S only ever suppressed a LEGITIMATE re-press (quick start→stop or stop→start-next). When an edge detector already dedupes the same press, a debounce only needs to cover mechanical switch chatter (sub-20ms), never 0.4s. Cut to 0.12s (~8 toggles/s). Perceived as duration-dependent but actually inverted: shorter takes put both presses closer together → eaten more. Added the first hotkey tests (drive _ComboState with a fake clock; mind that _last_fire inits to 0.0 so the test clock must start non-zero)."
+  },
+  {
     "id": "s1-research",
     "subject": "Research Qwen3-ASR-0.6B CPU inference path + streaming support",
     "completedAt": "2026-06-11",
