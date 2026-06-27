@@ -42,8 +42,18 @@ ratés observable.
   `recorder.stop()` is sub-timed (pa_stop/pa_close/concat) and shouts the
   breakdown only when slow, to fingerprint the next stall — it can't be
   reproduced from a captured WAV (replay bypasses the recorder).
+- **Doubled-punctuation collapse** (`punctuation.py`, `tests/test_punctuation.py`,
+  #6) — saying "virgule" while Whisper also heard the pause emitted "test, ," ;
+  a comma butting a stronger mark ("poème, .") was swallowed by it. `_tidy` now
+  collapses a redundant comma — comma-only and exact, never merging different
+  marks (`?!` stays) nor touching `…`/`...`.
 
 ### Added (cont.)
+- **Ellipsis "trois petits points" + the real `…`** (`punctuation.py`, #7) — the
+  colloquial name now maps to a typographic ellipsis (U+2026), as do the formal
+  "points de suspension" and "dot dot dot" (was `...`). Determiner-shielded: "les
+  /des/ces… trois petits points" is talking *about* the ellipsis, so it stays
+  text — only a bare one is dictation. When in doubt, it's text.
 - **Partial recovery belt** (`daemon.py`, #10) — when the final decode is *lost*
   (an exception, or empty while a partial was visibly painted), the last partial
   is copied to the clipboard with a toast (`Ctrl+V`), never auto-pasted — the

@@ -34,6 +34,11 @@ PROTECTED_PATTERNS = [
     r"|this|that|each|every|no|key|main|whole|good|fair|valid|moot)"
     r"[ ]point(?:s|ers?)?\b",
     r"\bpoints?[ ]of\b",
+    # "les/des/ces… trois petits points" is talking ABOUT the ellipsis, not
+    # dictating one — shield it so only a bare "trois petits points" maps to …
+    # (#7). When in doubt, it's text: a determiner before it means a mention.
+    r"\b(?:les|des|ces|aux|mes|tes|ses|nos|vos|leurs|de|du)[ ]"
+    r"trois[ ]petits[ ]points\b",
 ]
 
 # Longest patterns first: "point d'interrogation" must win over "point".
@@ -44,8 +49,9 @@ SPOKEN_TO_SYMBOL = [
     (r"point d['’]exclamation", "!"),
     (r"question mark", "?"),
     (r"exclamation (?:mark|point)", "!"),
-    (r"points? de suspension", "..."),
-    (r"dot dot dot", "..."),
+    (r"trois petits points", "…"),
+    (r"points? de suspension", "…"),
+    (r"dot dot dot", "…"),
     (r"point[- ]virgule", ";"),
     (r"semicolon", ";"),
     (r"deux points", ":"),
@@ -99,6 +105,13 @@ def apply_spoken_punctuation(text: str) -> str:
 def _tidy(text: str) -> str:
     """Fix spacing around inserted symbols and recapitalize sentences."""
     text = re.sub(r"[ \t]+([,.;:?!])", r"\1", text)
+    # Collapse a redundant comma: saying "virgule" while Whisper also heard the
+    # pause emits a doubled "test, ," ; a comma butting a stronger mark ("poème,
+    # .") is swallowed by it. Comma-only and exact — never merge different marks
+    # ("?!" stays) and never touch "…"/"..." (no comma involved). (#6)
+    text = re.sub(r",(?:[ \t]*,)+", ",", text)  # ", ," / ",," → ","
+    text = re.sub(r",[ \t]*(?=[.?!;:])", "", text)  # ", ." → "."
+    text = re.sub(r"(?<=[.?!;:])[ \t]*,", "", text)  # ". ," → "."
     text = re.sub(r"([,;:])(?=\S)", r"\1 ", text)
     text = re.sub(r"[ \t]*\n[ \t]*", "\n", text)
     # ASR sometimes glues sentences: "question.Alors" — reopen the gap, but

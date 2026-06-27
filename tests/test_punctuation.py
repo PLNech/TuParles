@@ -92,6 +92,46 @@ class TestTidy:
         assert p("a virgule b virgule c") == "A, b, c"
 
 
+class TestDoubledPunctuation:
+    """Saying 'virgule' while Whisper also heard the pause = 'test, ,' (#6)."""
+
+    def test_doubled_comma_collapses(self):
+        assert p("faire un test, virgule encore") == "Faire un test, encore"
+
+    def test_comma_then_period_period_wins(self):
+        assert p("un poème, point ce serait") == "Un poème. Ce serait"
+
+    def test_period_then_comma_period_wins(self):
+        assert p("fini point virgule alors") == "Fini; alors"  # 'point virgule' → ;
+
+    def test_does_not_merge_different_marks(self):
+        assert p("vraiment point d'exclamation") == "Vraiment!"
+        assert "?!" in p("attends ?!")  # interrobang survives, not collapsed
+
+    def test_ellipsis_glyph_survives_dedup(self):
+        assert p("bref points de suspension") == "Bref …"
+
+
+class TestEllipsis:
+    """'trois petits points' → … with a determiner-shield for mentions (#7)."""
+
+    def test_bare_trois_petits_points_maps(self):
+        assert p("je mets trois petits points ici") == "Je mets … ici"
+
+    def test_formal_and_english_map_to_glyph(self):
+        assert p("points de suspension") == "…"
+        assert p("dot dot dot") == "…"
+
+    def test_determiner_shields_mention(self):
+        # talking ABOUT the ellipsis, not dictating one → stays text
+        assert "trois petits points" in p("les trois petits points qu'on adore")
+        assert "trois petits points" in p("des trois petits points partout")
+
+    def test_glyph_is_real_ellipsis_not_three_dots(self):
+        assert p("trois petits points") == "…"
+        assert "..." not in p("trois petits points")
+
+
 class TestGluedSentences:
     def test_reopen_gap_after_period(self):
         assert p("je me pose une question.Alors je tente") == (
