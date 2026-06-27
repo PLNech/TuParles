@@ -1,7 +1,10 @@
 local.properties
 .gradle/
 build/
+.cxx/
 *.iml
 .idea/
 .kotlin/
 captures/
+models/
+*.bin
