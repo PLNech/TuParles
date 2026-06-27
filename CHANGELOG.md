@@ -1,5 +1,40 @@
 # Changelog
 
+## Sprint 18 — 2026-06-27 · Forensics sur les ratés
+
+You hit "Rien entendu" while partials were visibly painting text — and we had
+*nothing* to show for it. An empty final decode records no history row, so no
+id-keyed WAV, and the forensic print only reached the launching terminal. The
+one failure most worth debugging left zero trace. Plus, on CPU every take's
+language was blank — qwen runs `--silent`, so the code-switch signal that is the
+whole point of this tool went dark on the fallback path. This sprint makes the
+ratés observable.
+
+### Added
+- **Miss capture** (`takes.py`, `daemon.py`, `tests/test_takes.py`, #10) — an
+  empty final decode now saves its audio (dev mode) to `takes/misses/miss-<ts>.wav`
+  and prints a forensic line (`miss: Ns audio, empty final | raw=…,
+  last_partial=… | decode Ns`). The audio you most want to replay is no longer
+  the one we throw away. Own 64 MB byte-budget, self-pruning like the takes dir;
+  microsecond-stamped names so two misses in a second can't collide.
+- **CPU take language** (`engine.py`, `tests/test_cpu_partials.py`, #10) — qwen
+  emits no language, so `QwenCpuEngine.transcribe` now borrows the CPU-partials
+  model's last detection (`CpuPartialsEngine.last_language`). History `lang`/
+  `lang_prob` columns finally populate on the fallback path. Honest about
+  provenance: it's the small model's guess, a signal not ground truth; `None`
+  when partials are off.
+- **`replay_takes.py --engine cpu`** (#10) — the drift harness was GPU-only; now
+  it runs the vendored qwen binary too, so you can replay your real takes with
+  the card wedged, through the engine that actually served you. qwen takes no
+  initial_prompt, so the CPU path skips the seed regimes and does one decode per
+  take.
+
+### Doctrine
+- **The failure you record least is the one you most need.** Instrumentation
+  bias should be inverted: a clean landed take is self-evident; a miss is a
+  mystery, so it deserves *more* trace, not none. Forensics before theory only
+  works if the forensics survive the failure.
+
 ## Sprint 17 — 2026-06-26 · Les partiels font le ménage
 
 Live partials sometimes flash junk — silence hallucinations and the canonical

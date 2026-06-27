@@ -112,6 +112,47 @@ def test_resilient_window_follows_live_backend(tmp_path, monkeypatch):
     assert eng.partial_window_s == 6  # now follows the CPU engine's short window
 
 
+class _FakeProc:
+    returncode = 0
+    stdout = "bonjour world"
+    stderr = ""
+
+
+def test_cpu_transcribe_stamps_language_from_partials(tmp_path, monkeypatch):
+    """qwen emits no language, so the take borrows the partials model's last
+    detection — the only code-switch signal on CPU (#10)."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    from tuparles import engine as engine_mod
+
+    class LangPartials:
+        last_language = "fr"
+        last_language_prob = 0.92
+
+        def transcribe_partial(self, audio):
+            return "p"
+
+    monkeypatch.setattr(engine_mod.subprocess, "run", lambda *a, **k: _FakeProc())
+    eng = QwenCpuEngine(partials_factory=LangPartials)
+    eng.transcribe_partial(AUDIO)  # lazily builds the partials engine
+    result = eng.transcribe(AUDIO)
+    assert result.text == "bonjour world"
+    assert result.language == "fr"
+    assert result.language_prob == 0.92
+
+
+def test_cpu_transcribe_language_none_before_any_partial(tmp_path, monkeypatch):
+    """No partial yet (or partials off) → no language, never a crash."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+    from tuparles import engine as engine_mod
+
+    monkeypatch.setattr(engine_mod.subprocess, "run", lambda *a, **k: _FakeProc())
+    eng = QwenCpuEngine(partials_factory=FakePartials)
+    result = eng.transcribe(AUDIO)  # partials engine never built
+    assert result.text == "bonjour world"
+    assert result.language is None
+    assert result.language_prob is None
+
+
 def test_gpu_partials_untouched_by_cpu_setting(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     from tuparles import settings

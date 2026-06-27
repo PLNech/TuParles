@@ -72,6 +72,8 @@ class Controller(QObject):
         # delivery pastes Ctrl+Shift+V vs Ctrl+V from this (see capture below)
         self._last_edit: Command | None = None  # last delete, for "un peu plus"
         self._entry_source = "hotkey"  # how the current take was started (telemetry)
+        self._last_partial = ""  # most recent partial shown — forensics for an
+        # empty final decode ("partials showed text, then Rien entendu"; #10)
 
     @Slot()
     def toggle_from_hotkey(self) -> None:
@@ -101,6 +103,7 @@ class Controller(QObject):
             ).start()
         else:
             self._press_started_take = True
+            self._last_partial = ""  # fresh take, no preview shown yet (#10)
             # Wayland only: read focus NOW, while the target window still has
             # it and gnome-shell is calm — before the bubble shows and steals
             # it. A delivery-time read raced that and missed terminals (~12 ms,
@@ -180,6 +183,7 @@ class Controller(QObject):
                     # frame. The bubble shows ~600 chars at most anyway.
                     if len(text) > 800:
                         text = "…" + text[-800:]
+                    self._last_partial = text  # remember for miss-forensics (#10)
                     self._bridge.partial.emit(text)
             elapsed = time.monotonic() - started
             self._stop_partials.wait(max(0.1, PARTIAL_PERIOD_S - elapsed))
@@ -258,6 +262,19 @@ class Controller(QObject):
                     pass  # a lost history row must never cost a delivery
                 self._bridge.final.emit(text)
             else:
+                # Empty final decode — the "Rien entendu" black hole. It records
+                # no history row (and so no id-keyed WAV), so without this the
+                # one failure most worth debugging leaves zero trace. Print the
+                # forensics (raw decode, what the partials showed, timings) and,
+                # in dev mode, stash the audio under misses/ for replay (#10).
+                audio_s = audio.size / SAMPLE_RATE
+                miss_path = takes.save_miss(audio)
+                print(
+                    f"miss: {audio_s:.1f}s audio, empty final | "
+                    f"raw={result.text!r}, last_partial={self._last_partial!r} | "
+                    f"decode {decode_s:.2f}s"
+                    + (f" | saved {miss_path}" if miss_path else "")
+                )
                 self._bridge.error.emit("Rien entendu")
         except Exception as exc:  # surface in the bubble, never crash
             self._bridge.error.emit(str(exc)[:120])
