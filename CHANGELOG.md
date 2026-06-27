@@ -50,6 +50,13 @@ ratés observable.
   final is the truth and a provisional isn't it. A net for true crashes; the
   screenshot freeze actually landed fine, so this is belt *and* braces, not the
   freeze fix.
+- **Persistent heartbeat** (`daemon.py`, #10) — the GUI-stall watchdog only logs
+  once the main thread *resumes*, so a whole-system freeze ending in a reboot
+  kills us before it fires. A plain-thread `hb:` beat every 15 s (up / rss /
+  gui_lag) lands in journald, which survives reboots: after the next freeze the
+  last beat dates when we went silent, and `gui_lag` separates a GUI-only hang
+  (beats flowing, lag high) from a whole-box freeze (beats stop cold). Was the
+  laptop us? Next time we'll know.
 
 ### Doctrine
 - **The failure you record least is the one you most need.** Instrumentation

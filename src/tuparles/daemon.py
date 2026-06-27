@@ -359,6 +359,19 @@ class Controller(QObject):
         self._bridge.command.emit(label)
 
 
+def _rss_mb() -> float:
+    """Current resident memory in MB, for the heartbeat — so the next freeze's
+    timeline shows whether we were growing. Best-effort; 0.0 if /proc is absent."""
+    try:
+        with open("/proc/self/status") as f:
+            for line in f:
+                if line.startswith("VmRSS:"):
+                    return int(line.split()[1]) / 1024
+    except OSError:
+        pass
+    return 0.0
+
+
 def run() -> None:
     import fcntl
     import os
@@ -490,6 +503,27 @@ def run() -> None:
     watchdog = QTimer()
     watchdog.timeout.connect(_stall_check)
     watchdog.start(250)
+
+    # Persistent heartbeat: the stall_check above only logs once the GUI thread
+    # *resumes*, so a whole-system freeze that ends in a reboot kills us before
+    # it ever fires. This beat — from a plain thread, into journald which
+    # survives reboots — leaves a timeline: after the next freeze, the last `hb:`
+    # line dates when we went silent. gui_lag (now − the GUI thread's last tick)
+    # tells the two apart: a big gui_lag with beats still flowing = OUR GUI hung;
+    # beats stopping cold until reboot = the whole box froze, not us (#10).
+    hb_stop = threading.Event()
+
+    def _heartbeat() -> None:
+        boot = time.monotonic()
+        while not hb_stop.wait(15.0):
+            gui_lag = time.monotonic() - stall_last[0]
+            print(
+                f"hb: up {time.monotonic() - boot:.0f}s "
+                f"rss {_rss_mb():.0f}MB gui_lag {gui_lag:.1f}s"
+            )
+
+    threading.Thread(target=_heartbeat, daemon=True).start()
+    app.aboutToQuit.connect(hb_stop.set)
 
     app.exec()
     print("\nÀ la prochaine.")
