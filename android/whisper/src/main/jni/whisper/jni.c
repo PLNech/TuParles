@@ -161,13 +161,23 @@ Java_com_whispercpp_whisper_WhisperLib_00024Companion_freeContext(
     whisper_free(context);
 }
 
+static void whisper_progress_cb(struct whisper_context *ctx, struct whisper_state *state, int progress, void *user_data) {
+    UNUSED(ctx);
+    UNUSED(state);
+    UNUSED(user_data);
+    LOGI("whisper progress: %d%%", progress);
+}
+
 JNIEXPORT void JNICALL
 Java_com_whispercpp_whisper_WhisperLib_00024Companion_fullTranscribe(
-        JNIEnv *env, jobject thiz, jlong context_ptr, jint num_threads, jfloatArray audio_data) {
+        JNIEnv *env, jobject thiz, jlong context_ptr, jint num_threads, jfloatArray audio_data, jstring language) {
     UNUSED(thiz);
     struct whisper_context *context = (struct whisper_context *) context_ptr;
     jfloat *audio_data_arr = (*env)->GetFloatArrayElements(env, audio_data, NULL);
     const jsize audio_data_length = (*env)->GetArrayLength(env, audio_data);
+
+    // Language from Kotlin: "auto" detects (FR/EN code-switch), "fr"/"en" force it.
+    const char *lang = (*env)->GetStringUTFChars(env, language, NULL);
 
     // The below adapted from the Objective-C iOS sample
     struct whisper_full_params params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
@@ -176,20 +186,25 @@ Java_com_whispercpp_whisper_WhisperLib_00024Companion_fullTranscribe(
     params.print_timestamps = true;
     params.print_special = false;
     params.translate = false;
-    params.language = "en";
+    params.language = lang; // "auto" | "fr" | "en" — hardcoded "en" used to force English output
     params.n_threads = num_threads;
     params.offset_ms = 0;
     params.no_context = true;
     params.single_segment = false;
 
+    // Live progress to logcat so a long decode is visible, not silent.
+    params.progress_callback = whisper_progress_cb;
+    params.progress_callback_user_data = NULL;
+
     whisper_reset_timings(context);
 
-    LOGI("About to run whisper_full");
+    LOGI("About to run whisper_full (lang=%s, threads=%d, samples=%d)", lang, num_threads, audio_data_length);
     if (whisper_full(context, params, audio_data_arr, audio_data_length) != 0) {
         LOGI("Failed to run the model");
     } else {
         whisper_print_timings(context);
     }
+    (*env)->ReleaseStringUTFChars(env, language, lang);
     (*env)->ReleaseFloatArrayElements(env, audio_data, audio_data_arr, JNI_ABORT);
 }
 

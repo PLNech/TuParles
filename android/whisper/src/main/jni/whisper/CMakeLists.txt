@@ -40,22 +40,19 @@ function(build_library target_name)
     target_compile_definitions(${target_name} PUBLIC GGML_USE_CPU)
     target_compile_definitions(${target_name} PRIVATE WHISPER_VERSION="${WHISPER_VERSION}")
 
+    # ALWAYS optimise the native math, even in a debug APK. A -O0 ggml build is
+    # 10-50x slower — it made on-device decode unusable (minutes per 4s clip, CPU
+    # pegged at 360%). -O3 is non-negotiable for inference; debuggability of the
+    # C++ matters far less here than it running at all.
+    set(GGML_COMPILE_OPTIONS -O3)
+    target_compile_options(${target_name} PRIVATE -O3)
+
     if (${target_name} STREQUAL "whisper_v8fp16_va")
         target_compile_options(${target_name} PRIVATE -march=armv8.2-a+fp16)
-        set(GGML_COMPILE_OPTIONS                      -march=armv8.2-a+fp16)
+        list(APPEND GGML_COMPILE_OPTIONS -march=armv8.2-a+fp16)
     elseif (${target_name} STREQUAL "whisper_vfpv4")
         target_compile_options(${target_name} PRIVATE -mfpu=neon-vfpv4)
-        set(GGML_COMPILE_OPTIONS                      -mfpu=neon-vfpv4)
-    endif ()
-
-    if (NOT ${CMAKE_BUILD_TYPE} STREQUAL "Debug")
-        target_compile_options(${target_name} PRIVATE -O3)
-        target_compile_options(${target_name} PRIVATE -fvisibility=hidden -fvisibility-inlines-hidden)
-        target_compile_options(${target_name} PRIVATE -ffunction-sections -fdata-sections)
-
-        target_link_options(${target_name} PRIVATE -Wl,--gc-sections)
-        target_link_options(${target_name} PRIVATE -Wl,--exclude-libs,ALL)
-        target_link_options(${target_name} PRIVATE -flto)
+        list(APPEND GGML_COMPILE_OPTIONS -mfpu=neon-vfpv4)
     endif ()
 
     if (GGML_HOME)
@@ -64,7 +61,15 @@ function(build_library target_name)
         FetchContent_Declare(ggml SOURCE_DIR ${WHISPER_LIB_DIR}/ggml)
     endif()
     FetchContent_MakeAvailable(ggml)
-    target_compile_options(ggml PRIVATE ${GGML_COMPILE_OPTIONS})
+    # CRITICAL: the GEMM/compute lives in ggml-base and ggml-cpu (FetchContent
+    # sub-targets), NOT the thin `ggml` meta-target. Optimising only `ggml` left
+    # the actual matrix math at -O0 in a debug APK → minutes per clip. Force -O3
+    # on EVERY ggml target that exists.
+    foreach(ggml_target ggml ggml-base ggml-cpu)
+        if (TARGET ${ggml_target})
+            target_compile_options(${ggml_target} PRIVATE ${GGML_COMPILE_OPTIONS})
+        endif()
+    endforeach()
     target_link_libraries(${target_name} ${LOG_LIB} android ggml)
 
 

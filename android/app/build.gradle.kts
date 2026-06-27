@@ -36,6 +36,13 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    // The bundled GGML model must stay uncompressed so whisper can load it from
+    // the asset without inflating 140MB into RAM. Fetch it with
+    // scripts/fetch-android-model.sh before building (it's gitignored — >100MB).
+    androidResources {
+        noCompress += "bin"
+    }
 }
 
 dependencies {
