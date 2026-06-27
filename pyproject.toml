@@ -5,6 +5,9 @@ description = "Local push-to-talk dictation for Fr-En code-switchers. Speak, see
 authors = ["PLNech <PLNech@users.noreply.github.com>"]
 readme = "README.md"
 packages = [{ include = "tuparles", from = "src" }]
+include = [
+    { path = "src/tuparles/data/postprocess-data.json", format = ["sdist", "wheel"] },
+]
 
 [tool.poetry.dependencies]
 python = ">=3.11,<3.15"

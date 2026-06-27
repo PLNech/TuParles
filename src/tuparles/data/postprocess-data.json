@@ -1,0 +1,112 @@
+{
+  "schema_version": 1,
+  "LEXICON": {
+    "\\bqlors\\b": "alors",
+    "\\b[bp]oule request\\b": "pull request",
+    "\\bau fil ligne\\b": "au feeling",
+    "\\bPostgre\\b": "postgres"
+  },
+  "SPOKEN_TO_SYMBOL": [
+    [
+      "point d['\u2019]interrogation",
+      "?"
+    ],
+    [
+      "point d['\u2019]exclamation",
+      "!"
+    ],
+    [
+      "question mark",
+      "?"
+    ],
+    [
+      "exclamation (?:mark|point)",
+      "!"
+    ],
+    [
+      "trois petits points",
+      "\u2026"
+    ],
+    [
+      "points? de suspension",
+      "\u2026"
+    ],
+    [
+      "dot dot dot",
+      "\u2026"
+    ],
+    [
+      "point[- ]virgule",
+      ";"
+    ],
+    [
+      "semicolon",
+      ";"
+    ],
+    [
+      "deux points",
+      ":"
+    ],
+    [
+      "colon",
+      ":"
+    ],
+    [
+      "nouvelle ligne",
+      "\n"
+    ],
+    [
+      "\u00e0 la ligne",
+      "\n"
+    ],
+    [
+      "new ?line",
+      "\n"
+    ],
+    [
+      "line break",
+      "\n"
+    ],
+    [
+      "nouveau paragraphe",
+      "\n\n"
+    ],
+    [
+      "new paragraph",
+      "\n\n"
+    ],
+    [
+      "virgule",
+      ","
+    ],
+    [
+      "comma",
+      ","
+    ],
+    [
+      "full stop",
+      "."
+    ],
+    [
+      "period",
+      "."
+    ],
+    [
+      "point",
+      "."
+    ]
+  ],
+  "PROTECTED_PHRASES": [
+    "point de vue",
+    "\u00e0 quel point",
+    "au point",
+    "sur le point",
+    "point commun",
+    "point faible",
+    "point fort",
+    "mise au point",
+    "point d'\u00e9tape",
+    "rond-point",
+    "deux points de"
+  ]
+}
