@@ -1,5 +1,17 @@
 # Changelog
 
+## Sprint 19 — 2026-06-27 · Le doute, le flux, la cible
+
+Building toward the DeliveryTarget keystone — and seeding doubt on the way.
+
+### Added
+- **Per-word confidence** (`engine.py`, `tests/test_word_confidence.py`, #23) —
+  `Transcription` gains `words: list[Word] | None`; the GPU decode now requests
+  `word_timestamps` and a pure `words_from_segments()` flattens faster-whisper's
+  per-word `probability` into the model. None on engines that don't expose it
+  (qwen runs `--silent`) — the doubt UI degrades to no-dimming, never breaks. The
+  cheap foundation the rendered-doubt span work (#16/#24) stands on.
+
 ## Sprint 18 — 2026-06-27 · Forensics sur les ratés
 
 You hit "Rien entendu" while partials were visibly painting text — and we had
