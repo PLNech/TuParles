@@ -1,5 +1,59 @@
 # Changelog
 
+## Sprint 21 — 2026-06-27 · Le cap Android, et la maison d'aplomb
+
+Two strands: chart the course to TuParles-on-Android (research + a
+contributor-ready epic), and — found en route — quietly un-red a CI that had
+been failing for days without anyone noticing.
+
+### Added
+- **Android-readiness research + phased epic** (#2) — a 5-agent research
+  fan-out (engine SOTA, packaging fork, codebase portability audit, Android
+  platform/privacy) plus an adversarial verification pass, synthesized into five
+  build notes under `docs/research/2026-06-27-android-*` and
+  `-portable-core-audit.md`. Verdict on #2: embed the pure-Python postprocess on
+  Android via Chaquopy (one source of truth), engine = whisper.cpp (ONNX Runtime
+  if the doubt/spans UI must launch), gated on a FR/EN code-switch spike. Broken
+  into an epic → children #3–#8 with Codex-ready briefs.
+- **`config_core.py`** (#4, PR #9) — platform-agnostic constants split out of
+  `config.py` (which re-exports them, zero call-site churn) so
+  `pipeline.postprocess()`'s import closure carries no desktop deps. First
+  portable-core step toward Android. (Authored by Codex, operator-reviewed.)
+
+### Changed
+- **Optional `stdnum` import guarded** (`privacy/structured.py`, #4) — the
+  checksum validators (IBAN/NIR/card) degrade to no findings when
+  `python-stdnum` is absent, byte-identical when present; the firewall loads on a
+  lean install.
+
+### Fixed
+- **Windows-safe temp WAV in qwen CPU decode** (`engine.py`, #10) —
+  `transcribe()` reopened a still-open `NamedTemporaryFile`, which Windows
+  forbids (`PermissionError`). Now `mkstemp` + close fd + write-by-path +
+  `unlink` in `finally`; identical on Linux/macOS. A real cross-platform bug,
+  surfaced by the CI repair.
+
+### Infra
+- **CI matrix un-redded** (#10) — `main` had been failing on all six legs,
+  masked by one collection error: `test_daemon_finish` imported Qt at module top
+  (`Controller(QObject)`), aborting the whole pytest session and hiding latent
+  failures in `test_ui_honesty` (pure helpers trapped in the Qt-coupled `ui.py`)
+  and `test_cpu_partials` (exec'd the absent qwen binary; Windows temp-wav).
+  Guarded the Qt-coupled tests with `pytest.importorskip("PySide6")` (matching
+  the `_qt()` convention) and mocked the CPU decode path.
+
+### Doctrine
+- **A green local run is not a green CI.** Reproduce CI in a *fresh git clone* +
+  clean venv before trusting a pass — a clean venv over your own working tree
+  still carries gitignored artifacts (the qwen binary) that CI lacks, so it
+  hides failures. A collection-time import error aborts the *whole* suite and
+  masks everything downstream; fix it first, then re-enumerate.
+- **Codex as workhorse, human as operator.** Drive an external coding agent on
+  substantive, verifiable work (it opened PR #9 cleanly); keep incident
+  firefighting — where the agent can't even reproduce the condition — on the
+  operator. Always review the raw diff and run the real gate; "done, tests pass"
+  is a claim, not a verdict.
+
 ## Sprint 20 — 2026-06-27 · Le visage honnête
 
 A convenience sprint: small, visible polish that makes the tool *read* honestly —
