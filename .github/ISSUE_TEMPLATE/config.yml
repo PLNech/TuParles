@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📖 Cross-environment compatibility & troubleshooting
+    url: https://github.com/PLNech/TuParles/blob/main/docs/CROSS_ENV.md
+    about: X11/Wayland support, required tools per setup, and fixes for common paste/focus issues — read this first for environment problems.
+  - name: 🔧 Pre-fill a bug report from your machine
+    url: https://github.com/PLNech/TuParles#readme
+    about: "Run `tuparles report \"summary\"` to open an issue already filled with your environment + capability line."
