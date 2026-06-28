@@ -33,6 +33,11 @@ replaces `_path()` with an Android-appropriate path (Chaquopy can surface the ap
 `getFilesDir()`) makes it portable. The logic is pure stdlib, so no code change beyond
 that seam.
 
+Postprocess literal tables (`LEXICON`, `SPOKEN_TO_SYMBOL`, `PROTECTED_PHRASES`) live in
+`packages/tuparles-core/src/tuparles/data/postprocess-data.json` and load via
+`importlib.resources`, so wheels and Chaquopy resolve packaged data without filesystem
+path assumptions (refactor step 6, #11; approach from PR #11).
+
 ---
 
 ## 2. Module classification table
