@@ -29,6 +29,12 @@ android {
         }
     }
 
+    // BuildConfig.DEBUG / VERSION_NAME drive the flavor-aware telemetry (debug-only
+    // INTERNET + domovoy sync vs the INTERNET-free release). AGP 8 needs this opt-in.
+    buildFeatures {
+        buildConfig = true
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
