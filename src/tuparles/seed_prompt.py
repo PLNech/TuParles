@@ -35,6 +35,22 @@ _SEED_LIMIT = 30
 # docs/research/2026-06-25-transliteration-forensics.md.
 _PROMPT_CHAR_BUDGET = 400
 
+# A tiny command-vocabulary seed (#53). The 2026-06-28 take replay
+# (docs/research/2026-06-28-spoken-slash-commands.md) proved this rescues the
+# worst command mishear — "slash precompact" decoded as "c'est l'âge prix
+# compact" → "/pre-compact" — WITHOUT the URL hallucination a broader, URL-
+# example seed caused (it invented facebook.fr/google.com on take 23). So it is
+# deliberately command-WORDS-only, and rides the protected tail with the manual
+# glossary, never trimmed. Gated by the bias setting like every other seed.
+COMMAND_SEED: list[str] = [
+    "slash",
+    "slash help",
+    "slash compact",
+    "slash precompact",
+    "slash code review",
+    "slash security review",
+]
+
 
 def _manual_glossary() -> list[str]:
     """The hand-curated personal glossary (vocab.txt), comments stripped."""
@@ -67,35 +83,42 @@ def _seed_surfaces(limit: int = _SEED_LIMIT) -> list[str]:
 def initial_prompt(
     manual: list[str] | None = None,
     seeds: list[str] | None = None,
+    commands: list[str] | None = None,
     *,
     bias_enabled: bool | None = None,
 ) -> str | None:
     """`Glossaire : …` for Whisper, or None when there's nothing to bias toward.
 
-    Auto-seeds first, manual glossary last (manual wins on dedup and survives the
-    224-token tail-keep). Args are injectable for tests; production passes none.
+    Order: auto-seeds (trimmable) first, then the command seed, then the manual
+    glossary last — the tail wins Whisper's 224-token tail-keep and dedup, so the
+    hand-curated terms are the most protected. The command seed rides just ahead
+    of manual and, like it, is never trimmed by the budget (it's tiny and
+    measured). Args are injectable for tests; production passes none — pass
+    `commands=[]` to opt a test out of the built-in command seed.
     """
     manual = _manual_glossary() if manual is None else list(manual)
     if bias_enabled is None:
         bias_enabled = bool(settings.get("dictseed_bias"))
     if not bias_enabled:
-        seed_list: list[str] = []  # bias off → never seed, even if seeds passed
-    elif seeds is not None:
-        seed_list = list(seeds)
+        # bias off → no seeding at all, even if seeds/commands were passed
+        seed_list: list[str] = []
+        cmd_seed: list[str] = []
     else:
-        seed_list = _seed_surfaces()
+        seed_list = _seed_surfaces() if seeds is None else list(seeds)
+        cmd_seed = COMMAND_SEED if commands is None else list(commands)
 
     manual_keys = {w.casefold() for w in manual}
     fresh_seeds = [s for s in seed_list if s.casefold() not in manual_keys]
+    protected = cmd_seed + manual  # never trimmed; manual at the very tail
 
     # Trim auto-seeds (least-important first — they are ranked, so drop the
-    # tail) until the whole prompt fits the budget. Manual rides at the tail
-    # and is never dropped: it survives both this trim and Whisper's own
+    # tail) until the whole prompt fits the budget. The command seed and manual
+    # glossary are never dropped: they survive this trim and Whisper's own
     # ~224-token tail-keep.
     def _render(seeds: list[str]) -> str:
-        return f"Glossaire : {', '.join(seeds + manual)}."
+        return f"Glossaire : {', '.join(seeds + protected)}."
 
     while fresh_seeds and len(_render(fresh_seeds)) > _PROMPT_CHAR_BUDGET:
         fresh_seeds = fresh_seeds[:-1]
 
-    return _render(fresh_seeds) if (fresh_seeds or manual) else None
+    return _render(fresh_seeds) if (fresh_seeds or protected) else None

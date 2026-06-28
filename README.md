@@ -69,6 +69,12 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
   "point", "new line") in both languages, a personal lexicon for your
   jargon, and deterministic collapse of Whisper repetition loops. No AI
   rewriting: a visible mishear beats a confident wrong autocorrect.
+- **Drive a REPL by voice** — say "slash" and get `/`, a path separator that
+  glues like one: "slash compact" → `/compact`, "endpoint slash habits" →
+  `endpoint/habits`, "code slash slash comment" → `code//comment`. A curated
+  ontology of Claude Code commands fixes the spelling even when the decoder
+  splits or accents the name ("slash pré tiret compact" → `/pre-compact`); extend
+  it with your own via `slash_commands` in settings.
 - **Voice macros (quick-chat)** — a short spoken trigger expands to a canned
   text: say "lgtm" and get your full review sign-off, "standup billing" and get
   a filled template. Triggers fire only on an exact whole-take match (never

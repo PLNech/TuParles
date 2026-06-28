@@ -27,6 +27,11 @@ class TestFrench:
     def test_a_la_ligne(self):
         assert p("fini à la ligne suite") == "Fini\nSuite"
 
+    def test_tiret(self):
+        # Dictating the hyphen aloud — lets you spell a command/identifier.
+        assert p("pré tiret compact") == "Pré - compact"
+        assert p("trait d'union") == "-"
+
 
 class TestEnglish:
     def test_comma(self):
