@@ -8,12 +8,26 @@ of work. No product behaviour changed; what shipped is the design record and the
 first spine artifact — the import-boundary gate that the whole refactor leans on.
 
 ### Added
-- **Import-boundary gate** (#10) — `tests/test_core_boundary.py` imports all 32
+- **Import-boundary gate** (#10) — `tests/test_core_boundary.py` imports all 33
   intended-`tuparles-core` modules in a fresh interpreter with the desktop-hard deps
   (PySide6, sounddevice, faster_whisper, pynput, evdev, numpy) *blocked* at the
-  import system. All green today: the ~2,864 LOC of postprocess/privacy/settings IP
-  is genuinely stdlib-only, so the extraction won't fight hidden leaks. This is the
+  import system. All green: the ~2,864 LOC of postprocess/privacy/settings IP is
+  genuinely stdlib-only, so the extraction won't fight hidden leaks. This is the
   invariant that keeps the boundary from rotting as steps 4-5 proceed.
+- **The transcription contract is core** (#10, step 4) — `Word` / `Transcription` /
+  `words_from_segments` + a new `TranscriptionEngine` Protocol live in
+  `tuparles/transcription.py` (stdlib-only; numpy only under TYPE_CHECKING). Frontends
+  depend on the Protocol, not on a concrete engine — so the gradient (CUDA → qwen →
+  whisper.cpp) swaps the impl without touching a caller. Re-exported from `engine.py`
+  for back-compat.
+
+### Changed
+- **Settings path is injectable** (#10, step 2) — `TUPARLES_CONFIG_DIR` points the
+  config dir straight at a chosen path (Android app storage, a server container, a
+  test); unset = unchanged XDG behaviour. The seam that lets the same `settings.py`
+  run off-desktop.
+- **`partials.py` reads `config_core`** (#10, step 1) — repointed off the desktop
+  `config.py`, so the partials sanity filter sits cleanly below the core boundary.
 
 ### Doctrine
 - **One core, four thin frontends** (#10-#13) — commit to the full split:

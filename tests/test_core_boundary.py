@@ -31,6 +31,7 @@ BLOCKED = ["PySide6", "sounddevice", "faster_whisper", "pynput", "evdev", "numpy
 # Each must import with every BLOCKED dep absent.
 CORE_MODULES = [
     "tuparles.config_core",
+    "tuparles.transcription",
     "tuparles.pipeline",
     "tuparles.punctuation",
     "tuparles.lexicon",

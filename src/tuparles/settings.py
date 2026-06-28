@@ -157,6 +157,13 @@ _DEFAULTS: dict[str, object] = {
 
 
 def _path() -> Path:
+    # The injectable seam (core-extraction step 2): a frontend that doesn't live
+    # under XDG — Android (Chaquopy surfaces getFilesDir()), a server container,
+    # a test — points TUPARLES_CONFIG_DIR straight at its config dir. Unset =
+    # the unchanged desktop behaviour ($XDG_CONFIG_HOME/tuparles, else ~/.config).
+    override = os.environ.get("TUPARLES_CONFIG_DIR")
+    if override:
+        return Path(override) / "settings.json"
     base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
     return base / "tuparles" / "settings.json"
 
