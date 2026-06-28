@@ -75,11 +75,35 @@ first spine artifact — the import-boundary gate that the whole refactor leans 
   gradient and the bench/eval suite consume. Adding the next engine is a registration,
   not a two-place edit. Wired for real when the 3rd engine (WhisperCppEngine, #4)
   forces it; the bench is already registry-driven as the seed.
+- **Runtime SIMD dispatch is a portability requirement, not a nicety** (#9 → #4/#6) —
+  the SIMD audit found the vendored `qwen_asr` is built `-march=native` with
+  *compile-time* AVX2/FMA selection and zero `cpuid` dispatch, so it **SIGILLs** on a
+  no-AVX2 host (the 2011 erable i3). CTranslate2 (MKL+oneDNN) and whisper.cpp (ggml)
+  both ship *runtime* dispatch with an SSE floor and degrade gracefully. So the public
+  CPU rung wants whisper.cpp on portability grounds alone, and the #6 `/stt` shim must
+  never hand `qwen_asr` to a no-AVX2 box. "Still works on the train" means the binary
+  must ask the CPU what it can do — at load, not at compile.
+
+### Infra
+- **CPU STT bench, executed** (#3) — `scripts/bench_cpu_stt.py` run over the 72-WAV
+  code-switch corpus at 30% CPU (5 engines × 72 = 360 decodes, 0 errors). RTF rises
+  tiny 0.23× → base 0.45× → qwen 0.68× → small 0.97× → large-v3-turbo **4.5×**;
+  large-v3-turbo wins WER (0.57) but is **latency-disqualified for live CPU**. Surprise
+  of the run: **qwen (the incumbent fallback) Pareto-holds** — 2nd-best WER (0.68),
+  faster than realtime (0.68×), and it dominates fw-small on *both* axes. Caveat that
+  decides #4: the bench drops the vocab `initial_prompt`, which handicaps the
+  prompt-capable whisper family but **not** qwen (qwen takes no prompt) — so
+  whisper.cpp's production ceiling sits above its bench line. Concrete bar for #4:
+  match qwen's 0.68 WER *with prompt-bias on*, at ≤1× RTF. Chart + summary JSON
+  archived (`/tmp/tuparles_cpu_bench.png`).
 
 ### Research
 - `docs/research/2026-06-28-ui-architecture-decisions.md` — the four forks with the
   why, the Wayland terrain that reframes the UI choice, the core+4-frontends diagram,
   the config/UX-sharing strategy, and the 10-step minimal-refactor path.
+- SIMD/build-flag audit (#9) findings recorded in memory `stt-api-and-tuparles-gradient`
+  (qwen RED / CT2 GREEN-slow / whisper.cpp portable); the per-engine GREEN/RED verdict
+  feeds the #5 host decision and the #6 shim's never-hand-qwen-to-no-AVX2 rule.
 
 ## Sprint 24 — 2026-06-28 · La route vers le cloud — recon, pas de code
 
