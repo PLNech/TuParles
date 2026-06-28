@@ -3,6 +3,7 @@ package pl.nech.tuparles
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Bundle
@@ -18,7 +19,9 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.FileProvider
 import pl.nech.domovoy.analytics.DomovoyAnalytics
+import java.io.File
 
 /**
  * The learning store, made visible. Every take is a row: the cleaned text, its
@@ -173,10 +176,21 @@ class HistoryActivity : AppCompatActivity() {
     }
 
     private fun exportHistory() {
-        val all = TakesStore.all(this)
-        if (all.isEmpty()) { toast("rien à exporter"); return }
-        // the file is already JSONL on disk; point the user at the share flow they know
-        toast("${all.size} prises dans history/takes.jsonl — « Logs » partage les fichiers")
+        val jsonl = getExternalFilesDir("history")?.let { File(it, "takes.jsonl") }
+        if (jsonl == null || !jsonl.exists() || jsonl.length() == 0L) {
+            toast("rien à exporter"); return
+        }
+        val uri = try {
+            FileProvider.getUriForFile(this, "pl.nech.tuparles.fileprovider", jsonl)
+        } catch (t: Throwable) {
+            DebugLog.e(TAG, "history export: FileProvider failed", t); toast("export indisponible"); return
+        }
+        startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+            type = "application/json"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            putExtra(Intent.EXTRA_SUBJECT, "TuParles — prises (${TakesStore.all(this@HistoryActivity).size})")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }, "Exporter takes.jsonl"))
     }
 
     private fun copy(text: String) {
