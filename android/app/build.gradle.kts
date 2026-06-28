@@ -57,6 +57,7 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
     implementation(project(":whisper")) // Rung 2: native whisper.cpp engine
+    testImplementation("junit:junit:4.13.2") // pure-JVM unit tests (framework-free helpers)
 }
 
 // The postprocess core is the SAME source the desktop daemon and eval harness
