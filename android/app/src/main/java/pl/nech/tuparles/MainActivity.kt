@@ -302,30 +302,14 @@ class MainActivity : AppCompatActivity() {
         decoding = true
         lifecycleScope.launch {
             try {
-                val t0 = System.currentTimeMillis()
-                Log.i(TAG, "decode#$id: whisper.transcribeData start")
-                val raw = withTimeout(DECODE_TIMEOUT_MS) {
-                    withContext(Dispatchers.Default) {
-                        ctx.transcribeData(samples.toFloats(), printTimestamp = false, language = langMode).trim()
-                    }
-                }
-                val ms = System.currentTimeMillis() - t0
-                Log.i(TAG, "decode#$id: whisper done in ${ms}ms (lang=$langMode) RAW=<$raw>")
-                val cleaned = if (postprocessOn) {
-                    setState("⏳ #$id décodé en ${ms}ms — postprocess…", "#EF6C00")
-                    withContext(Dispatchers.Default) {
-                        postprocess?.callAttr("postprocess", raw)?.toString() ?: raw
-                    }
-                } else {
-                    raw // postprocess off — show the raw decode
-                }
-                Log.i(TAG, "decode#$id: postprocess=${if (postprocessOn) "on" else "off"} POST=<$cleaned>")
-                row.result.text = "RAW: $raw\n\nPOST: $cleaned"
-                save(row.prompt, samples, seconds, raw, cleaned)
-                Log.i(TAG, "decode#$id: saved OK")
-                setState("✅ #$id fait en ${ms}ms — prochaine prise", "#2E7D32")
+                // The ONE decode path — same Dictation the IME and scratchpad call,
+                // so the harness can't diverge from what users actually get.
+                val take = Dictation.decode(samples, langMode, postprocessOn)
+                row.result.text = "RAW: ${take.raw}\n\nPOST: ${take.clean}"
+                save(row.prompt, samples, seconds, take.raw, take.clean)
+                setState("✅ #$id fait en ${take.ms}ms — prochaine prise", "#2E7D32")
             } catch (e: Throwable) {
-                Log.e(TAG, "decode#$id: FAILED", e)
+                DebugLog.e(TAG, "decode#$id FAILED", e)
                 row.result.text = "ERREUR: ${e.message}"
                 setState("⚠️ erreur #$id : ${e.message}", "#C62828")
             } finally {
