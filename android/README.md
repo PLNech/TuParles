@@ -1,9 +1,34 @@
-# TuParles on Android — the spike
+# TuParles on Android
 
 Local, private FR/EN dictation on the phone, sharing **one** Python core with the
 desktop daemon (no Kotlin re-port, no dual-maintenance tax). This is the embed
 path from issue #2 / the packaging research: **Chaquopy carries the postprocess
 core; the STT engine runs native (whisper.cpp via JNI) on the Kotlin side.**
+
+What began as a build-ladder spike (below) is now an app you can live with:
+everything runs on your own silicon, and no `INTERNET` permission ships in release.
+
+## The surfaces — one backbone, many faces
+
+Recording and decoding live in a single foreground `DictationService` (type
+`microphone`); every surface below is a thin observer of its process `StateFlow`,
+so they share one model, one postprocess, one telemetry path — and a take in
+flight survives screen rotation or backgrounding.
+
+| Surface | What it is |
+|---|---|
+| **Scratchpad** (launcher) | Dictate or type, copy/share, pick model/language, flip private mode. |
+| **Keyboard** (`InputMethodService`) | A pure-TuParles keyboard: dictates into any app's field. Live meter, language cycle, **📝 record-fix** key. |
+| **Historique** | Newest-first take list with 👍/👎/✏️ labelling — the learning store made visible. |
+| **Réglages** | Engine/model/language, privacy block, **decode-thread** perf knob, live SIMD/core readout. |
+| **Widget** | One-tap dictate from the home screen → clipboard + notification. |
+| **Recognizer** (`RecognitionService`) | Set as the device voice input → the system mic-button goes on-device. |
+
+**Private mode** is the master switch: ON suppresses file logging, analytics/sync,
+and raw take audio — but never your own dictation result. The **learning loop**:
+dictate → correct (in any keyboard) → return to TuParles → 📝 to capture the
+corrected form; telemetry carries shape (counts, edit distance, RTF, votes), never
+the text.
 
 ## The build ladder — all rungs reached ✅
 
@@ -94,9 +119,14 @@ APK ships it uncompressed (`noCompress "bin"`) so it loads in ~1s.
 ```bash
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 adb shell pm grant pl.nech.tuparles android.permission.RECORD_AUDIO
-adb shell am start -n pl.nech.tuparles/.MainActivity
-adb logcat -s TuParles            # follow the harness (records, timings, lang, %)
+adb shell am start -n pl.nech.tuparles/.ScratchpadActivity   # the app home
+adb logcat -s TuParles            # follow decodes (timings, lang, RTF, chars)
 ```
+
+The launcher is **ScratchpadActivity**; the original 12-prompt capture harness is
+now **MainActivity** (`🎛 Capture`, reached from the scratchpad). Enable the
+keyboard under *Réglages système → Langues et saisie*; set the recognizer under the
+device's voice-input setting.
 
 A fresh install uses the **bundled base** model. To use the flawless large model,
 push it — the app prefers any model found in external files:
@@ -107,11 +137,16 @@ adb push app/src/main/assets/models/ggml-large-v3-turbo-q5_0.bin \
   /sdcard/Android/data/pl.nech.tuparles/files/models/
 ```
 
-Pull the recorded takes:
+Pull the recorded takes and the durable history/learning store:
 
 ```bash
-adb pull /sdcard/Android/data/pl.nech.tuparles/files/captures
+adb pull /sdcard/Android/data/pl.nech.tuparles/files/captures   # harness {wav,raw,clean}
+adb pull /sdcard/Android/data/pl.nech.tuparles/files/history     # takes.jsonl + opt-in WAVs
 ```
+
+`history/takes.jsonl` is the learning store: one row per take with
+`{raw, clean, corrected, vote}` + profiling (RTF, decode ms, model). Suppressed
+entirely in private mode.
 
 ## Privacy by construction
 
