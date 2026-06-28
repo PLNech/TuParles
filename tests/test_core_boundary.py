@@ -34,6 +34,7 @@ BLOCKED = ["PySide6", "sounddevice", "faster_whisper", "pynput", "evdev", "numpy
 CORE_MODULES = [
     "tuparles.config_core",
     "tuparles.transcription",
+    "tuparles.data.postprocess",
     "tuparles.pipeline",
     "tuparles.punctuation",
     "tuparles.lexicon",

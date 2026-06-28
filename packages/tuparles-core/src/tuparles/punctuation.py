@@ -8,21 +8,11 @@ everyday speech survives untouched.
 
 import re
 
-# Phrases where a trigger word is ordinary vocabulary, not dictated
-# punctuation. Checked (and shielded) before any mapping applies.
-PROTECTED_PHRASES = [
-    "point de vue",
-    "à quel point",
-    "au point",
-    "sur le point",
-    "point commun",
-    "point faible",
-    "point fort",
-    "mise au point",
-    "point d'étape",
-    "rond-point",
-    "deux points de",  # "deux points de vente" etc.
-]
+from tuparles.data.postprocess import PROTECTED_PHRASES, SPOKEN_TO_SYMBOL
+
+# Phrases where a trigger word is ordinary vocabulary, not dictated punctuation.
+# Loaded from src/tuparles/data/postprocess-data.json and shielded before any
+# mapping applies.
 
 # Bare "point" must map for French dictation ("c'est fini point") but is
 # everyday English vocabulary. A dictated "point" stands alone at a clause
@@ -44,33 +34,7 @@ PROTECTED_PATTERNS = [
 # Longest patterns first: "point d'interrogation" must win over "point".
 # English "point" is intentionally NOT a trigger (floating point, point of
 # view) — English speakers say "period" or "full stop".
-SPOKEN_TO_SYMBOL = [
-    (r"point d['’]interrogation", "?"),
-    (r"point d['’]exclamation", "!"),
-    (r"question mark", "?"),
-    (r"exclamation (?:mark|point)", "!"),
-    (r"trois petits points", "…"),
-    (r"points? de suspension", "…"),
-    (r"dot dot dot", "…"),
-    (r"point[- ]virgule", ";"),
-    (r"semicolon", ";"),
-    (r"deux points", ":"),
-    (r"colon", ":"),
-    (r"trait d['’]union", "-"),
-    (r"tiret", "-"),
-    (r"hyphen", "-"),
-    (r"nouvelle ligne", "\n"),
-    (r"à la ligne", "\n"),
-    (r"new ?line", "\n"),
-    (r"line break", "\n"),
-    (r"nouveau paragraphe", "\n\n"),
-    (r"new paragraph", "\n\n"),
-    (r"virgule", ","),
-    (r"comma", ","),
-    (r"full stop", "."),
-    (r"period", "."),
-    (r"point", "."),
-]
+# Loaded from src/tuparles/data/postprocess-data.json.
 
 _SHIELD = "\x00{}\x00"
 

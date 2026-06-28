@@ -7,6 +7,20 @@ physically left `src/tuparles/` and became its own distribution. The boundary is
 no longer a promise enforced by a test — it is two packages that pip can install
 apart. Imports did not change; the namespace did not change; the app still runs.
 
+And with the boundary real, step 6 followed: the postprocess literal tables left
+Python for packaged JSON — the first shared-data SSOT a future Android consumer reads.
+
+### Added
+- **Postprocess tables externalised to packaged JSON** (#11, step 6; approach from
+  PR #11) — `LEXICON`, `SPOKEN_TO_SYMBOL` (ordered), `PROTECTED_PHRASES` now live in
+  `packages/tuparles-core/src/tuparles/data/postprocess-data.json` (schema_version 1),
+  loaded at import via `importlib.resources` (wheel- and Chaquopy-safe; shipped in the
+  `tuparles-core` wheel via poetry `include`). Regex compilation and all behaviour stay
+  in Python — only literal data moves, so it's one source of truth without a divergent
+  parser. The JSON was regenerated from the live tables (not copied from the PR, whose
+  `SPOKEN_TO_SYMBOL` predated the 3 hyphen rules), and a consistency test asserts the
+  loaded tables match. Behaviour byte-identical: lexicon / punctuation / codeswitch green.
+
 ### Changed
 - **Monorepo split into two distributions** (#10, step 5) — `src/tuparles/` is gone;
   the tree now lives under `packages/`: **`tuparles-core`** (the 36 portable modules:

@@ -9,6 +9,11 @@ readme = "README.md"
 # shared `tuparles` namespace; an __init__.py in either would break editable installs
 # of both. See docs/research/2026-06-28-ui-architecture-decisions.md §2.
 packages = [{ include = "tuparles", from = "src" }]
+# Packaged static data (postprocess literal tables) — ship the JSON in both the
+# wheel and sdist so importlib.resources resolves it under pip AND Chaquopy.
+include = [
+    { path = "src/tuparles/data/postprocess-data.json", format = ["sdist", "wheel"] },
+]
 
 [tool.poetry.dependencies]
 python = ">=3.11,<3.15"
