@@ -532,5 +532,17 @@
     "subject": "Build-flag / SIMD audit of vendored qwen_asr + ctranslate2",
     "completedAt": "2026-06-28",
     "learnings": "qwen_asr is RED on no-AVX2 hosts: built -march=native with COMPILE-TIME '#elif __AVX2__ && __FMA__' and ZERO cpuid dispatch -> hard SIGILL on Sandy Bridge (erable), not a slowdown. CTranslate2 (MKL+oneDNN) and whisper.cpp (ggml) both ship RUNTIME SIMD dispatch with an SSE floor -> degrade gracefully. Lesson: runtime cpuid dispatch is a portability REQUIREMENT for the gradient, not a nicety; the #6 shim must never hand qwen_asr to a no-AVX2 box; cheap qwen fix is a per-host recompile (-march=sandybridge -> in-tree _generic kernels)."
+  },
+  {
+    "id": 10,
+    "subject": "Arch spine: extract & CI-fence tuparles-core (refactor steps 1-5)",
+    "completedAt": "2026-06-28",
+    "learnings": "Step 5 (physical namespace move) shipped as a PEP 420 native-namespace split, NOT a rename. KEY insight: two distributions sharing one import namespace MUST drop the top __init__.py (a regular package can't merge across two editable src roots -- Python stops at the first __init__.py); doing so keeps imports/Android getModule/boundary-test all unchanged. De-risked with a throwaway Poetry-2.2 prototype (two-dist editable + standalone wheel) BEFORE moving any of the 70 files. Root pyproject became package-mode=false workspace owning dev/nlp/embed groups + tool config, so pytest/ruff/mypy run unchanged from root; tests stay unified at tests/. Move-induced path bugs (config.REPO_ROOT parents[2], introspect parents[3]) fixed by walking UP to a marker (.git / docs dir) not a fixed index. Tooling needed teaching or it broke silently: ruff known-first-party=['tuparles']+src roots, mypy mypy_path+explicit_package_bases. telemetry/dashboard.py (only Qt module in all-core telemetry pkg) relocated out so each subpackage lives wholly in one dist. 791 green, ruff+mypy clean."
+  },
+  {
+    "id": "s26-pr11-postprocess-json",
+    "subject": "Externalise postprocess tables to packaged JSON (#11 step 6, via PR #11)",
+    "completedAt": "2026-06-28",
+    "learnings": "Leveraged an OPEN+CONFLICTING PR (feat/postprocess-data-json) instead of reimplementing: ported its loader/schema/test onto the post-split tuparles-core. CRITICAL: never blind-merge a stale branch's DATA -- diffed PR's postprocess-data.json vs the live tables and found its SPOKEN_TO_SYMBOL predated main's 3 hyphen rules (trait d'union/tiret/hyphen). Regenerated the JSON FROM current live tables (fidelity+order) and asserted byte-identical before swapping the .py tables for the importlib.resources loader. importlib.resources + a regular `data` subpackage (keeps __init__.py) works under the PEP420 top namespace; poetry `include` ships the JSON in the core wheel. PR closed as superseded, with credit + the correction noted."
   }
 ]
