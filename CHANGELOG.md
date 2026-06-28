@@ -1,5 +1,54 @@
 # Changelog
 
+## Sprint 23 — 2026-06-28 · « slash » devient `/` (piloter au clavier-voix) · v0.3.0
+
+You dictate INTO Claude Code, shells, URL bars, code comments. They all spell `/`
+the way you say it: "slash". But "slash" decoded as the *word*, and a split
+command name ("pre compact", "code review") never rejoined — so the one place
+voice should shine, driving a REPL, was the one place it fumbled. Fixed as a
+spoken-syntax family (#53), not a model tweak: deterministic, post-decode,
+reversible — plus a tiny decode-time seed so Whisper *hears* "slash" at all.
+
+### Added
+- **Spoken slashes** (`syntax_features/slashes.py`) — every spoken "slash"
+  becomes "/", a path separator that glues to its neighbours: "slash help" →
+  `/help`, "endpoint slash habits" → `endpoint/habits`, "code slash slash
+  comment" → `code//comment`. A curated **ontology** of Claude Code commands
+  canonicalises known names ("slash pré compact" → `/pre-compact`, "slash code
+  review" → `/code-review`); accents are trimmed (`/cafe`, not `/café`) and what
+  follows a "/" is treated as ASCII. A "/" after sentence punctuation keeps its
+  space, so breaks survive ("Bonjour. /help"). Wired into
+  `pipeline.postprocess()` (daemon + eval share it); auto-listed in
+  `tuparles cheatsheet`.
+- **Spoken hyphen** (`punctuation.py`) — "tiret" / "trait d'union" / "hyphen" →
+  `-`, so you can spell a command or identifier aloud ("slash pré tiret compact"
+  → `/pre-compact`).
+- **Command-vocabulary seed** (`seed_prompt.COMMAND_SEED`) — a tiny, validated
+  bias so Whisper actually *hears* the command. The 2026-06-28 take replay
+  proved it rescues the worst mishear: "slash precompact" decoded as "c'est l'âge
+  prix compact" → `/pre-compact`. Rides the protected tail with the manual
+  glossary, gated by `dictseed_bias`.
+- **`slash_commands` setting** — a flat list extending the ontology with your own
+  command names, no source edit. The family as a whole toggles via
+  `settings["syntax"]["slashes"]`.
+
+### Doctrine
+- **Forensics first: we seeded commands because the replay said to.** The earlier
+  instinct was "rewrite, don't seed". But take 16 has *no* "slash" in the decoded
+  text to rewrite — it had to be fixed at decode time. So we measured
+  (`docs/research/2026-06-28-spoken-slash-commands.md`): a command-WORDS-only seed
+  rescues it with zero hallucination, while a URL-example seed *invented*
+  `facebook.fr`/`google.com` (the Sprint 13 over-seeding tax, reproduced). Seed
+  the commands, drop the URL examples.
+- **"slash" means `/` everywhere — a measured product call.** It fires anywhere,
+  not just a line head, relaxing the house when-in-doubt-text asymmetry: in real
+  dictation (the take forensics) "slash" was the glyph, never prose. The one
+  thing we *won't* fuse is a sentence break. It stays a setting.
+- **URLs are the harder sibling — deferred to a dictation mode.** "https deux-
+  points slash slash …" mangles *acoustically* ("https2…", "slashnek"), so no
+  seed or rewrite this sprint fully fixes it. The right answer is a spoken
+  spell/URL quasimode (#62-kin), scoped separately rather than hacked in here.
+
 ## Sprint 22 — 2026-06-27 · Le POC qui parle dans la poche
 
 The Android spike went from "research epic" to **a working app on a Fairphone 6**

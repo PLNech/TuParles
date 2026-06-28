@@ -3,4 +3,8 @@ with the syntax core, so whatever assembles the pipeline only needs to import
 `tuparles.syntax_features` once for the grammar to come alive.
 """
 
-from tuparles.syntax_features import caps, quotes  # noqa: F401  (import = register)
+from tuparles.syntax_features import (  # noqa: F401  (import = register)
+    caps,
+    quotes,
+    slashes,
+)

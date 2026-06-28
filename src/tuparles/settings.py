@@ -28,6 +28,11 @@ _DEFAULTS: dict[str, object] = {
     # so it spells your symbols right. Advisory only (never forces a decode), so
     # default on; the conservative post-correct is a separate gated step (#69).
     "dictseed_bias": True,
+    # Spoken slashes (#53): every spoken "slash" → "/" (a path separator), with a
+    # command ontology that canonicalises known names ("slash pré compact" →
+    # "/pre-compact"). `slash_commands` extends that ontology with your own (a
+    # flat list of names). The family as a whole toggles via settings["syntax"].
+    "slash_commands": [],
     # Quick-chat / voice macros (#89): expand an anchored spoken trigger into a
     # canned text. Safe-on — an empty/absent phrasepack.json is a no-op, so it
     # can't fire until you write a macro. Structural match only (never fuzzy).

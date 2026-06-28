@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "tuparles"
-version = "0.2.0"
+version = "0.3.0"
 description = "Local push-to-talk dictation for Fr-En code-switchers. Speak, see, ship."
 authors = ["PLNech <PLNech@users.noreply.github.com>"]
 readme = "README.md"
