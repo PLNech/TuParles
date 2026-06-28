@@ -196,11 +196,11 @@ class DictationService : Service() {
 
     private fun goForeground(text: String) {
         val type = if (Build.VERSION.SDK_INT >= 30) ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0
-        ServiceCompat.startForeground(this, NOTIF_ID, notif(text), type)
+        ServiceCompat.startForeground(this, NOTIF_ID, notif(text, showStop = true), type)
     }
 
-    private fun updateNotif(text: String) {
-        getSystemService(NotificationManager::class.java)?.notify(NOTIF_ID, notif(text))
+    private fun updateNotif(text: String, showStop: Boolean = false) {
+        getSystemService(NotificationManager::class.java)?.notify(NOTIF_ID, notif(text, showStop))
     }
 
     private fun stopForegroundAndSelf() {
@@ -208,7 +208,7 @@ class DictationService : Service() {
         stopSelf()
     }
 
-    private fun notif(text: String): Notification {
+    private fun notif(text: String, showStop: Boolean): Notification {
         val nm = getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= 26 && nm?.getNotificationChannel(CHANNEL) == null) {
             nm?.createNotificationChannel(
@@ -219,13 +219,21 @@ class DictationService : Service() {
             this, 0, Intent(this, ScratchpadActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE,
         )
-        return NotificationCompat.Builder(this, CHANNEL)
+        val b = NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentTitle("TuParles")
             .setContentText(text)
             .setOngoing(true)
             .setContentIntent(pi)
-            .build()
+        // While recording, let the user end the take from the shade — no app trip.
+        if (showStop) {
+            val stop = PendingIntent.getService(
+                this, 2, Intent(this, DictationService::class.java).setAction(ACTION_STOP),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+            b.addAction(android.R.drawable.ic_media_pause, "Stop", stop)
+        }
+        return b.build()
     }
 
     override fun onDestroy() {

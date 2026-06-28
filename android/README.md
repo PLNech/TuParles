@@ -141,11 +141,13 @@ Pull the recorded takes and the durable history/learning store:
 
 ```bash
 adb pull /sdcard/Android/data/pl.nech.tuparles/files/captures   # harness {wav,raw,clean}
-adb pull /sdcard/Android/data/pl.nech.tuparles/files/history     # takes.jsonl + opt-in WAVs
+adb pull /sdcard/Android/data/pl.nech.tuparles/files/history     # takes.jsonl (learning store)
+adb pull /sdcard/Android/data/pl.nech.tuparles/files/takes       # opt-in per-take WAVs
 ```
 
 `history/takes.jsonl` is the learning store: one row per take with
-`{raw, clean, corrected, vote}` + profiling (RTF, decode ms, model). Suppressed
+`{raw, clean, corrected, vote}` + profiling (RTF, decode ms, model). The
+**Historique** screen also exports it directly via the share sheet. Suppressed
 entirely in private mode.
 
 ## Privacy by construction
