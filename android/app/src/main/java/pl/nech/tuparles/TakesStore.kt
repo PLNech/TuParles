@@ -77,6 +77,20 @@ object TakesStore {
         }
     }
 
+    /** Delete the whole history (the JSONL). Destructive — callers confirm first. */
+    @Synchronized
+    fun clear(c: Context): Boolean {
+        val f = file(c) ?: return false
+        return try {
+            if (f.exists()) f.delete() else true
+        } catch (t: Throwable) {
+            DebugLog.w(TAG, "takes: clear failed (${t.javaClass.simpleName})"); false
+        }
+    }
+
+    /** Bytes on disk for the history JSONL — for the storage readout. */
+    fun sizeBytes(c: Context): Long = file(c)?.takeIf { it.exists() }?.length() ?: 0L
+
     /** Aggregate profiling — the answer to "where's the profiling?". */
     data class Stats(
         val n: Int,
