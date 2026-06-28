@@ -1,5 +1,47 @@
 # Changelog
 
+## Sprint 25 — 2026-06-28 · Un cœur, quatre façades — les choix d'architecture
+
+A planning session turned four open questions into committed decisions: the UI
+direction, the core/frontend split, the Python↔whisper.cpp boundary, and the order
+of work. No product behaviour changed; what shipped is the design record and the
+first spine artifact — the import-boundary gate that the whole refactor leans on.
+
+### Added
+- **Import-boundary gate** (#10) — `tests/test_core_boundary.py` imports all 32
+  intended-`tuparles-core` modules in a fresh interpreter with the desktop-hard deps
+  (PySide6, sounddevice, faster_whisper, pynput, evdev, numpy) *blocked* at the
+  import system. All green today: the ~2,864 LOC of postprocess/privacy/settings IP
+  is genuinely stdlib-only, so the extraction won't fight hidden leaks. This is the
+  invariant that keeps the boundary from rotting as steps 4-5 proceed.
+
+### Doctrine
+- **One core, four thin frontends** (#10-#13) — commit to the full split:
+  `TuParles.app` / `tuparles-service` / `tuparles-server` / `tuparles-android` over a
+  pure-Python `tuparles-core`. `.app` and `-service` are one desktop runtime (GUI
+  optional). Config = one Python-authored schema → committed `settings.schema.json`
+  SSOT → generated Kotlin (CI diff-gated). Shared logic travels as Python (Chaquopy);
+  shared data as JSON; native idioms (`strings.xml`) are generated, never duplicated.
+- **The UI framework isn't where the hard parts live** (#13) — global hotkey,
+  always-on-top, and text injection are Wayland *protocol* problems (GlobalShortcuts
+  portal / `wlr-layer-shell` / ydotool) that hit every toolkit equally and live in our
+  layer regardless. So the UI is chosen on rendering + cross-device reach: finalists
+  **pywebview** (lean) vs **PySide6+QML**, resolved by a spike. `always-on-top` as a
+  window flag is a Wayland no-op for everyone; GNOME refuses layer-shell → reduced HUD
+  mode there (graceful degradation).
+- **pybind over hand-bindings unless measured otherwise** (#4) — Python↔whisper.cpp
+  on the CPU rung defaults to **pywhispercpp** (in-process, restores prompt-bias +
+  word-confidence, same GGML family); ctypes only if the benchmark proves a latency
+  margin worth the per-release tax. Both are in-process, so "fastest" rarely separates
+  them.
+- **Order: arch → engine → UI** — the core boundary makes everything downstream
+  cheaper; the engine is the differentiator; UI last, spike-decided.
+
+### Research
+- `docs/research/2026-06-28-ui-architecture-decisions.md` — the four forks with the
+  why, the Wayland terrain that reframes the UI choice, the core+4-frontends diagram,
+  the config/UX-sharing strategy, and the 10-step minimal-refactor path.
+
 ## Sprint 24 — 2026-06-28 · La route vers le cloud — recon, pas de code
 
 Two questions, no shipped code: can the Android acceleration work feed back into
