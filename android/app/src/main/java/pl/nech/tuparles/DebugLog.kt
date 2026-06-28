@@ -79,4 +79,16 @@ object DebugLog {
             files.take(files.size - MAX_FILES).forEach { it.delete() }
         }
     }
+
+    /** Total bytes of all on-disk logs — for the storage readout. */
+    fun sizeBytes(): Long = logFiles().sumOf { it.length() }
+
+    /** Delete every on-disk log. Destructive — callers confirm first. */
+    @Synchronized
+    fun clear(): Int {
+        val files = logFiles()
+        var n = 0
+        files.forEach { if (it.delete()) n++ }
+        return n
+    }
 }

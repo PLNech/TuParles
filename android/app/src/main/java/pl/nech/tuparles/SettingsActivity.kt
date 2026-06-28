@@ -66,6 +66,25 @@ class SettingsActivity : AppCompatActivity() {
         toggleRow("Journaux verbeux", "Journalisation détaillée — utile pour diagnostiquer après coup",
             Settings.verbose(this)) { Settings.set(this, Settings.KEY_VERBOSE, it) }
 
+        section("Données")
+        val audioDir = getExternalFilesDir("takes")
+        val audioBytes = audioDir?.listFiles()?.sumOf { it.length() } ?: 0L
+        choiceRow("Historique des prises", human(TakesStore.sizeBytes(this)), "takes.jsonl — le magasin d'apprentissage") {
+            confirmClear("Effacer l'historique ?", "Supprime takes.jsonl (prises, votes, corrections). Irréversible.") {
+                TakesStore.clear(this); toast("historique effacé"); build()
+            }
+        }
+        choiceRow("Audio des prises", human(audioBytes), "les WAV gardés si « Sauvegarder l'audio » est ON") {
+            confirmClear("Effacer l'audio ?", "Supprime tous les WAV des prises. Irréversible.") {
+                audioDir?.listFiles()?.forEach { it.delete() }; toast("audio effacé"); build()
+            }
+        }
+        choiceRow("Journaux", human(DebugLog.sizeBytes()), "les .log quotidiens (filet de récupération)") {
+            confirmClear("Effacer les journaux ?", "Supprime tous les fichiers .log. Irréversible.") {
+                val n = DebugLog.clear(); toast("$n journaux effacés"); build()
+            }
+        }
+
         section("Système")
         box.addView(TextView(this).apply {
             text = systemInfo(); textSize = 12f; setTextColor(Color.parseColor("#7D8CA0"))
@@ -169,6 +188,19 @@ class SettingsActivity : AppCompatActivity() {
         addView(TextView(this@SettingsActivity).apply {
             text = desc; textSize = 11f; setTextColor(Color.parseColor("#7D8CA0")); setPadding(0, dp(1), dp(8), 0)
         })
+    }
+
+    private fun confirmClear(title: String, message: String, onConfirm: () -> Unit) {
+        AlertDialog.Builder(this).setTitle(title).setMessage(message)
+            .setPositiveButton("Effacer") { _, _ -> onConfirm() }
+            .setNegativeButton("Annuler", null).show()
+    }
+
+    private fun human(bytes: Long): String = when {
+        bytes <= 0L -> "—"
+        bytes < 1024 -> "$bytes o"
+        bytes < 1024 * 1024 -> "${bytes / 1024} Ko"
+        else -> "${"%.1f".format(bytes / 1024.0 / 1024.0)} Mo"
     }
 
     private fun toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_SHORT).show()
