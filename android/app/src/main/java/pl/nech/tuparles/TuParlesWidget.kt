@@ -39,7 +39,7 @@ class TuParlesWidget : AppWidgetProvider() {
 
         private fun faceFor(s: DictationState): Pair<String, String> = when (s) {
             is DictationState.Recording -> "■ Stop" to "🔴 ${"%.1f".format(s.elapsedMs / 1000f)}s"
-            is DictationState.Decoding -> "⏳" to "décodage…"
+            is DictationState.Decoding -> "⏳" to "décodage ${s.elapsedMs / 1000}s"
             else -> "🎙 TuParles" to "Toucher pour dicter"
         }
 

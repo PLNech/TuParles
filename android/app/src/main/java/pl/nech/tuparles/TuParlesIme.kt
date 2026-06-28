@@ -117,7 +117,7 @@ class TuParlesIme : InputMethodService() {
                 refreshStatus("🔴 ${"%.1f".format(s.elapsedMs / 1000f)}s  ${meter(s.level)}")
             }
             is DictationState.Decoding -> {
-                mic.isEnabled = false; refreshStatus("⏳ décodage…")
+                mic.isEnabled = false; refreshStatus("⏳ décodage… ${s.elapsedMs / 1000}s")
             }
             is DictationState.Done -> {
                 mic.text = "🎙  Parler"; mic.isEnabled = true
