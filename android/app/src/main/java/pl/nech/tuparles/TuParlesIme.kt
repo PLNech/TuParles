@@ -10,7 +10,9 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.ExtractedTextRequest
 import android.view.inputmethod.InputMethodManager
+import pl.nech.domovoy.analytics.DomovoyAnalytics
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -34,6 +36,11 @@ class TuParlesIme : InputMethodService() {
     private lateinit var mic: Button
     private var langKey: Button? = null
     private var lastConsumedId = 0L
+    // The take last committed into a field — the anchor for "record-fix": after you
+    // edit the phrase in another keyboard and come back, tapping 📝 captures the
+    // field's final form as this take's correction (the learning label).
+    private var fixTakeId = 0L
+    private var fixOriginal = ""
 
     override fun onCreate() {
         super.onCreate()
@@ -64,6 +71,7 @@ class TuParlesIme : InputMethodService() {
         controls.addView(key("⌫") { ic()?.deleteSurroundingText(1, 0) }, weight())
         controls.addView(key("espace") { ic()?.commitText(" ", 1) }, weight(2f))
         controls.addView(key("⏎") { onEnter() }, weight())
+        controls.addView(key("📝") { recordFix() }, weight())
         controls.addView(key(langGlyph()) { cycleLang() }.also { langKey = it }, weight())
         controls.addView(key("⌨") { switchAway() }, weight())
         root.addView(controls, lp(matchW = true))
@@ -118,6 +126,7 @@ class TuParlesIme : InputMethodService() {
                     val text = s.take.clean.trim()
                     if (text.isNotEmpty()) {
                         ic()?.commitText("$text ", 1)
+                        fixTakeId = s.id; fixOriginal = text // anchor for record-fix
                         refreshStatus("✅ ${s.take.ms}ms · ${text.length} car.")
                     } else {
                         refreshStatus("…rien entendu")
@@ -143,6 +152,42 @@ class TuParlesIme : InputMethodService() {
         } else {
             ic.commitText("\n", 1)
         }
+    }
+
+    /**
+     * Record-fix: the learning loop's return leg. You dictated a phrase, switched to
+     * another keyboard to correct it, and came back — tapping 📝 reads the field's
+     * final form and stores it as the last take's correction (a {raw, clean, corrected}
+     * learning label) plus a typed take_label metric (shape only, never the text).
+     * Honest by construction: it does nothing if there's no anchored take, if the
+     * field is unchanged, or in private mode (where the take was never recorded).
+     */
+    private fun recordFix() {
+        if (fixTakeId == 0L) { refreshStatus("📝 dictez d'abord, puis corrigez"); return }
+        if (Settings.privateMode(this)) { refreshStatus("🔒 mode privé — non enregistré"); return }
+        val field = fieldText().trim()
+        if (field.isEmpty()) { refreshStatus("📝 champ vide"); return }
+        if (field == fixOriginal.trim()) { refreshStatus("📝 aucun changement"); return }
+        TakesStore.update(this, fixTakeId, corrected = field)
+        val dist = HistoryActivity.levenshtein(fixOriginal.trim(), field)
+        DomovoyAnalytics.metric("take_label", mapOf(
+            "id" to fixTakeId, "action" to "record_fix", "source" to "ime",
+            "orig_chars" to fixOriginal.trim().length, "fix_chars" to field.length,
+            "edit_distance" to dist,
+        ))
+        DebugLog.i(TAG, "record-fix: take $fixTakeId corrected (Δ$dist car.)")
+        refreshStatus("✅ correction enregistrée (Δ$dist car.)")
+        fixTakeId = 0L // consume: one correction per take, no accidental double-record
+    }
+
+    /** The field's current full text — the "final form" after edits in any keyboard. */
+    private fun fieldText(): String {
+        val ic = ic() ?: return ""
+        ic.getExtractedText(ExtractedTextRequest(), 0)?.text?.let { return it.toString() }
+        // Fallback for fields that refuse extraction: stitch around the cursor.
+        val before = ic.getTextBeforeCursor(MAX_FIELD, 0) ?: ""
+        val after = ic.getTextAfterCursor(MAX_FIELD, 0) ?: ""
+        return "$before$after"
     }
 
     private fun cycleLang() {
@@ -195,5 +240,6 @@ class TuParlesIme : InputMethodService() {
 
     companion object {
         private const val TAG = "TuParles"
+        private const val MAX_FIELD = 5000 // cap the field read; dictation fields are short
     }
 }
