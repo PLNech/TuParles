@@ -508,5 +508,17 @@
     "subject": "Ship experimental.apk + merge to main",
     "completedAt": "2026-06-27",
     "learnings": "Trim vendored whisper.cpp before merging: the ggml backends (cuda/vulkan/metal/sycl/...) are add_subdirectory-gated on GGML_<BACKEND> (default OFF) so deleting them is safe for a CPU build — 20MB→6.2MB, rebuild stays green. Fairphone aggressively suspends USB when idle → adb drops mid-command; the app runs independently and captures persist on-device, so pull-on-demand beats a fragile live logcat stream."
+  },
+  {
+    "id": "s24-android-to-cpu-port",
+    "subject": "Port Android acceleration learnings to the desktop CPU path",
+    "completedAt": "2026-06-28",
+    "learnings": "The two headline Android wins (-O3 58.7x, language=auto) are LEARNINGS not ports — desktop uses prebuilt wheels (no -O0 trap) and already detects language per 20s window. The real carry is the ENGINE: adopt the already-vendored whisper.cpp as the CPU path to (a) restore initial_prompt vocab-biasing + per-word confidence that qwen-asr 0.6B silently dropped, (b) unify on the large-v3-turbo weight family GPU<->CPU, (c) offer a base/large quality tier. whisper.cpp is the gradient's unifier because it's musl-friendly + AVX2-graceful + one GGML weight set across Android/erable/home-box/laptop — ctranslate2 can't (no musl wheels). qwen's fate rides the benchmark (Task #3). The 2-rung GPU/CPU ladder generalises to a 6-rung VRAM->(RAM+AVX+cores) gradient selected by a capability.py-style probe."
+  },
+  {
+    "id": "s24-stt-api-design",
+    "subject": "Design api.nech.pl /stt/ endpoint (wav + stream) + CPU reqs",
+    "completedAt": "2026-06-28",
+    "learnings": "Domain `audio` is already taken (Douanier/ParVagues, LIVE) so STT gets its own `/stt/v1/`. Tier = thin container: erable CANNOT host real inference (ssh proved it's a 2011 i3-2130, no AVX2, ~1.8GB free RAM, already swapping) — so the shim auth/hash/caches and DISPATCHES heavy decode behind an env URL per the platform's own no-big-models doctrine. Engine MUST be whisper.cpp not faster-whisper on the alpine base (ctranslate2 ships glibc/manylinux wheels only, no musl; whisper.cpp builds clean on musl — Android proved it). WAV-batch first; streaming deferred to chunked-POST v2 (whisper.cpp CPU streaming is broken/expensive). Cache app-level by sha256(wav) via cache.get_or_set, NOT edge proxy_cache (POST body isn't in the URI). Redis not yet deployed (binary on host, in-proc fallback today). Benchmark corpus is espeak/piper TTS: fine for RTF, weak for real-world code-switch WER."
   }
 ]
