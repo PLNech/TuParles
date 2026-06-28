@@ -17,6 +17,7 @@ class TuParlesApp : Application() {
     override fun onCreate() {
         super.onCreate()
         DebugLog.setVerbose(Settings.verbose(this))
+        DebugLog.setPrivate(Settings.privateMode(this))
         DebugLog.init(this)
 
         if (!Python.isStarted()) Python.start(AndroidPlatform(this))

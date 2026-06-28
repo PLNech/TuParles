@@ -108,15 +108,31 @@ object DomovoyAnalytics {
         while (breadcrumbs.size > 24) breadcrumbs.removeFirst()
     }
 
+    /** String-attribute event (back-compat: the Java app + existing callers). */
     @JvmStatic
     fun event(name: String, attributes: Map<String, String> = emptyMap(), category: String = "app", severity: String = "info") {
+        emit(name, attributes, category, severity)
+    }
+
+    /**
+     * Typed-attribute event: values may be Int/Long/Double/Float/Boolean/String (or
+     * an enum's .name). They survive to the JSON as native types, so domovoy's
+     * duckdb / data-lake / NLP layers can chart numbers as numbers, not strings.
+     */
+    @JvmStatic
+    fun metric(name: String, values: Map<String, Any?> = emptyMap(), category: String = "performance", severity: String = "info") {
+        emit(name, values, category, severity)
+    }
+
+    private fun emit(name: String, attributes: Map<String, Any?>, category: String, severity: String) {
         if (!started || !config.enabled) return
-        val merged = linkedMapOf<String, String>()
+        val merged = linkedMapOf<String, Any?>()
         merged.putAll(customKeys)
-        merged["breadcrumb_count"] = breadcrumbs.size.toString()
-        merged["pid_bucket"] = (Process.myPid() % 16).toString()
+        merged["breadcrumb_count"] = breadcrumbs.size // typed Int
+        merged["pid_bucket"] = Process.myPid() % 16 // typed Int
         for ((key, value) in attributes) {
-            merged[sanitizeToken(key)] = sanitizeValue(value)
+            val k = sanitizeToken(key)
+            if (k.isNotEmpty()) merged[k] = if (value is String) sanitizeValue(value) else value
         }
         enqueue(DomovoyAnalyticsEvent(
             observedAtMillis = System.currentTimeMillis(),
@@ -154,9 +170,9 @@ object DomovoyAnalytics {
         val clean = sanitizeToken(name).ifEmpty { "span" }
         val startedAt = activeSpans.remove(clean) ?: return
         val durationMs = (System.currentTimeMillis() - startedAt).coerceAtLeast(0)
-        val merged = linkedMapOf("span" to clean, "duration_ms" to durationMs.toString())
+        val merged = linkedMapOf<String, Any?>("span" to clean, "duration_ms" to durationMs) // typed Long
         merged.putAll(attributes)
-        event("span_finished", merged, category = "performance", severity = if (durationMs > 1500L) "warn" else "info")
+        metric("span_finished", merged, category = "performance", severity = if (durationMs > 1500L) "warn" else "info")
     }
 
     @JvmStatic
@@ -209,11 +225,12 @@ object DomovoyAnalytics {
                     if (line.isBlank()) continue
                     val json = JSONObject(line)
                     val attrsJson = json.optJSONObject("attributes") ?: JSONObject()
-                    val attrs = linkedMapOf<String, String>()
+                    val attrs = linkedMapOf<String, Any?>()
                     val keys = attrsJson.keys()
                     while (keys.hasNext()) {
                         val key = keys.next()
-                        attrs[key] = attrsJson.optString(key, "")
+                        // get() preserves the native JSON type (number/bool/string).
+                        attrs[key] = if (attrsJson.isNull(key)) null else attrsJson.get(key)
                     }
                     rows.add(DomovoyAnalyticsEvent(
                         observedAtMillis = json.optLong("observed_at_ms", System.currentTimeMillis()),
@@ -246,7 +263,15 @@ object DomovoyAnalytics {
                     json.put("session_id", event.sessionId)
                     json.put("run_id", event.runId)
                     val attrs = JSONObject()
-                    for ((key, value) in event.attributes) attrs.put(key, value)
+                    for ((key, value) in event.attributes) {
+                        // JSON has no float; widen to double. null/others -> skip/stringify.
+                        when (value) {
+                            null -> {}
+                            is Float -> attrs.put(key, value.toDouble())
+                            is Int, is Long, is Double, is Boolean, is String -> attrs.put(key, value)
+                            else -> attrs.put(key, value.toString())
+                        }
+                    }
                     json.put("attributes", attrs)
                     writer.write(json.toString())
                     writer.write('\n'.code)

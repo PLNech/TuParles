@@ -21,15 +21,21 @@ object DebugLog {
     private val tsFmt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
     private val dayFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
     @Volatile private var verbose = false
+    @Volatile private var privateMode = false
 
     fun init(context: Context) {
         dir = context.getExternalFilesDir("logs")?.also { it.mkdirs() }
         prune()
-        i("DebugLog", "logging to ${dir?.absolutePath} (verbose=$verbose)")
+        i("DebugLog", "logging to ${dir?.absolutePath} (verbose=$verbose, private=$privateMode)")
     }
 
     fun setVerbose(on: Boolean) {
         verbose = on
+    }
+
+    /** Private mode: stop writing to the on-disk log (logcat still flows, ephemeral). */
+    fun setPrivate(on: Boolean) {
+        privateMode = on
     }
 
     fun i(tag: String, msg: String) {
@@ -53,6 +59,7 @@ object DebugLog {
 
     @Synchronized
     private fun write(level: String, tag: String, msg: String) {
+        if (privateMode) return // private mode: nothing touches disk
         val d = dir ?: return
         try {
             File(d, "tuparles-${dayFmt.format(Date())}.log")

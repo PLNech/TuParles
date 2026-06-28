@@ -24,8 +24,13 @@ class AudioRecorder {
     private var thread: Thread? = null
     private val samples = ArrayList<Short>(SAMPLE_RATE * 10)
 
+    /**
+     * @param onLevel optional realtime feedback: invoked per audio chunk on the
+     *   reader thread with (rms 0..1, elapsedMs) so a surface can paint a live meter
+     *   + timer. Lightweight; the StateFlow consumer throttles redraws.
+     */
     @SuppressLint("MissingPermission") // caller checks RECORD_AUDIO before start()
-    fun start() {
+    fun start(onLevel: ((Float, Long) -> Unit)? = null) {
         val minBuf = AudioRecord.getMinBufferSize(
             SAMPLE_RATE,
             AudioFormat.CHANNEL_IN_MONO,
@@ -46,6 +51,7 @@ class AudioRecorder {
         record = rec
         recording = true
         rec.startRecording()
+        val startedAt = System.currentTimeMillis()
         Log.i(TAG, "mic: recording (recordingState=${rec.recordingState}, minBuf=$minBuf)")
         thread = Thread {
             val chunk = ShortArray(bufSize / 2)
@@ -58,6 +64,14 @@ class AudioRecorder {
                 }
                 for (i in 0 until n) samples.add(chunk[i])
                 totalRead += n
+                if (onLevel != null && n > 0) {
+                    var sum = 0.0
+                    for (i in 0 until n) {
+                        val s = chunk[i].toDouble(); sum += s * s
+                    }
+                    val rms = (Math.sqrt(sum / n) / 32768.0).toFloat().coerceIn(0f, 1f)
+                    onLevel(rms, System.currentTimeMillis() - startedAt)
+                }
             }
             Log.i(TAG, "mic: reader thread done, $totalRead samples read")
         }.also { it.start() }
