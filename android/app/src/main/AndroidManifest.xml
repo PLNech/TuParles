@@ -69,6 +69,20 @@
                 android:resource="@xml/method" />
         </service>
 
+        <!-- Smart home-screen widget: one-tap dictate → clipboard + notification,
+             live state pushed by DictationService. -->
+        <receiver
+            android:name=".TuParlesWidget"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="pl.nech.tuparles.WIDGET_TOGGLE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info" />
+        </receiver>
+
         <!-- Shares capture files to an email app via content:// URIs. No INTERNET
              permission for us — the email app does the sending, off-device control
              stays with the user. -->
