@@ -196,12 +196,7 @@ class SettingsActivity : AppCompatActivity() {
             .setNegativeButton("Annuler", null).show()
     }
 
-    private fun human(bytes: Long): String = when {
-        bytes <= 0L -> "—"
-        bytes < 1024 -> "$bytes o"
-        bytes < 1024 * 1024 -> "${bytes / 1024} Ko"
-        else -> "${"%.1f".format(bytes / 1024.0 / 1024.0)} Mo"
-    }
+    private fun human(bytes: Long): String = humanBytes(bytes)
 
     private fun toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_SHORT).show()
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()

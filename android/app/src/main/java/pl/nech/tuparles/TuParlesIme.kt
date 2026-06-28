@@ -169,7 +169,7 @@ class TuParlesIme : InputMethodService() {
         if (field.isEmpty()) { refreshStatus("📝 champ vide"); return }
         if (field == fixOriginal.trim()) { refreshStatus("📝 aucun changement"); return }
         TakesStore.update(this, fixTakeId, corrected = field)
-        val dist = HistoryActivity.levenshtein(fixOriginal.trim(), field)
+        val dist = levenshtein(fixOriginal.trim(), field)
         DomovoyAnalytics.metric("take_label", mapOf(
             "id" to fixTakeId, "action" to "record_fix", "source" to "ime",
             "orig_chars" to fixOriginal.trim().length, "fix_chars" to field.length,
