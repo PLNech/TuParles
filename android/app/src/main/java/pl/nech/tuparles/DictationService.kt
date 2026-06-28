@@ -5,6 +5,8 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
@@ -16,6 +18,7 @@ import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -51,6 +54,12 @@ class DictationService : Service() {
     private var target = "scratch"
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onCreate() {
+        super.onCreate()
+        // Mirror live state onto any placed home-screen widget for the service's life.
+        scope.launch { state.collect { TuParlesWidget.render(this@DictationService, it) } }
+    }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
@@ -97,6 +106,7 @@ class DictationService : Service() {
                 val take = Dictation.decode(samples, Settings.lang(this@DictationService),
                     Settings.postprocessOn(this@DictationService), Settings.threads(this@DictationService))
                 record(take, samples, id)
+                if (target == TARGET_WIDGET) deliver(take)
                 val done = DictationState.Done(id, target, take)
                 lastDone = done
                 _state.value = done
@@ -129,6 +139,47 @@ class DictationService : Service() {
             "target" to target, "ok" to true,
         ))
         if (Settings.saveAudio(this)) saveAudio(samples, id)
+    }
+
+    /**
+     * Deliver a widget-originated take: the widget has no field to commit into, so the
+     * text goes to the clipboard (best-effort — some OEMs gate background clipboard
+     * writes) AND a tap-to-open notification carrying a preview, so the result reaches
+     * the user even if the clipboard write is refused. Runs regardless of private mode:
+     * private mode suppresses logging/telemetry/audio, never the user's own result.
+     */
+    private fun deliver(take: Take) {
+        val text = take.clean.trim()
+        if (text.isEmpty()) { resultNotif("…rien entendu", null); return }
+        try {
+            getSystemService(ClipboardManager::class.java)
+                ?.setPrimaryClip(ClipData.newPlainText("TuParles", text))
+        } catch (t: Throwable) {
+            DebugLog.w(TAG, "widget: clipboard write refused (${t.javaClass.simpleName})")
+        }
+        resultNotif("✅ ${text.length} car. copié", text)
+    }
+
+    private fun resultNotif(title: String, preview: String?) {
+        val nm = getSystemService(NotificationManager::class.java) ?: return
+        if (Build.VERSION.SDK_INT >= 26 && nm.getNotificationChannel(CHANNEL_RESULT) == null) {
+            nm.createNotificationChannel(
+                NotificationChannel(CHANNEL_RESULT, "Résultat dictée", NotificationManager.IMPORTANCE_DEFAULT),
+            )
+        }
+        val pi = PendingIntent.getActivity(
+            this, 1, Intent(this, ScratchpadActivity::class.java),
+            PendingIntent.FLAG_IMMUTABLE,
+        )
+        val n = NotificationCompat.Builder(this, CHANNEL_RESULT)
+            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+            .setContentTitle(title)
+            .setContentText(preview?.take(120) ?: "")
+            .setStyle(preview?.let { NotificationCompat.BigTextStyle().bigText(it.take(400)) })
+            .setAutoCancel(true)
+            .setContentIntent(pi)
+            .build()
+        nm.notify(NOTIF_RESULT, n)
     }
 
     private fun saveAudio(samples: ShortArray, id: Long) {
@@ -179,6 +230,9 @@ class DictationService : Service() {
 
     override fun onDestroy() {
         if (recording) recorder.stop()
+        // Collector dies with the scope; leave the widget on its resting idle face.
+        TuParlesWidget.render(this, DictationState.Idle)
+        scope.cancel()
         super.onDestroy()
     }
 
@@ -188,8 +242,11 @@ class DictationService : Service() {
         const val EXTRA_TARGET = "target"
         const val TARGET_SCRATCH = "scratch"
         const val TARGET_IME = "ime"
+        const val TARGET_WIDGET = "widget"
         private const val NOTIF_ID = 1001
+        private const val NOTIF_RESULT = 1002
         private const val CHANNEL = "dictation"
+        private const val CHANNEL_RESULT = "dictation_result"
         private const val TAG = "TuParles"
 
         private val _state = MutableStateFlow<DictationState>(DictationState.Idle)
