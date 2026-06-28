@@ -1,5 +1,49 @@
 # Changelog
 
+## Sprint 26 — 2026-06-28 · Le déménagement — `tuparles-core` quitte le nid
+
+Step 5 of the refactor, the one the gate was built to protect: the portable IP
+physically left `src/tuparles/` and became its own distribution. The boundary is
+no longer a promise enforced by a test — it is two packages that pip can install
+apart. Imports did not change; the namespace did not change; the app still runs.
+
+### Changed
+- **Monorepo split into two distributions** (#10, step 5) — `src/tuparles/` is gone;
+  the tree now lives under `packages/`: **`tuparles-core`** (the 36 portable modules:
+  postprocess chain, privacy firewall, voice-command grammar, settings, telemetry,
+  history) and **`tuparles`** (desktop: GUI, daemon, engine gradient, audio, hotkey,
+  delivery, the optional `nlp/` layer). Desktop path-depends on core (`develop=true`).
+- **Shared `tuparles.` namespace via PEP 420** — both distributions populate one
+  import namespace, so every `from tuparles.<x> import …` is byte-for-byte unchanged
+  across desktop, tests, and Android's `getModule("tuparles.pipeline")`. There is
+  intentionally no `src/tuparles/__init__.py` in either package (the version comes from
+  `importlib.metadata`, where `bugreport.py` already read it). Verified: a Poetry-2.2
+  editable install of both, and a standalone `tuparles-core` wheel, both import clean.
+- **Root `pyproject.toml` is now a `package-mode=false` workspace** — owns the dev /
+  nlp / embed groups and all tool config (pytest, ruff, mypy, coverage), so
+  `poetry install [--with nlp|embed]`, `pytest`, `ruff`, `mypy` all run unchanged from
+  the repo root over the whole tree. Tests stay unified at `tests/`.
+- **Android Chaquopy mounts core-only** — `srcDir` now points at
+  `packages/tuparles-core/src`, so the heavy desktop modules no longer sit on the
+  Android Python path at all (they were dead bytecode before).
+
+### Fixed
+- **Layout-independent repo-root + data paths** — `config.REPO_ROOT` (vendor/, models/,
+  vocab.txt, docs/, CHANGELOG) now walks up to the `.git` marker instead of a fixed
+  `parents[2]`, and `telemetry/introspect.py` walks up to find `docs/research/data`
+  instead of `parents[3]`. Both survived the two-levels-deeper move; both degrade
+  gracefully to a sane fallback / None off a checkout.
+
+### Infra
+- **`telemetry/dashboard.py` → `telemetry_dashboard.py`** (#10) — the only Qt module in
+  the otherwise-all-core `telemetry/` package; relocated so each subpackage lives wholly
+  in one distribution (a regular subpackage can't straddle two editable src roots).
+- **Boundary gate widened to 35 modules** (#10) — added `syntax_features.slashes` and
+  `privacy.eval` (both post-audit, both boundary-clean) so the CI fence stays honest.
+- Tooling taught the new layout: ruff `known-first-party=["tuparles"]` + `src` roots;
+  mypy `mypy_path` + `explicit_package_bases` so per-module overrides still match.
+  788 passed, ruff + mypy clean — no behaviour change, no code churn beyond the paths.
+
 ## Sprint 25 — 2026-06-28 · Un cœur, quatre façades — les choix d'architecture
 
 A planning session turned four open questions into committed decisions: the UI

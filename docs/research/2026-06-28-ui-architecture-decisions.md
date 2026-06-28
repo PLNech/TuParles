@@ -164,6 +164,9 @@ the existing app keeps running on `tuparles` (= core + desktop) throughout.
 4. Lift the `Engine` Protocol + `Word`/`Transcription` dataclasses into core (leave impls in
    desktop).
 5. Extract `tuparles-core` as a package; `tuparles` (desktop) depends on it.
+   **(Shipped Sprint 26.)** Realised as a PEP 420 namespace split: two distributions
+   under `packages/` sharing the `tuparles.` namespace (so imports/Android unchanged),
+   a `package-mode=false` workspace root. Desktop path-depends on core (`develop=true`).
 6. Externalize shared data (lexicon/strings/grammar → JSON in core; readers stay core).
 7. Carve `tuparles-service` — extract the hotkey→record→decode→deliver loop from the Qt
    wiring so it runs headless + a thin socket/HTTP control surface. (Biggest single step.)

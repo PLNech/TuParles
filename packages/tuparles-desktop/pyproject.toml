@@ -1,0 +1,32 @@
+[tool.poetry]
+name = "tuparles"
+version = "0.3.0"
+description = "Local push-to-talk dictation for Fr-En code-switchers. Speak, see, ship."
+authors = ["PLNech <PLNech@users.noreply.github.com>"]
+readme = "README.md"
+# PEP 420 native namespace package (no src/tuparles/__init__.py) — see
+# packages/tuparles-core/pyproject.toml for why. Desktop modules + the optional
+# nlp/ layer share the `tuparles` namespace with tuparles-core.
+packages = [{ include = "tuparles", from = "src" }]
+
+[tool.poetry.dependencies]
+python = ">=3.11,<3.15"
+# The portable core — develop=true so edits in packages/tuparles-core are live.
+tuparles-core = { path = "../tuparles-core", develop = true }
+# Desktop-only runtime (the boundary the import gate enforces): mic, GPU decode,
+# global hotkey, X11/Wayland input, Qt GUI.
+sounddevice = "^0.5"
+numpy = "^2.0"
+pynput = "^1.7"
+faster-whisper = "^1.2.1"
+nvidia-cublas-cu12 = "^12.9.2.10"
+nvidia-cudnn-cu12 = "^9.23.1.3"
+pyside6-essentials = "^6.11.1"
+evdev = "^1.9.3"
+
+[tool.poetry.scripts]
+tuparles = "tuparles.cli:main"
+
+[build-system]
+requires = ["poetry-core>=2.0"]
+build-backend = "poetry.core.masonry.api"

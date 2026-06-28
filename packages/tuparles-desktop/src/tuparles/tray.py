@@ -221,7 +221,7 @@ class Tray(QObject):
         self._settings_dialog.raise_()
 
     def _open_analytics(self) -> None:
-        from tuparles.telemetry.dashboard import AnalyticsDialog
+        from tuparles.telemetry_dashboard import AnalyticsDialog
 
         self._analytics_dialog = AnalyticsDialog()  # ref kept: GC-proof
         self._analytics_dialog.show()

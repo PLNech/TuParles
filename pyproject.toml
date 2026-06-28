@@ -1,22 +1,17 @@
+# Monorepo dev workspace — NOT a distributable package itself (package-mode = false).
+# The two shipped distributions live under packages/: tuparles-core (portable) and
+# tuparles (desktop). This root wires both as editable path deps and owns the shared
+# dev/test toolchain + tool config, so `poetry install [--with nlp|embed]`, pytest,
+# ruff and mypy all run unchanged from the repo root over the whole tree.
+# See docs/research/2026-06-28-ui-architecture-decisions.md §2/§4 (step 5).
 [tool.poetry]
-name = "tuparles"
-version = "0.3.0"
-description = "Local push-to-talk dictation for Fr-En code-switchers. Speak, see, ship."
-authors = ["PLNech <PLNech@users.noreply.github.com>"]
-readme = "README.md"
-packages = [{ include = "tuparles", from = "src" }]
+package-mode = false
 
 [tool.poetry.dependencies]
 python = ">=3.11,<3.15"
-sounddevice = "^0.5"
-numpy = "^2.0"
-pynput = "^1.7"
-faster-whisper = "^1.2.1"
-nvidia-cublas-cu12 = "^12.9.2.10"
-nvidia-cudnn-cu12 = "^9.23.1.3"
-pyside6-essentials = "^6.11.1"
-evdev = "^1.9.3"
-python-stdnum = "^2.2"
+# Desktop pulls tuparles-core transitively (its own path dep, develop=true), so a
+# single root install yields both distributions editable in the shared namespace.
+tuparles = { path = "packages/tuparles-desktop", develop = true }
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0"
@@ -26,7 +21,8 @@ pytest-cov = "^7.1.0"
 pre-commit = "^4.6.0"
 
 # Light, portable NLP deps — pure-python / cross-OS wheels, safe in the CI
-# matrix. The corpus-analysis core (nlp/) needs these.
+# matrix. The corpus-analysis layer (tuparles/nlp/, desktop side) needs these;
+# they live here because the unified test suite at the repo root consumes them.
 [tool.poetry.group.nlp.dependencies]
 markdown-it-py = "^4.2.0"
 scikit-learn = "^1.9.0"
@@ -41,9 +37,6 @@ optional = true
 [tool.poetry.group.embed.dependencies]
 fastembed = "^0.8.0"
 sentence-transformers = "^5.6.0"
-
-[tool.poetry.scripts]
-tuparles = "tuparles.cli:main"
 
 [tool.pytest.ini_options]
 # `gpu` needs a CUDA device + WAVs; `embed` needs the optional embed group.
@@ -67,6 +60,12 @@ show_missing = true
 [tool.ruff]
 line-length = 88
 target-version = "py311"
+# The two distributions' source roots, so ruff classifies `tuparles` as
+# first-party for import-sorting despite the packages/*/src layout.
+src = ["packages/tuparles-core/src", "packages/tuparles-desktop/src", "tests"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["tuparles"]
 
 [tool.ruff.lint]
 # Beyond the default E/F/W: import-sorting (I), bugbear (B), pyupgrade (UP),
@@ -96,7 +95,13 @@ ignore = [
 # matrix (which exists for the pure-python *runtime*) doesn't flag fcntl.flock as
 # missing on the Windows/macos cells.
 platform = "linux"
-files = ["src/tuparles"]
+files = ["packages/tuparles-core/src/tuparles", "packages/tuparles-desktop/src/tuparles"]
+# The split distributions share the `tuparles` PEP 420 namespace from two src
+# roots; tell mypy those are the package bases so it maps files to `tuparles.*`
+# module names (else the per-module overrides below stop matching).
+mypy_path = ["packages/tuparles-core/src", "packages/tuparles-desktop/src"]
+namespace_packages = true
+explicit_package_bases = true
 check_untyped_defs = true
 warn_redundant_casts = true
 warn_unused_ignores = true
@@ -111,7 +116,3 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = ["tuparles.tray", "tuparles.ui", "tuparles.settings_ui"]
 disable_error_code = ["attr-defined"]
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"

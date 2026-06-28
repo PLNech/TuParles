@@ -20,7 +20,22 @@ PARTIAL_WINDOW_S = _core.PARTIAL_WINDOW_S
 PARTIAL_MIN_AUDIO_S = _core.PARTIAL_MIN_AUDIO_S
 PARTIAL_PERIOD_S = _core.PARTIAL_PERIOD_S
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+def _repo_root() -> Path:
+    """The git-checkout root — home of vendor/, models/, vocab.txt, docs/.
+
+    Found by walking up to the `.git` marker (a dir in a clone, a file in a
+    worktree) rather than a fixed parent index, so it survives the monorepo
+    layout (this module lives at packages/tuparles-desktop/src/tuparles/). A
+    non-checkout install has no .git; fall back to the package-tree root.
+    """
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        if (parent / ".git").exists():
+            return parent
+    return here.parents[4] if len(here.parents) > 4 else here.parents[-1]
+
+
+REPO_ROOT = _repo_root()
 
 # Wayland needs different hotkey and delivery backends than X11 (evdev +
 # ydotool/wl-copy instead of pynput + xdotool/xsel). One probe imported by

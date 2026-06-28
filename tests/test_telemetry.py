@@ -193,7 +193,7 @@ class TestDashboardHtml:
     def test_usage_html_shows_counts_and_discovery_gap(
         self, _clean_registry, tmp_path, monkeypatch
     ):
-        from tuparles.telemetry import dashboard
+        from tuparles import telemetry_dashboard as dashboard
 
         _isolate(tmp_path, monkeypatch)
         syntax.register(_feature("bullets", mark="•"))  # registered, never fired
@@ -204,13 +204,13 @@ class TestDashboardHtml:
         assert "Jamais utilisé" in html and "bullets" in html  # the discovery gap
 
     def test_usage_html_empty_state(self, tmp_path, monkeypatch):
-        from tuparles.telemetry import dashboard
+        from tuparles import telemetry_dashboard as dashboard
 
         _isolate(tmp_path, monkeypatch)
         assert "Aucune donnée" in dashboard._usage_html()
 
     def test_code_html_renders_or_prompts(self, tmp_path, monkeypatch):
-        from tuparles.telemetry import dashboard
+        from tuparles import telemetry_dashboard as dashboard
 
         # cached EDA JSON lives in the repo, so this renders the real analysis;
         # either way it must be a non-crashing string under the right heading.
