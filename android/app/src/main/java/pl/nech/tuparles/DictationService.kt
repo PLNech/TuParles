@@ -32,7 +32,7 @@ import java.util.concurrent.atomic.AtomicLong
 sealed interface DictationState {
     data object Idle : DictationState
     data class Recording(val elapsedMs: Long, val level: Float) : DictationState
-    data class Decoding(val seconds: Float) : DictationState
+    data class Decoding(val seconds: Float, val elapsedMs: Long = 0L) : DictationState
     data class Done(val id: Long, val target: String, val take: Take) : DictationState
     data class Failed(val id: Long, val target: String, val message: String) : DictationState
 }
@@ -120,22 +120,33 @@ class DictationService : Service() {
         decoding = true
         val samples = recorder.stop()
         val seconds = samples.size.toFloat() / SAMPLE_RATE
-        _state.value = DictationState.Decoding(seconds)
+        _state.value = DictationState.Decoding(seconds, 0L)
         updateNotif("⏳ décodage…")
         val id = nextId()
+        val startedAt = System.currentTimeMillis()
         scope.launch {
+            // Heartbeat so a long (small/medium) decode reads as alive, not frozen.
+            val ticker = scope.launch {
+                while (true) {
+                    kotlinx.coroutines.delay(400)
+                    _state.value = DictationState.Decoding(seconds, System.currentTimeMillis() - startedAt)
+                }
+            }
             try {
                 val take = Dictation.decode(samples, Settings.lang(this@DictationService),
                     Settings.postprocessOn(this@DictationService), Settings.threads(this@DictationService))
                 record(take, samples, id)
                 if (target == TARGET_WIDGET) deliver(take)
+                ticker.cancel() // cancel BEFORE the terminal state so it can't clobber Done
                 val done = DictationState.Done(id, target, take)
                 lastDone = done
                 _state.value = done
             } catch (e: Throwable) {
+                ticker.cancel()
                 DebugLog.e(TAG, "service: decode failed", e)
                 _state.value = DictationState.Failed(id, target, e.message ?: "decode error")
             } finally {
+                ticker.cancel()
                 decoding = false
                 stopForegroundAndSelf()
             }

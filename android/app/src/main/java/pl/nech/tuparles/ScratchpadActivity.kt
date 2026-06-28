@@ -90,7 +90,7 @@ class ScratchpadActivity : AppCompatActivity() {
         }
         is DictationState.Decoding -> {
             mic.isEnabled = false
-            setStatus("⏳ décodage (%.1fs)…".format(s.seconds), "#EF6C00")
+            setStatus("⏳ décodage… %.1fs".format(s.elapsedMs / 1000f), "#EF6C00")
         }
         is DictationState.Done -> {
             mic.isEnabled = true
