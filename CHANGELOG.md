@@ -1,5 +1,79 @@
 # Changelog
 
+## Sprint 27 — 2026-06-29 · La poche — TuParles devient une app
+
+The spike grew a body. What was a build-ladder proof (mic → whisper → postprocess
+on the phone) became something you can actually live with for a week off-grid: a
+pure-TuParles **keyboard** that dictates into any app, a **scratchpad**, a
+home-screen **widget**, a system **recognizer**, a full **Réglages** screen — and,
+underneath, the move that made it trustworthy: compute left the UI thread and moved
+into a **foreground service**, so rotating the phone mid-take can no longer eat your
+words. The design rule throughout: a feature that touches disk, the mic, or the
+network ships its **private-mode off-switch** in the same change, and every metric
+carries shape, never the text.
+
+### Added
+- **The TuParles keyboard** (#16, A2) — an `InputMethodService` that commits
+  postprocessed dictation into any app's focused field, with a live meter, language
+  cycle, and edit keys. The same core, model, and telemetry as every other surface.
+- **Scratchpad home + copy tooling** (#17, A3) — the launcher screen: dictate or type,
+  copy/share/clear, pick the model/language, flip private mode — a thin observer of
+  the service, never the compute itself.
+- **Takes history + the learning loop** (#23, A9; #24, A10) — a durable per-take store
+  ({raw, clean, corrected, vote} + profiling) made visible as a newest-first
+  **Historique** screen with 👍/👎/✏️ labelling, plus a keyboard **📝 record-fix** key:
+  dictate, correct the phrase in any keyboard, return to TuParles, one tap captures the
+  field's final form as the take's correction. The week becomes training data.
+- **Full Réglages screen + decode-thread knob** (#22, A8) — engine/model/language,
+  privacy block (private mode, save-audio, analytics + verbose opt-outs), and a real
+  perf knob: thread count flows Settings → `Dictation.decode` →
+  `WhisperContext.transcribeData(threads)`, 0 = auto (high-perf cores), an override
+  clamped to the core count. A live whisper SIMD/core readout answers "what am I
+  running on?".
+- **Smart home-screen widget** (#19) — one-tap dictate without opening the app; the
+  service mirrors live state onto it and delivers the result to the clipboard plus a
+  tap-to-open notification (so it lands even where background clipboard writes are
+  gated). Update spam damped to a per-face dedup for battery.
+- **System recognizer** (#19, A5) — `android.speech.RecognitionService` over the shared
+  decode path: set TuParles as the device voice input and the mic-button anywhere goes
+  on-device instead of the cloud. A 30s safety cap never holds the mic open.
+- **Realtime feedback while recording** (#20, A6) — per-chunk RMS meter + timer painted
+  from the recorder, surfaced on every face (scratchpad, keyboard, widget).
+- **Typed analytics attributes** (#25, G) — `metric(name, Map<String, Any?>)` keeps
+  Int/Long/Double/Float/Boolean as native JSON types end-to-end, so the domovoy
+  duckdb/NLP layers chart numbers as numbers. Mirrored into the Domovoy repo.
+
+### Changed
+- **Compute moved into a foreground service** (#21, A7) — recording AND decoding now run
+  in `DictationService` (type `microphone`), independent of any Activity/IME lifecycle.
+  The surfaces observe a process `StateFlow`; a take in flight survives rotation,
+  backgrounding, and "don't keep activities". This is the structural fix, not a
+  band-aid.
+
+### Fixed
+- **The lost-take bug** (#21) — root cause was decoding inside an Activity's
+  `lifecycleScope`, cancelled on configuration change. Moving compute to the service
+  (above) plus persisting scratch text + last-consumed-take-id across config changes
+  closes it by construction.
+- **Freshly-placed widget had no click intent** — the per-face dedup could skip wiring a
+  newly placed widget; `onUpdate` now bypasses the cache.
+
+### Infra
+- **Privacy is structural in the manifest** — no `INTERNET` permission in release, by
+  design; a debug-flavor overlay carries it only for domovoy sync. The durable
+  analytics outbox drains when reachable, holds locally otherwise.
+- **Private mode is a master switch** — when ON, debug file logging, analytics/sync, and
+  raw take audio are ALL suppressed; the user's own dictation result is never withheld.
+
+### Doctrine
+- **A feature that wants the mic/disk/network ships its off-switch in the same change.**
+  Private mode isn't a screen you add later; it's a parameter of every new behaviour.
+- **Telemetry carries shape, never content.** Char counts, edit distance, RTF, votes —
+  the learning signal's magnitude travels; the dictated text stays on the box.
+- **Every surface is a thin face over one backbone.** Keyboard, scratchpad, widget,
+  recognizer all toggle the same service and observe the same state — they cannot
+  diverge in behaviour, model, or postprocess.
+
 ## Sprint 26 — 2026-06-28 · Le déménagement — `tuparles-core` quitte le nid
 
 Step 5 of the refactor, the one the gate was built to protect: the portable IP
