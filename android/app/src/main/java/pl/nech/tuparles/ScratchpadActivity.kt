@@ -184,6 +184,7 @@ class ScratchpadActivity : AppCompatActivity() {
             btn("📊 Stats") { showStats() },
         ))
         root.addView(row(
+            btn("🕘 Historique") { startActivity(Intent(this, HistoryActivity::class.java)) },
             btn("⌨ Clavier") { openImeSettings() },
             btn("🎛 Capture") { startActivity(Intent(this, MainActivity::class.java)) },
         ))
