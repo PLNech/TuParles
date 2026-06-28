@@ -20,7 +20,10 @@ import android.widget.RemoteViews
 class TuParlesWidget : AppWidgetProvider() {
 
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
-        // Reflect whatever the service is currently doing (idle if it's stopped).
+        // A newly placed/resized/rebooted widget must always be (re)wired with its
+        // click intent — bypass the dedup cache, which exists only to damp the
+        // recording-tick spam.
+        lastFace = ""
         render(context, DictationService.state.value)
     }
 
@@ -40,12 +43,19 @@ class TuParlesWidget : AppWidgetProvider() {
             else -> "🎙 TuParles" to "Toucher pour dicter"
         }
 
+        @Volatile private var lastFace: String = ""
+
         /** Push the current dictation state to every placed widget instance. */
         fun render(context: Context, s: DictationState) {
+            val (title, status) = faceFor(s)
+            // Skip redundant pushes — the recording tick fires many times/sec but the
+            // face (0.1s timer) rarely differs, so this keeps the binder traffic down.
+            val face = "$title|$status"
+            if (face == lastFace) return
+            lastFace = face
             val manager = AppWidgetManager.getInstance(context) ?: return
             val ids = manager.getAppWidgetIds(ComponentName(context, TuParlesWidget::class.java))
             if (ids.isEmpty()) return
-            val (title, status) = faceFor(s)
             val views = RemoteViews(context.packageName, R.layout.widget_tuparles).apply {
                 setTextViewText(R.id.widget_title, title)
                 setTextViewText(R.id.widget_status, status)
