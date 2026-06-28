@@ -41,6 +41,12 @@
             android:exported="false"
             android:configChanges="orientation|screenSize|smallestScreenSize|keyboardHidden|uiMode|density|fontScale" />
 
+        <!-- Full settings (perf/threads, models, privacy) — the "it's a setting" home. -->
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|smallestScreenSize|keyboardHidden|uiMode|density|fontScale" />
+
         <!-- Compute backbone: owns recording + decode off the UI lifecycle (fixes the
              lost-take bug), foreground type=microphone while active. -->
         <service
