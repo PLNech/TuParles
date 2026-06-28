@@ -8,7 +8,9 @@ import android.app.Service
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
@@ -52,6 +54,7 @@ class DictationService : Service() {
     @Volatile private var recording = false
     @Volatile private var decoding = false
     private var target = "scratch"
+    private var capJob: kotlinx.coroutines.Job? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -78,12 +81,29 @@ class DictationService : Service() {
 
     private fun startRecording(tgt: String) {
         target = tgt
+        // We were launched via startForegroundService, so we MUST call startForeground
+        // promptly (else ForegroundServiceDidNotStartInTime) — do it before any bail-out.
         goForeground("🔴 écoute…")
+        // The widget + recognizer have no UI to request the mic; fail cleanly here
+        // rather than dead-mike, so every entry path surfaces a denied permission.
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            DebugLog.w(TAG, "service: RECORD_AUDIO not granted")
+            _state.value = DictationState.Failed(nextId(), tgt, "micro non autorisé — ouvre TuParles")
+            stopForegroundAndSelf()
+            return
+        }
         recording = true
         _state.value = DictationState.Recording(0L, 0f)
         try {
             recorder.start { level, elapsed ->
                 if (recording) _state.value = DictationState.Recording(elapsed, level)
+            }
+            // Safety cap: a forgotten/backgrounded take can't hold the mic forever.
+            capJob = scope.launch {
+                kotlinx.coroutines.delay(MAX_RECORD_MS)
+                if (recording) { DebugLog.w(TAG, "service: recording cap hit, auto-stopping"); stopAndDecode() }
             }
         } catch (e: Throwable) {
             recording = false
@@ -94,6 +114,8 @@ class DictationService : Service() {
     }
 
     private fun stopAndDecode() {
+        if (!recording) return // idempotent: a stop tap racing the safety cap can't double-decode
+        capJob?.cancel()
         recording = false
         decoding = true
         val samples = recorder.stop()
@@ -251,6 +273,7 @@ class DictationService : Service() {
         const val TARGET_SCRATCH = "scratch"
         const val TARGET_IME = "ime"
         const val TARGET_WIDGET = "widget"
+        private const val MAX_RECORD_MS = 180_000L // safety cap: a take can't hold the mic forever
         private const val NOTIF_ID = 1001
         private const val NOTIF_RESULT = 1002
         private const val CHANNEL = "dictation"
