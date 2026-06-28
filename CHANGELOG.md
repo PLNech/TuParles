@@ -1,5 +1,40 @@
 # Changelog
 
+## Sprint 24 — 2026-06-28 · La route vers le cloud — recon, pas de code
+
+Two questions, no shipped code: can the Android acceleration work feed back into
+the desktop CPU path, and can TuParles' STT live at `api.nech.pl/stt/v1/`? Both
+answered as a design + a measurement. The honest output is a research note and a
+benchmark to run; the durable wins live there and in session memory.
+
+### Infra
+- **Retired the `feat/android-spike` worktree** (#1) — it wasn't a lost repo, it
+  was a git worktree already merged into `main` (`bc12fc4`). Removed it + the
+  merged local branch; `android/` stays on `main`. A `.git` *file* (not dir) =
+  worktree; `git worktree list` before assuming a repo vanished.
+
+### Doctrine
+- **The 2-rung ladder is a gradient** (#1) — turbo-GPU / qwen-CPU generalises to
+  a 6-rung VRAM→(RAM+AVX+cores) gradient. **whisper.cpp unifies the CPU rungs**
+  (musl-friendly, AVX2-graceful, one GGML weight family across Android / erable /
+  home-box / laptop-CPU); ctranslate2 stays GPU-only (no musl wheels). qwen-asr is
+  on the ballot — retire it if whisper.cpp wins the benchmark at equal quality.
+- **The Android wins were mostly learnings, one real port** (#1) — the `-O3` and
+  `language="en"` breakthroughs don't port (desktop solved their roots already);
+  the carry is adopting whisper.cpp on CPU to restore `initial_prompt` bias +
+  word-confidence that qwen dropped, and unify the model family.
+- **Measure the box, not just the model** (#2) — `ssh` proved `erable` is a 2011
+  i3-2130, no AVX2, ~1.8GB free RAM, already swapping. It hosts the thin `/stt/`
+  shim and dispatches heavy decode elsewhere (per the platform's own doctrine);
+  it is not the engine. Laptop-tunnel rejected; on-box big-model impossible.
+
+### Research
+- `docs/research/2026-06-28-cpu-engine-gradient-and-stt-api.md` — the full why:
+  Android-learnings audit, the engine gradient, the `/stt/` API plan (domain,
+  thin-container tier, whisper.cpp-not-faster-whisper, WAV-batch-first,
+  sha256 caching), erable reality, Redis status, and the benchmark-corpus call
+  (synthetic WAVs fine for RTF, weak for real-world WER).
+
 ## Sprint 23 — 2026-06-28 · « slash » devient `/` (piloter au clavier-voix) · v0.3.0
 
 You dictate INTO Claude Code, shells, URL bars, code comments. They all spell `/`
