@@ -20,12 +20,31 @@ first spine artifact — the import-boundary gate that the whole refactor leans 
   depend on the Protocol, not on a concrete engine — so the gradient (CUDA → qwen →
   whisper.cpp) swaps the impl without touching a caller. Re-exported from `engine.py`
   for back-compat.
+- **Static config-boundary gate** (#10, step 5) — `test_core_boundary.py` now also
+  AST-parses every core module and fails if it imports the *desktop* `tuparles.config`
+  (REPO_ROOT / IS_WAYLAND / QWEN_* / HOTKEY_*) instead of the portable `config_core`.
+  The runtime gate can't catch this while `config.py` is still stdlib-only; the static
+  gate makes the regression fail now, not after the namespace move turns it fatal.
+- **CPU STT bench harness** (#3) — `scripts/bench_cpu_stt.py` runs the same adversarial
+  code-switch corpus the GPU eval uses, through the same `pipeline.postprocess` path,
+  but on CPU under a realistic core budget (`taskset -c 0-5`, 30% of the machine). It
+  is **registry-driven**: a small `EngineSpec` table (name, rung, lazy factory,
+  availability probe) is the local seed of the core engine registry (#14), so adding a
+  rung is one spec line. Streams JSONL + emits a quality×speed PNG. whisper.cpp-q5 is
+  left as an honest, probe-gated gap pending #4 (pywhispercpp) — no faked row.
 
 ### Changed
 - **Settings path is injectable** (#10, step 2) — `TUPARLES_CONFIG_DIR` points the
   config dir straight at a chosen path (Android app storage, a server container, a
   test); unset = unchanged XDG behaviour. The seam that lets the same `settings.py`
-  run off-desktop.
+  run off-desktop. (Now factored through a shared `settings.config_dir()` so every
+  per-user file resolves to one place.)
+- **Glossary path is portable** (#10, step 5) — `vocab.py` dropped its import of the
+  desktop `config.VOCAB_FILE` and now defaults to the shared config dir via
+  `settings.config_dir()`. Dependency inverted: the desktop CLI keeps its historical
+  repo-root `vocab.txt` by passing that path explicitly. Core stays checkout-free;
+  Android / server / tests get a real per-user location for free. No data moved,
+  desktop behaviour byte-identical.
 - **`partials.py` reads `config_core`** (#10, step 1) — repointed off the desktop
   `config.py`, so the partials sanity filter sits cleanly below the core boundary.
 
@@ -50,6 +69,12 @@ first spine artifact — the import-boundary gate that the whole refactor leans 
   them.
 - **Order: arch → engine → UI** — the core boundary makes everything downstream
   cheaper; the engine is the differentiator; UI last, spike-decided.
+- **The platform is its own bench** (#14) — STT engines (CPU/GPU/embedded) will be
+  swapped and upgraded repeatedly, so engines are named, pluggable adapters behind the
+  `TranscriptionEngine` Protocol, gathered in one registry that *both* the runtime
+  gradient and the bench/eval suite consume. Adding the next engine is a registration,
+  not a two-place edit. Wired for real when the 3rd engine (WhisperCppEngine, #4)
+  forces it; the bench is already registry-driven as the seed.
 
 ### Research
 - `docs/research/2026-06-28-ui-architecture-decisions.md` — the four forks with the
