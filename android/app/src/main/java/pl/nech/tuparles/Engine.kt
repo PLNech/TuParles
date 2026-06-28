@@ -50,4 +50,14 @@ object Engine {
             loadedFrom = "asset:${assetPath.substringAfterLast('/')}"
         }
     }
+
+    /** Release the current model so the next ensure* loads a different one — the
+     *  switch behind the model selector. Frees the native context's memory first. */
+    suspend fun reset() {
+        loadMutex.withLock {
+            whisper?.release()
+            whisper = null
+            loadedFrom = ""
+        }
+    }
 }
