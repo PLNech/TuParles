@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Points the system recognizer settings at our Réglages screen. -->
+<recognition-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:settingsActivity="pl.nech.tuparles.SettingsActivity" />

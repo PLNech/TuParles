@@ -69,6 +69,19 @@
                 android:resource="@xml/method" />
         </service>
 
+        <!-- TuParles as the system speech recognizer: set it as the device voice-input
+             service and the mic-button anywhere routes to on-device TuParles. -->
+        <service
+            android:name=".TuParlesRecognitionService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.speech.RecognitionService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.speech"
+                android:resource="@xml/recognition_service" />
+        </service>
+
         <!-- Smart home-screen widget: one-tap dictate → clipboard + notification,
              live state pushed by DictationService. -->
         <receiver
