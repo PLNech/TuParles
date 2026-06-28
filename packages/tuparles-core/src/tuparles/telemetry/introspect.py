@@ -103,10 +103,17 @@ def corpus_analysis() -> dict | None:
     import json
     from pathlib import Path
 
-    # parents[3] = repo root (telemetry → tuparles → src → root); assumes a dev
-    # checkout. A non-editable install has no docs/ → None → "Aucune analyse".
-    data_dir = Path(__file__).resolve().parents[3] / "docs" / "research" / "data"
-    cached = sorted(data_dir.glob("*-nlp-eda.json")) if data_dir.is_dir() else []
+    # Ascend from this module looking for the repo's docs/research/data cache.
+    # Depth is layout-dependent (root/docs vs packages/tuparles-core/src/tuparles/
+    # telemetry/ post-split), so walk up instead of hardcoding parents[N]. A
+    # non-editable install has no docs/ → None → "Aucune analyse" (graceful).
+    data_dir = None
+    for parent in Path(__file__).resolve().parents:
+        candidate = parent / "docs" / "research" / "data"
+        if candidate.is_dir():
+            data_dir = candidate
+            break
+    cached = sorted(data_dir.glob("*-nlp-eda.json")) if data_dir else []
     if not cached:
         return None
     try:

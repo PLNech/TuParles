@@ -53,17 +53,20 @@ dependencies {
     implementation(project(":whisper")) // Rung 2: native whisper.cpp engine
 }
 
-// The postprocess core is the SAME src/ the desktop daemon and eval harness use —
-// no copy, no fork. The lean chain (pipeline → casing/lexicon/punctuation/repeats/
-// syntax/syntax_features → config_core) is pure stdlib, so no pip deps are needed;
-// the heavy desktop modules (daemon, ui, engine) ship as unused bytecode.
+// The postprocess core is the SAME source the desktop daemon and eval harness
+// use — no copy, no fork. Since the core/desktop namespace split (refactor #10),
+// we mount ONLY the portable distribution (packages/tuparles-core/src): the lean
+// chain (pipeline → casing/lexicon/punctuation/repeats/syntax/syntax_features →
+// config_core) is pure stdlib, and the heavy desktop modules no longer sit on the
+// Android Python path at all. getModule("tuparles.pipeline") is unchanged — the
+// shared `tuparles` namespace is preserved by the split (PEP 420).
 chaquopy {
     defaultConfig {
         version = "3.12"
     }
     sourceSets {
         getByName("main") {
-            srcDir("../../src")
+            srcDir("../../packages/tuparles-core/src")
         }
     }
 }

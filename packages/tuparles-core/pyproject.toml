@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "tuparles-core"
+version = "0.3.0"
+description = "Portable, stdlib-first core of TuParles: postprocess chain, privacy firewall, voice-command grammar, settings, telemetry. No GUI / mic / GPU deps — importable under Chaquopy on Android and inside the /stt/ server."
+authors = ["PLNech <PLNech@users.noreply.github.com>"]
+readme = "README.md"
+# PEP 420 native namespace package: there is intentionally NO src/tuparles/__init__.py.
+# tuparles-core and tuparles (desktop) are two distributions that both populate the
+# shared `tuparles` namespace; an __init__.py in either would break editable installs
+# of both. See docs/research/2026-06-28-ui-architecture-decisions.md §2.
+packages = [{ include = "tuparles", from = "src" }]
+
+[tool.poetry.dependencies]
+python = ">=3.11,<3.15"
+# The only non-stdlib runtime dep in the portable subtree: checksum-validated
+# structured-PII detection (IBAN / NIR / Luhn) in privacy/structured.py.
+python-stdnum = "^2.2"
+
+[build-system]
+requires = ["poetry-core>=2.0"]
+build-backend = "poetry.core.masonry.api"
