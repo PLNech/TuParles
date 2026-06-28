@@ -16,6 +16,8 @@ docs/research/2026-06-27-portable-core-audit.md (the module classification this 
 mirrors).
 """
 
+import ast
+import importlib.util
 import os
 import subprocess
 import sys
@@ -101,4 +103,44 @@ def test_core_module_imports_without_desktop_deps(module):
     )
     assert result.returncode == 0, (
         f"{module} leaks a desktop dependency.\n{result.stderr.strip()}"
+    )
+
+
+# `tuparles.config` is the DESKTOP config (REPO_ROOT, IS_WAYLAND, QWEN_*, HOTKEY_*,
+# VOCAB_FILE); `tuparles.config_core` is its portable subset. Today config.py is
+# still stdlib-only, so the runtime gate above wouldn't catch a core module that
+# imports it — but the moment config.py becomes desktop-only (refactor step 5, the
+# namespace move), such an import is a hard boundary leak. This static gate makes
+# that regression fail NOW, while it's a one-line fix, instead of after the move.
+def _module_source(module: str) -> str:
+    spec = importlib.util.find_spec(module)
+    assert spec and spec.origin, f"cannot locate {module}"
+    with open(spec.origin, encoding="utf-8") as fh:
+        return fh.read()
+
+
+@pytest.mark.parametrize("module", CORE_MODULES)
+def test_core_module_does_not_import_desktop_config(module):
+    tree = ast.parse(_module_source(module))
+    offenders = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            # `from tuparles.config import ...` (but allow tuparles.config_core)
+            if node.module == "tuparles.config":
+                offenders.append(f"from {node.module} import ...")
+            # `from tuparles import config`
+            elif node.module == "tuparles":
+                offenders += [
+                    f"from tuparles import {a.name}"
+                    for a in node.names
+                    if a.name == "config"
+                ]
+        elif isinstance(node, ast.Import):
+            offenders += [
+                f"import {a.name}"
+                for a in node.names
+                if a.name == "tuparles.config"
+            ]
+    assert not offenders, (
+        f"{module} imports the DESKTOP config (use tuparles.config_core): {offenders}"
     )

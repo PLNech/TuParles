@@ -80,14 +80,17 @@ def main() -> None:
 
 def _vocab(args) -> None:
     from tuparles import vocab
+    from tuparles.config import VOCAB_FILE
     from tuparles.history import recent
 
+    # The desktop tool keeps its historical repo-root vocab.txt: core vocab now
+    # defaults to the config dir (portable), so the desktop path is passed in.
     if args.action == "add":
-        added = vocab.add(args.words)
+        added = vocab.add(args.words, VOCAB_FILE)
         print(f"Ajouté : {', '.join(added)}" if added else "Rien de nouveau.")
         return
     if args.action == "list":
-        words = vocab.load()
+        words = vocab.load(VOCAB_FILE)
         print(
             "\n".join(words) if words else "Glossaire vide — `tuparles vocab suggest`."
         )
@@ -95,7 +98,7 @@ def _vocab(args) -> None:
 
     # suggest / review share the mining pass over the whole local history.
     texts = [text for _ts, text in recent(1000)]
-    existing = set(vocab.load())
+    existing = set(vocab.load(VOCAB_FILE))
     found = vocab.suggest(texts, existing, min_count=args.min_count)
     if not found:
         print("Aucun candidat — dicte encore un peu, le glossaire viendra.")
@@ -119,7 +122,7 @@ def _vocab(args) -> None:
         if answer in ("o", "y", "oui", "yes"):
             accepted.append(word)
     if accepted:
-        vocab.add(accepted)
+        vocab.add(accepted, VOCAB_FILE)
         print(f"Ajouté : {', '.join(accepted)} — actif dès la prochaine dictée.")
     else:
         print("Rien ajouté.")
