@@ -20,7 +20,7 @@ gets covered. Engines pass faster-whisper Segment objects; we read fields
 defensively so a plain test namedtuple works too.
 """
 
-from tuparles.config import (
+from tuparles.config_core import (
     PARTIAL_AVG_LOGPROB_MIN,
     PARTIAL_COMPRESSION_MAX,
     PARTIAL_NO_SPEECH_MAX,

@@ -27,3 +27,14 @@ class TestSettings:
         assert settings.get("view") == "full"  # falls back to the default
         settings.put("view", "minimal")  # heals the file
         assert settings.get("view") == "minimal"
+
+    def test_config_dir_override(self, tmp_path, monkeypatch):
+        # The DI seam (core-extraction step 2): TUPARLES_CONFIG_DIR points the
+        # config dir straight at a chosen path — no "tuparles" subdir, no XDG —
+        # for Android / a server container / a test.
+        monkeypatch.setenv("TUPARLES_CONFIG_DIR", str(tmp_path))
+        monkeypatch.setenv("XDG_CONFIG_HOME", "/should/be/ignored")
+        assert settings._path() == tmp_path / "settings.json"
+        settings.put("view", "minimal")
+        assert (tmp_path / "settings.json").exists()
+        assert settings.get("view") == "minimal"
