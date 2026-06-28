@@ -200,6 +200,37 @@ def percentile(xs: list[float], p: float) -> float:
     return s[lo] + (s[hi] - s[lo]) * (k - lo)
 
 
+def decode_one(engine, key: str, rung: str, entry: dict, audio, dur: float,
+               case: dict) -> dict:
+    """One timed decode → postprocess → score, as a JSONL-ready row. A decode
+    that throws is recorded (empty text, error string) rather than aborting the
+    run — one bad WAV shouldn't cost the whole engine's numbers."""
+    t0 = time.perf_counter()
+    try:
+        raw, err = engine.transcribe(audio), None
+    except Exception as exc:
+        raw, err = "", str(exc)[:200]
+    elapsed = time.perf_counter() - t0
+    text = postprocess(raw)
+    res = tp_eval.score_case(case, text)
+    return {
+        "engine": key,
+        "rung": rung,
+        "file": entry["file"],
+        "case_id": entry["case_id"],
+        "voice": entry["voice"],
+        "elapsed_s": round(elapsed, 3),
+        "audio_s": round(dur, 3),
+        "rtf": round(elapsed / dur, 3) if dur else None,
+        "wer": round(res.wer, 3),
+        "passed": res.passed,
+        "missing": res.missing,
+        "leaked": res.leaked,
+        "hypothesis": text,
+        "error": err,
+    }
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", required=True, help="output dir for jsonl/json/png")
@@ -237,32 +268,8 @@ def main() -> None:
             print(f"[bench] {key} loaded in {load_s:.1f}s", flush=True)
             for i, entry in enumerate(entries, 1):
                 audio, dur = audio_cache[entry["file"]]
-                case = cases[entry["case_id"]]
-                t0 = time.perf_counter()
-                try:
-                    raw = engine.transcribe(audio)
-                    err = None
-                except Exception as exc:
-                    raw, err = "", str(exc)[:200]
-                elapsed = time.perf_counter() - t0
-                text = postprocess(raw)
-                res = tp_eval.score_case(case, text)
-                row = {
-                    "engine": key,
-                    "rung": spec.rung,
-                    "file": entry["file"],
-                    "case_id": entry["case_id"],
-                    "voice": entry["voice"],
-                    "elapsed_s": round(elapsed, 3),
-                    "audio_s": round(dur, 3),
-                    "rtf": round(elapsed / dur, 3) if dur else None,
-                    "wer": round(res.wer, 3),
-                    "passed": res.passed,
-                    "missing": res.missing,
-                    "leaked": res.leaked,
-                    "hypothesis": text,
-                    "error": err,
-                }
+                row = decode_one(engine, key, spec.rung, entry, audio, dur,
+                                 cases[entry["case_id"]])
                 results.append(row)
                 jf.write(json.dumps(row) + "\n")
                 jf.flush()
