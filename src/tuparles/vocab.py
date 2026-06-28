@@ -10,7 +10,19 @@ visible mishear.
 import re
 from pathlib import Path
 
-from tuparles.config import VOCAB_FILE
+from tuparles import settings
+
+
+def default_path() -> Path:
+    """The glossary's home: alongside settings.json in the shared config dir.
+
+    Core stays portable — it resolves its own per-user path via the same seam as
+    settings (TUPARLES_CONFIG_DIR / XDG), with no dependency on the desktop
+    `config` module or a repo checkout. The desktop frontend keeps its historical
+    repo-root `vocab.txt` by passing that path explicitly (see cli.py); everything
+    else (Android, a server, a test) gets a real per-user location for free."""
+    return settings.config_dir() / "vocab.txt"
+
 
 # Tokens worth a glossary slot regardless of frequency context:
 # snake_case, digits-in-word (large-v3), camelCase, ALLCAPS acronyms.
@@ -23,8 +35,9 @@ _SENTENCE_END = re.compile(r"[.?!…:]\s*$")
 _WORD = re.compile(r"[A-Za-zÀ-ÖØ-öø-ÿ][\w'-]*", re.UNICODE)
 
 
-def load(path: Path = VOCAB_FILE) -> list[str]:
+def load(path: Path | None = None) -> list[str]:
     """Glossary words, comments and blanks stripped, file order kept."""
+    path = path or default_path()
     if not path.exists():
         return []
     return [
@@ -34,8 +47,9 @@ def load(path: Path = VOCAB_FILE) -> list[str]:
     ]
 
 
-def add(words: list[str], path: Path = VOCAB_FILE) -> list[str]:
+def add(words: list[str], path: Path | None = None) -> list[str]:
     """Append new words (case-insensitive dedup); returns what was added."""
+    path = path or default_path()
     known = {w.casefold() for w in load(path)}
     fresh = []
     for w in words:
