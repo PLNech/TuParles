@@ -45,7 +45,11 @@ class AudioRecorder {
             bufSize,
         )
         if (rec.state != AudioRecord.STATE_INITIALIZED) {
+            // Fail loudly, not silently dead-miked: a revoked permission or a busy mic
+            // surfaces as a caught error the surfaces render, not an empty "rien entendu".
             Log.e(TAG, "AudioRecord NOT initialized (state=${rec.state}); mic denied or busy?")
+            rec.release()
+            throw IllegalStateException("micro indisponible (permission ou occupé)")
         }
         samples.clear()
         record = rec
