@@ -16,6 +16,9 @@ object Settings {
     const val KEY_MODEL = "model" // chosen .bin filename, or "" = bundled/first pushed
     const val KEY_ANALYTICS = "analytics" // Boolean — domovoy telemetry on/off
     const val KEY_VERBOSE = "verbose" // Boolean — verbose debug file logging
+    const val KEY_PRIVATE = "private_mode" // Boolean — master privacy switch
+    const val KEY_SAVE_AUDIO = "save_audio" // Boolean — retain every take's WAV
+    const val KEY_THREADS = "threads" // Int — whisper threads (0 = auto)
 
     fun prefs(c: Context): SharedPreferences =
         c.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -26,11 +29,25 @@ object Settings {
     fun analyticsOn(c: Context): Boolean = prefs(c).getBoolean(KEY_ANALYTICS, true)
     fun verbose(c: Context): Boolean = prefs(c).getBoolean(KEY_VERBOSE, false)
 
+    /**
+     * Private mode: the master privacy switch. When ON, nothing touches disk or
+     * leaves the process — debug file logging, domovoy analytics/sync, and raw take
+     * audio are ALL suppressed (see DebugLog / DomovoySync / DictationService). The
+     * "until back" escape hatch for sensitive periods; flip it off to resume.
+     */
+    fun privateMode(c: Context): Boolean = prefs(c).getBoolean(KEY_PRIVATE, false)
+    fun saveAudio(c: Context): Boolean = prefs(c).getBoolean(KEY_SAVE_AUDIO, false)
+    fun threads(c: Context): Int = prefs(c).getInt(KEY_THREADS, 0)
+
     fun set(c: Context, key: String, value: Boolean) {
         prefs(c).edit().putBoolean(key, value).apply()
     }
 
     fun set(c: Context, key: String, value: String) {
         prefs(c).edit().putString(key, value).apply()
+    }
+
+    fun set(c: Context, key: String, value: Int) {
+        prefs(c).edit().putInt(key, value).apply()
     }
 }

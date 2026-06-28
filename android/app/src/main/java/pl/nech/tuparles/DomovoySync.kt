@@ -38,6 +38,9 @@ object DomovoySync {
     fun sink(context: Context): DomovoyAnalyticsSink {
         val app = context.applicationContext
         return DomovoyAnalyticsSink { events ->
+            // Private mode: drop on the floor (report accepted so the lib clears its
+            // in-memory queue too) — nothing reaches disk or domovoy until you're back.
+            if (Settings.privateMode(app)) return@DomovoyAnalyticsSink true
             append(app, events)
             true // accepted into our durable outbox; network drain is separate
         }
@@ -62,7 +65,14 @@ object DomovoySync {
         put("severity", e.severity)
         put("session_id", e.sessionId)
         put("run_id", e.runId)
-        put("attributes", JSONObject().also { a -> for ((k, v) in e.attributes) a.put(k, v) })
+        put("attributes", JSONObject().also { a ->
+            for ((k, v) in e.attributes) when (v) {
+                null -> {}
+                is Float -> a.put(k, v.toDouble()) // JSON has no float
+                is Int, is Long, is Double, is Boolean, is String -> a.put(k, v)
+                else -> a.put(k, v.toString())
+            }
+        })
     }
 
     /**
