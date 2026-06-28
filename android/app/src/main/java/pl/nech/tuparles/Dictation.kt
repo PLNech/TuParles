@@ -42,7 +42,7 @@ object Dictation {
      * Throws on no model / timeout — callers render the error; they never see a hang.
      * Telemetry carries timing + shape only, NEVER the dictated text (privacy).
      */
-    suspend fun decode(samples: ShortArray, lang: String, postprocessOn: Boolean): Take {
+    suspend fun decode(samples: ShortArray, lang: String, postprocessOn: Boolean, threads: Int = 0): Take {
         val ctx = Engine.whisper ?: error("model not loaded")
         val seconds = samples.size.toFloat() / SAMPLE_RATE
         if (samples.isEmpty()) return Take("", "", 0L, 0f, lang, Engine.loadedFrom)
@@ -51,7 +51,7 @@ object Dictation {
         val t0 = System.currentTimeMillis()
         val raw = withTimeout(DECODE_TIMEOUT_MS) {
             withContext(Dispatchers.Default) {
-                ctx.transcribeData(samples.toFloats(), printTimestamp = false, language = lang).trim()
+                ctx.transcribeData(samples.toFloats(), printTimestamp = false, language = lang, threads = threads).trim()
             }
         }
         val ms = System.currentTimeMillis() - t0

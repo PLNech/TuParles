@@ -189,6 +189,7 @@ class ScratchpadActivity : AppCompatActivity() {
             btn("🎛 Capture") { startActivity(Intent(this, MainActivity::class.java)) },
         ))
         root.addView(row(
+            btn("⚙ Réglages") { startActivity(Intent(this, SettingsActivity::class.java)) },
             btn("🧾 Logs") { shareLogs() },
             btn("☁ Sync domovoy") { syncNow() },
         ))

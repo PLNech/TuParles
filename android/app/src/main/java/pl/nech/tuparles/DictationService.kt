@@ -95,7 +95,7 @@ class DictationService : Service() {
         scope.launch {
             try {
                 val take = Dictation.decode(samples, Settings.lang(this@DictationService),
-                    Settings.postprocessOn(this@DictationService))
+                    Settings.postprocessOn(this@DictationService), Settings.threads(this@DictationService))
                 record(take, samples, id)
                 val done = DictationState.Done(id, target, take)
                 lastDone = done
