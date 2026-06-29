@@ -43,6 +43,22 @@ carries shape, never the text.
   Int/Long/Double/Float/Boolean as native JSON types end-to-end, so the domovoy
   duckdb/NLP layers chart numbers as numbers. Mirrored into the Domovoy repo.
 
+#### Hardening pass (reliability for a week offline)
+- **Stop action on the recording notification** (#26) — end a take from the shade
+  without opening the app; shown only while recording.
+- **Real history export** (#27) — Historique exports `takes.jsonl` via the share sheet
+  (FileProvider) instead of only toasting; the learning data is portable.
+- **Record/decode guards** (#28) — RECORD_AUDIO checked in the service (the widget +
+  recognizer have no UI to ask) → clean error, never a silent dead mic; a 180s recording
+  safety cap; idempotent stop; `AudioRecorder` throws on an uninitialised mic.
+- **Data management in Réglages** (#30) — storage readout for history/audio/logs, each
+  clearable behind a confirm dialog.
+- **Decode heartbeat** (#31) — `Decoding` ticks elapsed ms so a long (small/medium model)
+  decode reads as alive, not frozen.
+- **First Kotlin-side unit tests** (#29) — framework-free helpers extracted to `Text.kt`
+  (levenshtein, humanBytes, meterBar); 8 pure-JVM tests, no Robolectric. Version bumped
+  `0.1-spike → 0.3.0`.
+
 ### Changed
 - **Compute moved into a foreground service** (#21, A7) — recording AND decoding now run
   in `DictationService` (type `microphone`), independent of any Activity/IME lifecycle.
@@ -57,6 +73,9 @@ carries shape, never the text.
   closes it by construction.
 - **Freshly-placed widget had no click intent** — the per-face dedup could skip wiring a
   newly placed widget; `onUpdate` now bypasses the cache.
+- **Foreground-service start contract** (#28) — the new permission bail-out must still
+  call `startForeground` first, or `startForegroundService` throws
+  `ForegroundServiceDidNotStartInTime`; go foreground before any early return.
 
 ### Infra
 - **Privacy is structural in the manifest** — no `INTERNET` permission in release, by
