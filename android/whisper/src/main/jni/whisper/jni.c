@@ -170,7 +170,7 @@ static void whisper_progress_cb(struct whisper_context *ctx, struct whisper_stat
 
 JNIEXPORT void JNICALL
 Java_com_whispercpp_whisper_WhisperLib_00024Companion_fullTranscribe(
-        JNIEnv *env, jobject thiz, jlong context_ptr, jint num_threads, jfloatArray audio_data, jstring language) {
+        JNIEnv *env, jobject thiz, jlong context_ptr, jint num_threads, jfloatArray audio_data, jstring language, jstring prompt) {
     UNUSED(thiz);
     struct whisper_context *context = (struct whisper_context *) context_ptr;
     jfloat *audio_data_arr = (*env)->GetFloatArrayElements(env, audio_data, NULL);
@@ -178,6 +178,8 @@ Java_com_whispercpp_whisper_WhisperLib_00024Companion_fullTranscribe(
 
     // Language from Kotlin: "auto" detects (FR/EN code-switch), "fr"/"en" force it.
     const char *lang = (*env)->GetStringUTFChars(env, language, NULL);
+    // Optional vocab-biasing prompt: empty string -> NULL (no bias, the default).
+    const char *prompt_chars = (*env)->GetStringUTFChars(env, prompt, NULL);
 
     // The below adapted from the Objective-C iOS sample
     struct whisper_full_params params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
@@ -191,6 +193,9 @@ Java_com_whispercpp_whisper_WhisperLib_00024Companion_fullTranscribe(
     params.offset_ms = 0;
     params.no_context = true;
     params.single_segment = false;
+    // Bias decoding toward the user's vocabulary (tech terms the small models fumble,
+    // e.g. "pipeline"). NULL when empty so default behaviour is byte-identical.
+    params.initial_prompt = (prompt_chars && prompt_chars[0] != '\0') ? prompt_chars : NULL;
 
     // Live progress to logcat so a long decode is visible, not silent.
     params.progress_callback = whisper_progress_cb;
@@ -205,6 +210,7 @@ Java_com_whispercpp_whisper_WhisperLib_00024Companion_fullTranscribe(
         whisper_print_timings(context);
     }
     (*env)->ReleaseStringUTFChars(env, language, lang);
+    (*env)->ReleaseStringUTFChars(env, prompt, prompt_chars);
     (*env)->ReleaseFloatArrayElements(env, audio_data, audio_data_arr, JNI_ABORT);
 }
 

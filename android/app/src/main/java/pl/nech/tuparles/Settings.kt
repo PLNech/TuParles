@@ -19,6 +19,7 @@ object Settings {
     const val KEY_PRIVATE = "private_mode" // Boolean — master privacy switch
     const val KEY_SAVE_AUDIO = "save_audio" // Boolean — retain every take's WAV
     const val KEY_THREADS = "threads" // Int — whisper threads (0 = auto)
+    const val KEY_PROMPT = "prompt" // String — initial_prompt vocab bias ("" = none)
 
     fun prefs(c: Context): SharedPreferences =
         c.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -38,6 +39,13 @@ object Settings {
     fun privateMode(c: Context): Boolean = prefs(c).getBoolean(KEY_PRIVATE, false)
     fun saveAudio(c: Context): Boolean = prefs(c).getBoolean(KEY_SAVE_AUDIO, false)
     fun threads(c: Context): Int = prefs(c).getInt(KEY_THREADS, 0)
+
+    /**
+     * Vocab-biasing initial_prompt for whisper (e.g. "pipeline, refactor, commit,
+     * deploy"). Empty = no bias (default, behaviour unchanged). Conservative by
+     * doctrine: it nudges spelling/casing of known terms, it does not rewrite meaning.
+     */
+    fun prompt(c: Context): String = prefs(c).getString(KEY_PROMPT, "") ?: ""
 
     fun set(c: Context, key: String, value: Boolean) {
         prefs(c).edit().putBoolean(key, value).apply()

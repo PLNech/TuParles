@@ -134,7 +134,8 @@ class DictationService : Service() {
             }
             try {
                 val take = Dictation.decode(samples, Settings.lang(this@DictationService),
-                    Settings.postprocessOn(this@DictationService), Settings.threads(this@DictationService))
+                    Settings.postprocessOn(this@DictationService), Settings.threads(this@DictationService),
+                    Settings.prompt(this@DictationService))
                 record(take, samples, id)
                 if (target == TARGET_WIDGET) deliver(take)
                 ticker.cancel() // cancel BEFORE the terminal state so it can't clobber Done
