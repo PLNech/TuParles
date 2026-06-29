@@ -16,6 +16,7 @@ android {
         targetSdk = 36
         versionCode = 2
         versionName = "0.3.0" // Sprint 27: the spike became an app (keyboard/history/widget/recognizer)
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Chaquopy ships a per-ABI Python runtime; arm64 = phones, x86_64 = emulator.
         ndk {
@@ -58,6 +59,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
     implementation(project(":whisper")) // Rung 2: native whisper.cpp engine
     testImplementation("junit:junit:4.13.2") // pure-JVM unit tests (framework-free helpers)
+    androidTestImplementation("androidx.test.ext:junit:1.2.1") // on-device pipeline test
+    androidTestImplementation("androidx.test:runner:1.6.2")
 }
 
 // The postprocess core is the SAME source the desktop daemon and eval harness
