@@ -39,9 +39,16 @@ object TakesStore {
     private fun file(c: Context): File? =
         c.getExternalFilesDir("history")?.let { File(it, "takes.jsonl") }
 
+    // Public Context API delegates to File-parameterized internals so the IO + the
+    // vote/correct rewrite can be tested against a temp file — never the real
+    // takes.jsonl. @Synchronized stays on the public seam (the daemon's entry points).
+
     @Synchronized
     fun append(c: Context, rec: TakeRecord) {
-        val f = file(c) ?: return
+        file(c)?.let { appendTo(it, rec) }
+    }
+
+    internal fun appendTo(f: File, rec: TakeRecord) {
         f.parentFile?.mkdirs()
         try {
             f.appendText(toJson(rec).toString() + "\n")
@@ -51,8 +58,9 @@ object TakesStore {
     }
 
     @Synchronized
-    fun all(c: Context): List<TakeRecord> {
-        val f = file(c) ?: return emptyList()
+    fun all(c: Context): List<TakeRecord> = file(c)?.let { allFrom(it) } ?: emptyList()
+
+    internal fun allFrom(f: File): List<TakeRecord> {
         if (!f.exists()) return emptyList()
         return try {
             f.readLines().filter { it.isNotBlank() }.mapNotNull { fromJson(it) }
@@ -63,8 +71,11 @@ object TakesStore {
 
     @Synchronized
     fun update(c: Context, id: Long, vote: Int? = null, corrected: String? = null) {
-        val f = file(c) ?: return
-        val rows = all(c).map {
+        file(c)?.let { updateIn(it, id, vote, corrected) }
+    }
+
+    internal fun updateIn(f: File, id: Long, vote: Int? = null, corrected: String? = null) {
+        val rows = allFrom(f).map {
             if (it.id == id) it.copy(
                 vote = vote ?: it.vote,
                 corrected = corrected ?: it.corrected,
@@ -103,8 +114,9 @@ object TakesStore {
         val perModel: Map<String, Int>,
     )
 
-    fun stats(c: Context): Stats {
-        val rows = all(c)
+    fun stats(c: Context): Stats = statsOf(all(c))
+
+    internal fun statsOf(rows: List<TakeRecord>): Stats {
         if (rows.isEmpty()) return Stats(0, 0, 0f, 0L, 0, 0, 0, emptyMap())
         val ok = rows.filter { it.error == null }
         return Stats(
