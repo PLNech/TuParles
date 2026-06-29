@@ -86,7 +86,7 @@ class ScratchpadActivity : AppCompatActivity() {
         }
         is DictationState.Recording -> {
             mic.text = "■  Stop"; mic.isEnabled = true
-            setStatus("🔴 ${"%.1f".format(s.elapsedMs / 1000f)}s  ${meter(s.level)}", "#C62828")
+            setStatus("🔴 ${"%.1f".format(s.elapsedMs / 1000f)}s  ${meterBar(s.level)}", "#C62828")
         }
         is DictationState.Decoding -> {
             mic.isEnabled = false
@@ -353,12 +353,6 @@ class ScratchpadActivity : AppCompatActivity() {
     }
 
     // --- helpers ---
-
-    private fun meter(level: Float): String {
-        val n = 12
-        val filled = (level * n * 3f).toInt().coerceIn(0, n) // boost: speech rarely maxes RMS
-        return "█".repeat(filled) + "░".repeat(n - filled)
-    }
 
     private fun updateChips() {
         chips.text = "moteur: ${Engine.loadedFrom.ifEmpty { "—" }}   ·   ${Settings.lang(this)}   ·   ${ppLabel()}" +

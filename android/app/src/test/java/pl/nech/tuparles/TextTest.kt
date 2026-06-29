@@ -37,6 +37,21 @@ class TextTest {
         assertEquals(1, levenshtein("café", "cafe"))
     }
 
+    @Test fun meterBar_empty_and_full() {
+        assertEquals("░".repeat(12), meterBar(0f))
+        assertEquals("█".repeat(12), meterBar(1f))      // ×3 boost saturates well before 1.0
+        assertEquals("█".repeat(12), meterBar(0.34f))   // 0.34*12*3 ≈ 12 → full
+    }
+
+    @Test fun meterBar_partial_and_clamped() {
+        // 0.1 * 12 * 3 = 3.6 → 3 filled
+        assertEquals("█".repeat(3) + "░".repeat(9), meterBar(0.1f))
+        // negative/overshoot clamp to the bar bounds, never throw or overflow
+        assertEquals("░".repeat(12), meterBar(-1f))
+        assertEquals("█".repeat(12), meterBar(99f))
+        assertEquals("███░░", meterBar(0.2f, n = 5)) // 0.2*5*3=3.0 → 3 filled, width honored
+    }
+
     @Test fun humanBytes_thresholds() {
         assertEquals("—", humanBytes(0))
         assertEquals("—", humanBytes(-5))

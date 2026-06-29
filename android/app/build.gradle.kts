@@ -14,8 +14,8 @@ android {
         applicationId = "pl.nech.tuparles"
         minSdk = 24 // Chaquopy 17 floor; covers ~97% of devices
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1-spike"
+        versionCode = 2
+        versionName = "0.3.0" // Sprint 27: the spike became an app (keyboard/history/widget/recognizer)
 
         // Chaquopy ships a per-ABI Python runtime; arm64 = phones, x86_64 = emulator.
         ndk {
