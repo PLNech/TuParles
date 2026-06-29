@@ -62,6 +62,7 @@ class TuParlesIme : InputMethodService() {
         root.addView(status)
         mic = Button(this).apply {
             isAllCaps = false; textSize = 18f; text = "🎙  Parler"
+            contentDescription = "Parler ou arrêter l'enregistrement"
             setOnClickListener { onMicTapped() }
         }
         root.addView(mic, lp(matchW = true, heightDp = 96))
@@ -69,12 +70,12 @@ class TuParlesIme : InputMethodService() {
         val controls = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL; setPadding(0, dp(8), 0, 0)
         }
-        controls.addView(key("⌫") { ic()?.deleteSurroundingText(1, 0) }, weight())
+        controls.addView(key("⌫", desc = "Effacer le caractère") { ic()?.deleteSurroundingText(1, 0) }, weight())
         controls.addView(key("espace") { ic()?.commitText(" ", 1) }, weight(2f))
-        controls.addView(key("⏎") { onEnter() }, weight())
-        controls.addView(key("📝", onLong = { open(HistoryActivity::class.java) }) { recordFix() }, weight())
-        controls.addView(key(langGlyph()) { cycleLang() }.also { langKey = it }, weight())
-        controls.addView(key("⌨", onLong = { open(SettingsActivity::class.java) }) { switchAway() }, weight())
+        controls.addView(key("⏎", desc = "Entrée ou valider") { onEnter() }, weight())
+        controls.addView(key("📝", desc = "Enregistrer la correction ; appui long : historique", onLong = { open(HistoryActivity::class.java) }) { recordFix() }, weight())
+        controls.addView(key(langGlyph(), desc = "Changer la langue") { cycleLang() }.also { langKey = it }, weight())
+        controls.addView(key("⌨", desc = "Changer de clavier ; appui long : réglages", onLong = { open(SettingsActivity::class.java) }) { switchAway() }, weight())
         root.addView(controls, lp(matchW = true))
 
         refreshStatus("prêt")
@@ -218,8 +219,9 @@ class TuParlesIme : InputMethodService() {
         super.onDestroy()
     }
 
-    private fun key(label: String, onLong: (() -> Unit)? = null, onTap: () -> Unit) = Button(this).apply {
+    private fun key(label: String, desc: String? = null, onLong: (() -> Unit)? = null, onTap: () -> Unit) = Button(this).apply {
         isAllCaps = false; text = label; textSize = 16f; setOnClickListener { onTap() }
+        contentDescription = desc ?: label // TalkBack reads emoji keys as nothing useful otherwise
         if (onLong != null) setOnLongClickListener { onLong(); true }
     }
 
