@@ -150,6 +150,20 @@ adb pull /sdcard/Android/data/pl.nech.tuparles/files/takes       # opt-in per-ta
 **Historique** screen also exports it directly via the share sheet. Suppressed
 entirely in private mode.
 
+## Tests
+
+```bash
+./gradlew :app:testDebugUnitTest          # pure-JVM, framework-free (Text.kt helpers)
+ANDROID_SERIAL=<device> ./gradlew :app:connectedDebugAndroidTest   # on-device
+```
+
+- **Unit (8)** — `Text.kt`: levenshtein edit-distance, `humanBytes`, `meterBar` (clamp/boost
+  edges). No Android, no Robolectric — runs anywhere.
+- **Instrumented (7, on a real device)** — the core pipeline end-to-end (Chaquopy
+  postprocess + whisper.cpp model load + a full `Dictation.decode`), and the TakesStore
+  JSONL codec round-trip (votes/corrections/profiling survive; garbage → null). The codec
+  test does no file IO, so it never touches your real `takes.jsonl`.
+
 ## Privacy by construction
 
 No `INTERNET` permission is declared in the manifest — the OS itself denies any
