@@ -4,9 +4,11 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Test
 import org.junit.runner.RunWith
 import pl.nech.domovoy.analytics.DomovoyAnalyticsEvent
+import java.io.File
 
 /**
  * The typed-telemetry contract (G): an event's attributes must reach the outbox JSON
@@ -54,5 +56,38 @@ class DomovoySyncSerializationTest {
         assertEquals("performance", json.getString("category"))
         assertEquals(1_700_000_000_000L, json.getLong("observed_at_ms"))
         assertEquals("s1", json.getString("session_id"))
+    }
+
+    // --- the durability guarantee: prepareSending never loses a batch (temp files) ---
+
+    private fun tmp(name: String): File {
+        val dir = InstrumentationRegistry.getInstrumentation().targetContext.cacheDir
+        return File(dir, "$name${System.nanoTime()}.jsonl").also { it.delete() }
+    }
+
+    @Test fun prepareSending_rotates_fresh_outbox() {
+        val out = tmp("ob"); val send = tmp("sd")
+        out.writeText("a\nb\n")
+        assertTrue(DomovoySync.prepareSending(out, send))
+        assertFalse("outbox consumed", out.exists())
+        assertEquals("a\nb\n", send.readText())
+        out.delete(); send.delete()
+    }
+
+    @Test fun prepareSending_carries_over_failed_batch() {
+        val out = tmp("ob"); val send = tmp("sd")
+        send.writeText("old\n")   // a previous send that didn't get a 2xx
+        out.writeText("new\n")    // events logged since
+        assertTrue(DomovoySync.prepareSending(out, send))
+        assertEquals("nothing dropped, old+new merged forward", "old\nnew\n", send.readText())
+        assertFalse(out.exists())
+        out.delete(); send.delete()
+    }
+
+    @Test fun prepareSending_empty_outbox_is_noop() {
+        val out = tmp("ob"); val send = tmp("sd")
+        assertTrue(DomovoySync.prepareSending(out, send))
+        assertFalse(send.exists()) // nothing to send, sending not created
+        out.delete(); send.delete()
     }
 }
