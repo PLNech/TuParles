@@ -38,14 +38,24 @@ optional = true
 fastembed = "^0.8.0"
 sentence-transformers = "^5.6.0"
 
+# The whisper.cpp CPU rung (#4): native build, opt-in for the dev/bench env here
+# (the desktop dist carries it as its own optional group for end users). Install
+# with `poetry install --with whispercpp` to run the CPU bench / the engine tests.
+[tool.poetry.group.whispercpp]
+optional = true
+
+[tool.poetry.group.whispercpp.dependencies]
+pywhispercpp = ">=1.2"
+
 [tool.pytest.ini_options]
 # `gpu` needs a CUDA device + WAVs; `embed` needs the optional embed group.
 # Both deselected by default so the pure-python suite stays CI-portable.
 # Run them with `pytest -m gpu` / `pytest -m embed`.
-addopts = "-m 'not gpu and not embed' --cov=tuparles --cov-report=term-missing"
+addopts = "-m 'not gpu and not embed and not whispercpp' --cov=tuparles --cov-report=term-missing"
 markers = [
     "gpu: requires a CUDA device and generated fixtures (the code-switch eval)",
     "embed: requires the optional 'embed' group (fastembed / sentence-transformers)",
+    "whispercpp: requires the optional 'whispercpp' group (pywhispercpp + ggml weights)",
 ]
 
 [tool.coverage.run]

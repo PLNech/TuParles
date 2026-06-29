@@ -1,5 +1,50 @@
 # Changelog
 
+## Sprint 28 — 2026-06-29 · Le troisième barreau — whisper.cpp sur CPU
+
+A loose thread from the gradient plan, tied off. The overnight Android session had
+extracted a `_CpuPartialsMixin` *for* a whisper.cpp CPU engine that was never
+written; this writes it. The point isn't a faster fallback — it's a **promptable**
+one: qwen takes no `initial_prompt`, so on CPU the personal glossary couldn't bias
+the decode (the documented "pipeline" → "payplane" fumble). whisper.cpp does, so
+the CPU rung now restores exactly the vocab bias the GPU has. And because ggml does
+runtime SIMD dispatch, the one source spans no-AVX2 x86 and ARM NEON — the engine
+the Pi-class home host runs (`docs/research/2026-06-28-stt-host-decision.md`).
+
+### Added
+- **`WhisperCppEngine` — the promptable CPU rung** (#4) — whisper.cpp via
+  pywhispercpp, sharing the small-model live partials (`_CpuPartialsMixin`) with
+  qwen but with a *promptable* final decode: glossary + carryover context ride
+  `initial_prompt`, like the GPU path. Language maps selection→`auto`/forced
+  (whisper.cpp has no per-segment multilingual flag — the GPU stays the code-switch
+  ceiling, stated honestly); the code-switch language is borrowed from the partials
+  model, qwen-parity (#10). The whisper.cpp model is injectable, so prompt/language
+  logic is tested without the native build.
+- **`whispercpp_model` setting + `WHISPERCPP_MODEL`/`_THREADS` config** — smart
+  default (`base`), total override; `small`/`medium-q5` for a capable host.
+
+### Changed
+- **CPU rung is now chosen, not fixed** (#4) — `_cpu_fallback_factory` prefers
+  whisper.cpp when it imports AND a model loads, else qwen. Both `load_engine` and
+  `ResilientEngine` route through it. The pywhispercpp import is lazy (fires only
+  when the CPU rung is actually built), so the lean/GPU install never pays for the
+  native build — and with the dep absent, behaviour is byte-identical to before.
+
+### Infra
+- **Optional `whispercpp` poetry group** (root + desktop dist) + a `whispercpp`
+  pytest marker, deselected by default — the lean/CI suite never needs the native
+  build. 8 deterministic fake-model unit tests (prompt composition, language map,
+  empty-audio guard, partials delegation + provenance, the fallback chooser both
+  ways) run in the default suite; one marker-gated smoke test decodes on the real
+  ABI for whoever installs the rung. **Full suite: 801 passed.**
+
+### Doctrine
+- **The quality bar is deferred, not claimed.** The plumbing is proven (logic by
+  fakes, ABI by the gated smoke test); whether the prompt bias actually restores
+  "pipeline" over "payplane" at ≤1× RTF is a *real-hardware* measurement against the
+  code-switch eval (#5b/#19) — never asserted from a fake. *Measure before you
+  trust.*
+
 ## Sprint 27 — 2026-06-29 · La poche — TuParles devient une app
 
 The spike grew a body. What was a build-ladder proof (mic → whisper → postprocess

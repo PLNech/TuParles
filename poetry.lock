@@ -120,7 +120,7 @@ version = "2026.6.17"
 description = "Python package for providing Mozilla's CA Bundle."
 optional = false
 python-versions = ">=3.7"
-groups = ["main", "embed"]
+groups = ["main", "embed", "whispercpp"]
 files = [
     {file = "certifi-2026.6.17-py3-none-any.whl", hash = "sha256:2227dcbaafe0d2f59279d1762ddddc37783ed4354594f194ffc31d20f41fc3db"},
     {file = "certifi-2026.6.17.tar.gz", hash = "sha256:024c88eeec92ca068db80f02b8b07c9cef7b9fe261d1d535abfd5abd6f6af432"},
@@ -241,7 +241,7 @@ version = "3.4.7"
 description = "The Real First Universal Charset Detector. Open, modern and actively maintained alternative to Chardet."
 optional = false
 python-versions = ">=3.7"
-groups = ["embed"]
+groups = ["embed", "whispercpp"]
 files = [
     {file = "charset_normalizer-3.4.7-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:cdd68a1fb318e290a2077696b7eb7a21a49163c455979c639bf5a5dcdc46617d"},
     {file = "charset_normalizer-3.4.7-cp310-cp310-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:e17b8d5d6a8c47c85e68ca8379def1303fd360c3e22093a807cd34a71cd082b8"},
@@ -395,12 +395,12 @@ version = "0.4.6"
 description = "Cross-platform colored terminal text."
 optional = false
 python-versions = "!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,!=3.6.*,>=2.7"
-groups = ["main", "dev", "embed", "nlp"]
+groups = ["main", "dev", "embed", "nlp", "whispercpp"]
 files = [
     {file = "colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6"},
     {file = "colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44"},
 ]
-markers = {main = "platform_system == \"Windows\"", dev = "sys_platform == \"win32\"", embed = "platform_system == \"Windows\" or sys_platform == \"win32\"", nlp = "platform_system == \"Windows\""}
+markers = {main = "platform_system == \"Windows\"", dev = "sys_platform == \"win32\"", embed = "platform_system == \"Windows\" or sys_platform == \"win32\"", nlp = "platform_system == \"Windows\"", whispercpp = "platform_system == \"Windows\""}
 
 [[package]]
 name = "coverage"
@@ -957,7 +957,7 @@ version = "3.18"
 description = "Internationalized Domain Names in Applications (IDNA)"
 optional = false
 python-versions = ">=3.9"
-groups = ["main", "embed"]
+groups = ["main", "embed", "whispercpp"]
 files = [
     {file = "idna-3.18-py3-none-any.whl", hash = "sha256:7f952cbe720b688055e3f87de14f5c3e5fdaa8bc3928985c4077ca689de849a2"},
     {file = "idna-3.18.tar.gz", hash = "sha256:ffb385a7e039654cef1ab9ef32c6fafe283c0c0467bba1d9029738ce4a14a848"},
@@ -1673,7 +1673,7 @@ version = "2.4.6"
 description = "Fundamental package for array computing in Python"
 optional = false
 python-versions = ">=3.11"
-groups = ["main", "embed", "nlp"]
+groups = ["main", "embed", "nlp", "whispercpp"]
 markers = "python_version == \"3.11\""
 files = [
     {file = "numpy-2.4.6-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:0280e0356c0829a18d9de1cb7eee50ec22ca639878d7240307ca0943d73cd2c4"},
@@ -1756,7 +1756,7 @@ version = "2.5.0"
 description = "Fundamental package for array computing in Python"
 optional = false
 python-versions = ">=3.12"
-groups = ["main", "embed", "nlp"]
+groups = ["main", "embed", "nlp", "whispercpp"]
 markers = "python_version >= \"3.12\""
 files = [
     {file = "numpy-2.5.0-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:489780423903667933b4ed6197b6ec3b75ea5dd17d1d8f0f38d798feb6921561"},
@@ -2262,7 +2262,7 @@ version = "4.10.0"
 description = "A small Python package for determining appropriate platform-specific dirs, e.g. a `user data dir`."
 optional = false
 python-versions = ">=3.10"
-groups = ["dev"]
+groups = ["dev", "whispercpp"]
 files = [
     {file = "platformdirs-4.10.0-py3-none-any.whl", hash = "sha256:fb516cdb12eb0d857d0cd85a7c57cea4d060bee4578d6cf5a14dfdf8cbf8784a"},
     {file = "platformdirs-4.10.0.tar.gz", hash = "sha256:31e761a6a0ca04faf7353ea759bdba55652be214725111e5aac52dfa29d4bef7"},
@@ -2671,6 +2671,76 @@ files = [
 six = ">=1.10.0"
 
 [[package]]
+name = "pywhispercpp"
+version = "1.5.0"
+description = "Python bindings for whisper.cpp"
+optional = false
+python-versions = ">=3.8"
+groups = ["whispercpp"]
+files = [
+    {file = "pywhispercpp-1.5.0-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:2498d591cca97bf186adb0d746775c21debd8a264b2053358f252cc9dd10167a"},
+    {file = "pywhispercpp-1.5.0-cp310-cp310-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:ce3f1e511335ca6c4f8cd2eabd8f0db5cdaff54047b7aa3f24bd962a9436b077"},
+    {file = "pywhispercpp-1.5.0-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:6e709172192331a7e3f18fc227279e3e11295894b5e2d3caca1bf837ecb69128"},
+    {file = "pywhispercpp-1.5.0-cp310-cp310-musllinux_1_2_aarch64.whl", hash = "sha256:a96816cf6b8d62c19ff3eda89094679006f86cef81acd60339ca19cc56241b95"},
+    {file = "pywhispercpp-1.5.0-cp310-cp310-musllinux_1_2_x86_64.whl", hash = "sha256:0804fc3a2f168f78b6869386c221a3622bc76cdb5ba5e25b8347572aac704542"},
+    {file = "pywhispercpp-1.5.0-cp310-cp310-win32.whl", hash = "sha256:e287bc277eef67729c57a4c7abf687e38ad9bd62074cdf451ca3e0fcf1ff4859"},
+    {file = "pywhispercpp-1.5.0-cp310-cp310-win_amd64.whl", hash = "sha256:eb36ac24e0c80199cda03a393df53941f0dfaac463773bf770163984fb984c7e"},
+    {file = "pywhispercpp-1.5.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:d92eec44b49595ab1454cff1d10faa83b0b27779db8d8f00592ed363f0c5a262"},
+    {file = "pywhispercpp-1.5.0-cp311-cp311-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:9b43ddd44e65ca53d5ab1f62b623bc3edc64019bbe06b9641fff2dfef704c990"},
+    {file = "pywhispercpp-1.5.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:0f895cbbf5ba71a9e3f0e6afb4b6ae49bae5c716dc6a8a4d905eb789d9fe2238"},
+    {file = "pywhispercpp-1.5.0-cp311-cp311-musllinux_1_2_aarch64.whl", hash = "sha256:70e925fad2c48554d3f5baf79e2746540268d2974b5cf40a4880887e4a065c2f"},
+    {file = "pywhispercpp-1.5.0-cp311-cp311-musllinux_1_2_x86_64.whl", hash = "sha256:b592011cd992a5bcd36d0923477fb4cfdd338a0c7ce58997de195a14ab2b6d9a"},
+    {file = "pywhispercpp-1.5.0-cp311-cp311-win32.whl", hash = "sha256:c35c16f5da31d79be604dfd082b8bb67d5d46ba2f7f59bf5ab13857d5cd6ec6b"},
+    {file = "pywhispercpp-1.5.0-cp311-cp311-win_amd64.whl", hash = "sha256:1bc31f684b6a38000e397824155bda3b45b61af6acc9f7e0f3bfa70e20b574e3"},
+    {file = "pywhispercpp-1.5.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:24602b8d0329a224fe6eb1c1e455853e983a5e04a63d4cb759ae2f275e254f5f"},
+    {file = "pywhispercpp-1.5.0-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:a839b738936a8cd72cdd55c59a83a462820532bee78e233241bf9a3503e92144"},
+    {file = "pywhispercpp-1.5.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:6ad4071772eb9dad59a741611e44e3819e6249c46e295ab8468609d03c6e4232"},
+    {file = "pywhispercpp-1.5.0-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:22f9ddf12f6fb0fe3c43465d976b554e8928fcc113c902127e94c792d85f0631"},
+    {file = "pywhispercpp-1.5.0-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:3f825942067da3b0c48fc5b552b816fcee1761e955b9fdfdc911f0ab2d6fff11"},
+    {file = "pywhispercpp-1.5.0-cp312-cp312-win32.whl", hash = "sha256:03025227d0da211e382db6b6b16d910a267c663b6b2c57092b1200965ec45393"},
+    {file = "pywhispercpp-1.5.0-cp312-cp312-win_amd64.whl", hash = "sha256:f9b1cd9dd4c3eb7fb2b777529eb62618e58a6bb05be20f82b7b1afe3d0b12274"},
+    {file = "pywhispercpp-1.5.0-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:64415b7687c0b39e66652b38683983ef7f23e174d7b3b05caa539955da8b088e"},
+    {file = "pywhispercpp-1.5.0-cp313-cp313-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:649af3ae0f9dc0d0dd757d8c2adfc6d929b1b203ac1ba85d5ac453015ddd6e63"},
+    {file = "pywhispercpp-1.5.0-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:2ea8fa7f5ce602d3e986fb11c4c2973b471f1b14e0fe75e01a66f1a60aecbfbf"},
+    {file = "pywhispercpp-1.5.0-cp313-cp313-musllinux_1_2_aarch64.whl", hash = "sha256:4363fa893e398d1f18a5775374109aa310022b9f4fc777a89329b12963f3149d"},
+    {file = "pywhispercpp-1.5.0-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:c9498eb9f4c38ea121da2435b5275c267486a5e14dddf5e72ec54a480b1fb44e"},
+    {file = "pywhispercpp-1.5.0-cp313-cp313-win32.whl", hash = "sha256:d2805f15361247ada04a34b51c556514527b984f9b089a4e32f1b2a4abbc5367"},
+    {file = "pywhispercpp-1.5.0-cp313-cp313-win_amd64.whl", hash = "sha256:57dd5111d4dd9fe3f0e784a03a3337df5abd514260a7d16656733d110316d2f0"},
+    {file = "pywhispercpp-1.5.0-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:b1f94300f2fa1748f67f63a9240b526e8542b2dad1ceca5ea87ec2e9e15a939a"},
+    {file = "pywhispercpp-1.5.0-cp314-cp314-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:0c393c01a0a77007a17d17cb706e08cba97f0e35ea0268733af1792949d03ceb"},
+    {file = "pywhispercpp-1.5.0-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:a6777b5d40c0679952ded7934f7119d5fbfd606ec348293f869f430795609bae"},
+    {file = "pywhispercpp-1.5.0-cp314-cp314-musllinux_1_2_aarch64.whl", hash = "sha256:a2fe9312fe3c08f832da392296118cc8cc1fc901753289132253f2066d911357"},
+    {file = "pywhispercpp-1.5.0-cp314-cp314-musllinux_1_2_x86_64.whl", hash = "sha256:ea34ae824a6f934ba7736e6440f93cc467a7ec98b9c8fb2e5a37bb439ffa93b9"},
+    {file = "pywhispercpp-1.5.0-cp314-cp314-win32.whl", hash = "sha256:f5d13b4a7e34b9f4eebf70bff150ec36f4145c580bd5d812b9a3139611e7433c"},
+    {file = "pywhispercpp-1.5.0-cp314-cp314-win_amd64.whl", hash = "sha256:77d4d0ff382b5bc1369e9f77a851b45659edf5974e0903ffb15b981a043d216b"},
+    {file = "pywhispercpp-1.5.0-cp314-cp314t-macosx_11_0_arm64.whl", hash = "sha256:4bb409027566b473100e43f07fac48f9c8bdb6cba1ac0fbff5594a6f5a0e1b7e"},
+    {file = "pywhispercpp-1.5.0-cp314-cp314t-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:fbdbb1bb236f4481ff6ea475aed9ed091393ddb02271df309645d71de207778d"},
+    {file = "pywhispercpp-1.5.0-cp314-cp314t-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:568669bae45bd879bba1e35401cefc89d572428bd17326ce8437107ab80003d0"},
+    {file = "pywhispercpp-1.5.0-cp314-cp314t-musllinux_1_2_aarch64.whl", hash = "sha256:358261055c56a96a04f6b0ff419633ffc61ef61027788b2bb2c6e7dca69abdb7"},
+    {file = "pywhispercpp-1.5.0-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:24da0c0bd33068f4c9c3f45eae3e6b7fb31d9b5d3487e4e1e1323b4253288d62"},
+    {file = "pywhispercpp-1.5.0-cp314-cp314t-win32.whl", hash = "sha256:9806e084ebf956c7e492c76ea31c708e894849024772b3c3a57f85c342afc341"},
+    {file = "pywhispercpp-1.5.0-cp314-cp314t-win_amd64.whl", hash = "sha256:dc8dbcb6033db306e9ec450d835c005dd491c457937c79ef2673ea8797cbb93c"},
+    {file = "pywhispercpp-1.5.0-cp39-cp39-macosx_11_0_arm64.whl", hash = "sha256:fd163b551b95112ddd18aac6bddd4cd30636790bff288274ebbb404e3f66a08f"},
+    {file = "pywhispercpp-1.5.0-cp39-cp39-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:eed1d5f73d8c38f2f18cdf11882860ac7e6e061e611c67627933d7e1b59b6fcb"},
+    {file = "pywhispercpp-1.5.0-cp39-cp39-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:be1683fe67b5980472779eac8592536f993b987e193af21fda7da1c4c929561b"},
+    {file = "pywhispercpp-1.5.0-cp39-cp39-musllinux_1_2_aarch64.whl", hash = "sha256:521df17d4e1d7ccd192303051bda8ce8b516f66816ed0b3a32281b57a6a0d3c4"},
+    {file = "pywhispercpp-1.5.0-cp39-cp39-musllinux_1_2_x86_64.whl", hash = "sha256:8796bcc410b7f6bd5af430e22116458d178effba628555c4c1d7db9ecce11d55"},
+    {file = "pywhispercpp-1.5.0-cp39-cp39-win32.whl", hash = "sha256:e2e89712d340170771e538e39543b904535195621a0706836ababb69fb159ff1"},
+    {file = "pywhispercpp-1.5.0-cp39-cp39-win_amd64.whl", hash = "sha256:11a3cd1973238beccd8ca523e7789bee88956968881893770bedd26be1c995d7"},
+    {file = "pywhispercpp-1.5.0.tar.gz", hash = "sha256:5aa54c73ec96617d97aa519dbbf817e44255eddd9bd52ee1243be61028dbd018"},
+]
+
+[package.dependencies]
+numpy = "*"
+platformdirs = "*"
+requests = "*"
+tqdm = "*"
+
+[package.extras]
+examples = ["sounddevice", "webrtcvad"]
+gui = ["pyqt5"]
+
+[[package]]
 name = "pyyaml"
 version = "6.0.3"
 description = "YAML parser and emitter for Python"
@@ -2883,7 +2953,7 @@ version = "2.34.2"
 description = "Python HTTP for Humans."
 optional = false
 python-versions = ">=3.10"
-groups = ["embed"]
+groups = ["embed", "whispercpp"]
 files = [
     {file = "requests-2.34.2-py3-none-any.whl", hash = "sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0"},
     {file = "requests-2.34.2.tar.gz", hash = "sha256:f288924cae4e29463698d6d60bc6a4da69c89185ad1e0bcc4104f584e960b9ed"},
@@ -3463,7 +3533,7 @@ version = "4.68.3"
 description = "Fast, Extensible Progress Meter"
 optional = false
 python-versions = ">=3.8"
-groups = ["main", "embed"]
+groups = ["main", "embed", "whispercpp"]
 files = [
     {file = "tqdm-4.68.3-py3-none-any.whl", hash = "sha256:39832cc2def2789a6f29df83f172db7416cea70052c0907a57801c5f2fdccb03"},
     {file = "tqdm-4.68.3.tar.gz", hash = "sha256:00dfa48452b6b6cfae3dd9885636c23d3422d1ec97c66d96818cbd5e0821d482"},
@@ -3638,7 +3708,7 @@ version = "2.7.0"
 description = "HTTP library with thread-safe connection pooling, file post, and more."
 optional = false
 python-versions = ">=3.10"
-groups = ["embed"]
+groups = ["embed", "whispercpp"]
 files = [
     {file = "urllib3-2.7.0-py3-none-any.whl", hash = "sha256:9fb4c81ebbb1ce9531cce37674bbc6f1360472bc18ca9a553ede278ef7276897"},
     {file = "urllib3-2.7.0.tar.gz", hash = "sha256:231e0ec3b63ceb14667c67be60f2f2c40a518cb38b03af60abc813da26505f4c"},
@@ -3712,4 +3782,4 @@ lemmatization = ["nltk (>=3.8.0)", "spacy (>=3.8.0)"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11,<3.15"
-content-hash = "3704ce2d294e1a395d417ca624e72397173e918df621f8d19e70db23bd815256"
+content-hash = "c23e648c6507b8cb5526e991b6dc716fe171368222d1ebbfe86cef66e619fe7b"
