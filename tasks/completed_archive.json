@@ -580,5 +580,29 @@
     "subject": "G: typed analytics attributes for duckdb/NLP",
     "completedAt": "2026-06-29",
     "learnings": "metric(name, Map<String,Any?>) keeps Int/Long/Double/Float/Boolean as native JSON types end-to-end (Float widened to Double on write; get() preserves type on read). Mirrored into Domovoy repo (DomovoyAnalytics.kt/Event.kt + Bridge.java Map.Entry<String,Object>) — left UNCOMMITTED on Domovoy master per the never-commit-to-master-unbidden rule."
+  },
+  {
+    "id": "s27-hardening",
+    "subject": "Hardening pass: stop-notif, export, guards, data-mgmt, heartbeat, IME shortcuts, a11y",
+    "completedAt": "2026-06-29",
+    "learnings": "Caught a real FGS bug: a permission bail-out in a service started via startForegroundService MUST still call startForeground first or Android throws ForegroundServiceDidNotStartInTime — go foreground before any early return. 180s recording cap + idempotent stopAndDecode (guard !recording) so a stop tap racing the cap can't double-decode. Widget RemoteViews need a real layout XML (app was all-programmatic); per-face dedup damps recording-tick spam but onUpdate must reset the cache or a freshly-placed widget never gets its click intent."
+  },
+  {
+    "id": "s27-tests",
+    "subject": "Kotlin test suite: 8 unit + 19 on-device instrumentation",
+    "completedAt": "2026-06-29",
+    "learnings": "Injectable-seam pattern is the safe way to test data-critical components without touching the user's real files: refactor IO to File/SharedPreferences-parameterized internals behind the unchanged public Context API, test against a temp cacheDir. Pinned TakesStore codec+IO+stats, DomovoySync typed-telemetry (numbers-as-numbers), and the outbox durability rotation (prepareSending = the 'lose nothing over 7 days' guarantee). org.json is a throwing stub in pure-JVM tests → those go to instrumentation. ActivityScenario UI tests can't reach RESUMED over adb-wifi on a real phone (power mgmt drives STOPPED even with keyguard clear) → CI-emulator only (now GH #21)."
+  },
+  {
+    "id": "s27-engine-prompt",
+    "subject": "whisper initial_prompt vocab-biasing (default-off)",
+    "completedAt": "2026-06-29",
+    "learnings": "Threaded a vocab-bias prompt through the JNI (jni.c params.initial_prompt = NULL when empty so default decode is byte-identical; release the jstring AFTER whisper_full since it's consumed synchronously) -> LibWhisper -> Dictation.decode -> a Reglages field. Shipped the SAFE plumbing only; quality gain is unmeasured (needs the code-switch eval, now GH #19). The on-device decode test proved the new native ABI doesn't break transcription — that's how you ship a verifiable-safe JNI change without measuring the feature itself."
+  },
+  {
+    "id": "s27-close",
+    "subject": "Session close: merged to main, Domovoy pushed, GitHub triaged",
+    "completedAt": "2026-06-29",
+    "learnings": "INTERNAL task IDs != GitHub issue numbers — the public repo had its own #2-14 roadmap; most of the #2 Android epic (#3,#5,#6,#7,#8,#12) was actually completed by this work and got closed with refs. New desktop/engine/test work filed as GH #15-21. nech.pl /stt API (#6,#7 internal) kept OFF the public tracker per user (personal infra, revive later). Domovoy push needed pull --rebase --autostash (teammate had pushed; autostash preserved the user's unrelated WIP)."
   }
 ]
