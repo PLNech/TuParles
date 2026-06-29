@@ -57,7 +57,7 @@ object DomovoySync {
         }
     }
 
-    private fun toJson(e: DomovoyAnalyticsEvent): JSONObject = JSONObject().apply {
+    internal fun toJson(e: DomovoyAnalyticsEvent): JSONObject = JSONObject().apply {
         put("app", APP)
         put("observed_at_ms", e.observedAtMillis)
         put("name", e.name)
