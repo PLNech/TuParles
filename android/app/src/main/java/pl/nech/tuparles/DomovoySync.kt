@@ -57,6 +57,22 @@ object DomovoySync {
         }
     }
 
+    /**
+     * Rotate the outbox aside for sending, carrying over any batch a previous send
+     * failed to deliver — the durability guarantee: events logged mid-send (into a
+     * fresh outbox) are never lost, and a failed send's batch is merged forward, not
+     * dropped. Returns false only on an IO error (caller aborts the drain).
+     */
+    internal fun prepareSending(outbox: File, sending: File): Boolean = try {
+        if (outbox.exists() && outbox.length() > 0L) {
+            if (sending.exists()) sending.appendText(outbox.readText()) else outbox.renameTo(sending)
+            if (outbox.exists()) outbox.delete()
+        }
+        true
+    } catch (_: Throwable) {
+        false
+    }
+
     internal fun toJson(e: DomovoyAnalyticsEvent): JSONObject = JSONObject().apply {
         put("app", APP)
         put("observed_at_ms", e.observedAtMillis)
@@ -84,15 +100,7 @@ object DomovoySync {
     fun drain(c: Context): Boolean {
         val f = outbox(c) ?: return false
         val sending = File(f.parentFile, "outbox.sending.jsonl")
-        // Carry over any leftover from a previously-failed send, then take the current.
-        try {
-            if (f.exists() && f.length() > 0L) {
-                if (sending.exists()) sending.appendText(f.readText()) else f.renameTo(sending)
-                if (f.exists()) f.delete()
-            }
-        } catch (_: Throwable) {
-            return false
-        }
+        if (!prepareSending(f, sending)) return false
         if (!sending.exists() || sending.length() == 0L) return true
 
         val body = try { sending.readText() } catch (_: Throwable) { return false }
