@@ -66,3 +66,18 @@ record:
   bench run.
 - domovoy has no `poetry`/`ffmpeg` yet — provisioning is part of #6, not #5.
 - Mesh choice (tailscale vs wireguard) deferred to #6 build.
+
+## Update (2026-06-29): the engine landed (plumbing), the measurement didn't
+
+`WhisperCppEngine` is now written and wired (Sprint 28): a promptable CPU rung
+(whisper.cpp via pywhispercpp) sharing qwen's small-model partials, with the
+glossary/carryover prompt restored on CPU. `load_engine` prefers it over qwen when
+the optional `whispercpp` group is installed and a model loads, else qwen — lazy
+import, so the GPU/lean path is byte-identical to before. Logic is unit-tested with
+a fake model; the native ABI has a marker-gated smoke test.
+
+What's **still open, and is the actual point of this note**: the `#4` bar —
+whisper.cpp-q5 matching qwen's 0.68 WER *with prompt-bias restored at ≤1× RTF* — is
+**unmeasured**. It needs this silicon (domovoy's A76), real FR/EN recordings, and
+the code-switch eval (#5b/#19). The engine being green is not the engine being
+good; that number is owed before the public CPU rung ships.

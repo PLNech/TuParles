@@ -1,9 +1,16 @@
-"""Transcription engines.
+"""Transcription engines — the GPU→CPU gradient.
 
 Primary: faster-whisper large-v3-turbo, float16, persistent on the RTX 4080
 (~0.5-1 s per utterance, 29x realtime measured — see docs/spike-backend.md).
-Fallback: the vendored qwen-asr C binary on CPU, for when the GPU is
-unavailable (driver issues, VRAM pressure).
+CPU rung (when the GPU is unavailable — driver issues, VRAM pressure, no card):
+the promptable, portable `WhisperCppEngine` (whisper.cpp via pywhispercpp) when
+it's installed, else the vendored qwen-asr C binary. whisper.cpp is preferred
+because it takes an initial_prompt — restoring the glossary/vocab bias on CPU
+that qwen structurally can't — and because ggml's runtime SIMD dispatch makes
+one source span no-AVX2 x86 and ARM NEON (#4/#9,
+docs/research/2026-06-28-stt-host-decision.md). Both CPU finals share one small
+faster-whisper for live partials (`_CpuPartialsMixin`). The chooser is
+`_cpu_fallback_factory`; every rung degrades, never X-or-nothing.
 """
 
 import ctypes
@@ -22,6 +29,8 @@ from tuparles.config import (
     QWEN_MODEL_DIR,
     QWEN_THREADS,
     SAMPLE_RATE,
+    WHISPERCPP_MODEL,
+    WHISPERCPP_THREADS,
 )
 from tuparles.partials import sanitize_partial
 from tuparles.preprocess import normalize_audio
@@ -236,15 +245,18 @@ class CpuPartialsEngine:
         return sanitize_partial(segments)
 
 
-class QwenCpuEngine:
-    """Fallback: vendored qwen-asr C binary, fresh process per utterance
-    (weights are mmap'd, spawn costs ~0.65 s).
+class _CpuPartialsMixin:
+    """Live-partials behaviour shared by every CPU *final* engine (qwen, whisper.cpp).
 
-    qwen itself can't stream (fresh process, ~0.4x realtime — see
-    docs/spike-backend.md), so live partials come from a separate small CPU
-    model (`CpuPartialsEngine`, #127), built lazily on the first partial and
-    opt-out via `cpu_partials_enabled`. If that model can't load (e.g. no
-    network on first use), we degrade silently to a waveform-only bubble."""
+    The final CPU engines can't cheaply stream their own preview (qwen is a fresh
+    process per utterance; whisper.cpp streaming is broken on CPU — Android #4),
+    so both paint the live bubble from one small faster-whisper (`CpuPartialsEngine`,
+    #127), built lazily on the first partial and opt-out via `cpu_partials_enabled`.
+    If it can't load (e.g. no network on first use), partials degrade silently to a
+    waveform-only bubble rather than crashing a take. Sharing this is the whole
+    reason both CPU rungs feel identical while you speak; only the final decode
+    differs. The mixin also exposes `self._partials` so a final engine can borrow
+    the small model's last language detection as its code-switch signal (#10)."""
 
     active_backend = "cpu"
 
@@ -281,6 +293,15 @@ class QwenCpuEngine:
                 self._partials_failed = True
                 return ""
         return self._partials.transcribe_partial(audio)
+
+
+class QwenCpuEngine(_CpuPartialsMixin):
+    """Fallback: vendored qwen-asr C binary, fresh process per utterance
+    (weights are mmap'd, spawn costs ~0.65 s). Live partials come from the shared
+    `_CpuPartialsMixin` (a small faster-whisper, #127). qwen takes no prompt, so it
+    can't be vocab-biased — the reason whisper.cpp (#4) exists as the other CPU
+    rung: same partials, but a promptable final decode that restores glossary bias.
+    """
 
     def transcribe(
         self, audio: np.ndarray, context: str | None = None
@@ -327,6 +348,108 @@ class QwenCpuEngine:
         )
 
 
+def _default_whispercpp_model(name: str):
+    """Build the real whisper.cpp model (pywhispercpp). Isolated so the engine's
+    decode logic is testable with a fake factory — and so the heavy, optional
+    native import is lazy: it lives in the `whispercpp` poetry group, absent from
+    the lean/GPU install, and only fires the moment this rung is actually chosen
+    (load_engine catches the ImportError and falls back to qwen)."""
+    from pywhispercpp.model import Model
+
+    # n_threads at construction so every decode reuses it; logs muted (ggml is
+    # chatty at load). `name` resolves a ggml weight by name (fetched + cached)
+    # or an absolute path to a .bin.
+    return Model(
+        name,
+        n_threads=WHISPERCPP_THREADS,
+        print_realtime=False,
+        print_progress=False,
+        redirect_whispercpp_logs_to=None,
+    )
+
+
+class WhisperCppEngine(_CpuPartialsMixin):
+    """The promptable CPU rung (#4): whisper.cpp via pywhispercpp.
+
+    Why it exists *alongside* qwen, sharing the same partials: qwen takes no
+    prompt, so the personal glossary + carryover context can't bias its decode
+    (the documented "pipeline" → "payplane" fumble). whisper.cpp honours
+    `initial_prompt`, so this rung restores on CPU exactly the vocab bias the GPU
+    path has — same small-model live preview (`_CpuPartialsMixin`), a *promptable*
+    final decode. It is also the portable engine: ggml does runtime SIMD dispatch,
+    so the one source runs on no-AVX2 x86 AND ARM NEON where qwen's -march=native
+    build can't (#9) — the reason it's the public CPU-rung host on the Pi 5
+    (docs/research/2026-06-28-stt-host-decision.md).
+
+    Optional + lazy: pywhispercpp lives in the `whispercpp` poetry group, so the
+    lean/GPU install never pays for the native build. `load_engine()` prefers this
+    over qwen only when it imports AND a model loads; otherwise qwen — GPU-or-CPU,
+    never GPU-or-nothing, all the way down the gradient. The whisper.cpp model is
+    injectable (`model_factory`) so the prompt/language logic is tested without the
+    native lib; the real WER-vs-qwen bar is measured on real hardware (#5b/#19),
+    not asserted here.
+    """
+
+    def __init__(
+        self,
+        model: str | None = None,
+        *,
+        model_factory=None,
+        partials_factory=CpuPartialsEngine,
+    ) -> None:
+        super().__init__(partials_factory=partials_factory)
+        name = model or settings.get("whispercpp_model") or WHISPERCPP_MODEL
+        # Resolve the real factory at call time (module global, not a frozen
+        # default) so a test can inject a fake and the chooser path is patchable.
+        self._model = (model_factory or _default_whispercpp_model)(name)
+
+    def transcribe(
+        self, audio: np.ndarray, context: str | None = None
+    ) -> Transcription:
+        """Promptable final decode — the whole reason this rung exists. The
+        glossary/dict-seed prompt + the previous take's carryover context ride
+        `initial_prompt` (#68/#18), exactly like the GPU path; that's the bias
+        qwen structurally can't take."""
+        if audio.size == 0:
+            return Transcription("")
+        pcm = normalize_audio(audio.astype(np.float32) / 32768.0)
+        language, _multilingual = decode_language_opts(settings.get("languages") or [])
+        # whisper.cpp has no per-segment `multilingual` flag (that's a
+        # faster-whisper extension), so we can't follow a mid-sentence switch the
+        # way the GPU does. "auto" lets it detect per decode (the best this binding
+        # offers); a single forced language still pins when the user picked exactly
+        # one. Honest limitation — the GPU rung remains the code-switch ceiling.
+        segments = self._model.transcribe(
+            pcm,
+            language=language or "auto",
+            initial_prompt=_compose_prompt(_vocab_prompt(), context) or "",
+        )
+        text = " ".join(seg.text.strip() for seg in segments).strip()
+        # Borrow the partials model's last detection as the code-switch signal,
+        # same as qwen (#10) — honest about provenance (the small preview model's
+        # guess, not the final decode's). whisper.cpp can report its own detected
+        # language, but the binding's surface for it varies across versions; revisit
+        # if the per-decode language proves worth the version-coupling.
+        return Transcription(
+            text,
+            language=getattr(self._partials, "last_language", None),
+            language_prob=getattr(self._partials, "last_language_prob", None),
+        )
+
+
+def _cpu_fallback_factory():
+    """The CPU rung chooser: prefer the promptable whisper.cpp engine when it's
+    installed AND a model loads, else qwen. Restores glossary bias on CPU where
+    available, degrades to qwen where not — never X-or-nothing. Lazy by design:
+    the pywhispercpp import only fires here, when the CPU rung is actually built
+    (GPU dead or absent), so the GPU/lean path never imports the native lib."""
+    try:
+        return WhisperCppEngine()
+    except Exception as exc:
+        print(f"whisper.cpp CPU rung unavailable ({str(exc)[:120]}); qwen-asr CPU")
+        return QwenCpuEngine()
+
+
 class ResilientEngine:
     """GPU engine with mid-session recovery.
 
@@ -346,7 +469,7 @@ class ResilientEngine:
     Factories are injectable so the recovery logic is testable without a GPU.
     """
 
-    def __init__(self, gpu_factory=GpuEngine, cpu_factory=QwenCpuEngine) -> None:
+    def __init__(self, gpu_factory=GpuEngine, cpu_factory=_cpu_fallback_factory) -> None:
         self._gpu_factory = gpu_factory
         self._cpu_factory = cpu_factory
         self._gpu = gpu_factory()  # may raise — load_engine() handles it
@@ -429,12 +552,14 @@ class ResilientEngine:
 
 def load_engine():
     """GPU (self-healing) if it answers, CPU fallback otherwise. Never crash
-    at startup, and never get stuck with no STT after a suspend/resume."""
+    at startup, and never get stuck with no STT after a suspend/resume. The CPU
+    rung is whisper.cpp when installed (promptable, portable), else qwen —
+    chosen by `_cpu_fallback_factory`, here and inside ResilientEngine."""
     try:
         return ResilientEngine()
     except Exception as exc:
-        print(f"GPU engine unavailable ({exc}); falling back to qwen-asr CPU")
-        return QwenCpuEngine()
+        print(f"GPU engine unavailable ({exc}); falling back to CPU rung")
+        return _cpu_fallback_factory()
 
 
 def _write_wav(path: Path, audio: np.ndarray) -> None:

@@ -81,6 +81,13 @@ _DEFAULTS: dict[str, object] = {
     # can't load, the CPU bubble degrades to waveform-only.
     "cpu_partials_enabled": True,
     "cpu_partials_model": "base",
+    # Which whisper.cpp weight the promptable CPU rung loads for its FINAL decode
+    # (#4) — distinct from cpu_partials_model (the small *preview* model). "base"
+    # is the interactive default; "small"/"medium-q5" trade latency for accuracy
+    # on a capable CPU host (the Pi 5 / domovoy rung). A name fetches a ggml
+    # weight; an absolute path to a .bin also works. Only consulted when the
+    # whisper.cpp rung is the live CPU engine; faster-whisper on GPU is untouched.
+    "whispercpp_model": "base",
     # CPU partials decode only this tail of the take (#3 follow-up). Shorter than
     # the GPU window (PARTIAL_WINDOW_S=20) on purpose: the small `base` model
     # picks ONE language per window, so a long French-dominant tail Frenchifies

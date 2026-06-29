@@ -48,6 +48,16 @@ QWEN_MODEL_DIR = REPO_ROOT / "models" / "qwen3-asr-0.6b"
 # Spike result: BLAS plateaus at the P-core thread count on the i9-13900H.
 QWEN_THREADS = 14
 
+# whisper.cpp CPU rung (#4): the promptable, portable engine for hosts where
+# faster-whisper's CTranslate2 / qwen's -march=native build can't run (no-AVX2
+# x86, ARM NEON) — ggml does runtime SIMD dispatch, so one source spans the
+# gradient. See docs/research/2026-06-28-stt-host-decision.md. Default model is
+# overridable via the `whispercpp_model` setting; threads reuse the qwen-measured
+# P-core sweet spot (the same BLAS plateau applies). pywhispercpp resolves a
+# bundled ggml weight by name, or pass an absolute path to a .bin.
+WHISPERCPP_MODEL = "base"
+WHISPERCPP_THREADS = QWEN_THREADS
+
 # Chatter guard: ignore a SECOND combo-engage within this span of the last one.
 # The edge detector (_ComboState._combo_since) already collapses a single
 # physical press to one fire, so this only ever suppresses a distinct re-press —

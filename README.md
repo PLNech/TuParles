@@ -130,9 +130,20 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
   `large-v3-turbo` in float16, persistent on the GPU (~29x realtime
   measured on an RTX 4080). Finals go through the batched pipeline;
   partials are cheap greedy decodes of a sliding window.
-- **CPU fallback**: [Qwen3-ASR-0.6B](https://huggingface.co/Qwen/Qwen3-ASR-0.6B)
-  via [antirez/qwen-asr](https://github.com/antirez/qwen-asr), a pure-C
-  inference engine (OpenBLAS) — used automatically when no GPU answers.
+- **CPU fallback**: used automatically when no GPU answers. Two rungs, chosen
+  by what's installed:
+  - [whisper.cpp](https://github.com/ggml-org/whisper.cpp) via
+    [pywhispercpp](https://github.com/abdeladim-s/pywhispercpp) — *preferred*
+    when present (`poetry install --with whispercpp`). It takes an
+    `initial_prompt`, so the personal glossary + carryover context bias the CPU
+    decode exactly as they do on the GPU — the bias qwen structurally can't take.
+    And ggml's runtime SIMD dispatch makes one source run on no-AVX2 x86 and ARM
+    NEON, so the same rung serves a Pi-class home host
+    (`docs/research/2026-06-28-stt-host-decision.md`). Model via *Réglages*
+    (`whispercpp_model`, `base` default).
+  - [Qwen3-ASR-0.6B](https://huggingface.co/Qwen/Qwen3-ASR-0.6B) via
+    [antirez/qwen-asr](https://github.com/antirez/qwen-asr), a pure-C engine
+    (OpenBLAS) — the deeper fallback when whisper.cpp isn't installed.
 - **CPU live partials**: qwen can't stream, so the preview text on a CPU
   session comes from a separate small whisper on CPU (`base` by default,
   greedy, bounded window) — faster-whisper's CT2 CPU backend, no CUDA. The
