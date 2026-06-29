@@ -28,6 +28,16 @@ fun levenshtein(a: String, b: String): Int {
     return prev[b.length]
 }
 
+/**
+ * The realtime level meter — a block bar from an RMS level in [0,1]. The ×3 boost
+ * is deliberate: speech rarely maxes RMS, so unboosted the bar barely moves. Shared
+ * by the scratchpad and the keyboard so the meter looks identical on every surface.
+ */
+fun meterBar(level: Float, n: Int = 12): String {
+    val filled = (level * n * 3f).toInt().coerceIn(0, n)
+    return "█".repeat(filled) + "░".repeat(n - filled)
+}
+
 /** Human-readable byte size for the storage readouts (o / Ko / Mo). */
 fun humanBytes(bytes: Long): String = when {
     bytes <= 0L -> "—"

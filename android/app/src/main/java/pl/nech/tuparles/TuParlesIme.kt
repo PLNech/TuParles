@@ -114,7 +114,7 @@ class TuParlesIme : InputMethodService() {
             is DictationState.Idle -> { mic.text = "🎙  Parler"; mic.isEnabled = true; refreshStatus("prêt") }
             is DictationState.Recording -> {
                 mic.text = "■  Stop"; mic.isEnabled = true
-                refreshStatus("🔴 ${"%.1f".format(s.elapsedMs / 1000f)}s  ${meter(s.level)}")
+                refreshStatus("🔴 ${"%.1f".format(s.elapsedMs / 1000f)}s  ${meterBar(s.level)}")
             }
             is DictationState.Decoding -> {
                 mic.isEnabled = false; refreshStatus("⏳ décodage… ${s.elapsedMs / 1000}s")
@@ -208,12 +208,6 @@ class TuParlesIme : InputMethodService() {
         if (!::status.isInitialized) return
         status.text = "TuParles · $state    ·    ${Engine.loadedFrom.ifEmpty { "—" }} · ${Settings.lang(this)}" +
             if (Settings.privateMode(this)) " · 🔒" else ""
-    }
-
-    private fun meter(level: Float): String {
-        val n = 12
-        val filled = (level * n * 3f).toInt().coerceIn(0, n)
-        return "█".repeat(filled) + "░".repeat(n - filled)
     }
 
     private fun ic() = currentInputConnection
