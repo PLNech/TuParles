@@ -2,6 +2,7 @@ package pl.nech.tuparles
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.inputmethodservice.InputMethodService
@@ -71,9 +72,9 @@ class TuParlesIme : InputMethodService() {
         controls.addView(key("⌫") { ic()?.deleteSurroundingText(1, 0) }, weight())
         controls.addView(key("espace") { ic()?.commitText(" ", 1) }, weight(2f))
         controls.addView(key("⏎") { onEnter() }, weight())
-        controls.addView(key("📝") { recordFix() }, weight())
+        controls.addView(key("📝", onLong = { open(HistoryActivity::class.java) }) { recordFix() }, weight())
         controls.addView(key(langGlyph()) { cycleLang() }.also { langKey = it }, weight())
-        controls.addView(key("⌨") { switchAway() }, weight())
+        controls.addView(key("⌨", onLong = { open(SettingsActivity::class.java) }) { switchAway() }, weight())
         root.addView(controls, lp(matchW = true))
 
         refreshStatus("prêt")
@@ -217,8 +218,18 @@ class TuParlesIme : InputMethodService() {
         super.onDestroy()
     }
 
-    private fun key(label: String, onTap: () -> Unit) = Button(this).apply {
+    private fun key(label: String, onLong: (() -> Unit)? = null, onTap: () -> Unit) = Button(this).apply {
         isAllCaps = false; text = label; textSize = 16f; setOnClickListener { onTap() }
+        if (onLong != null) setOnLongClickListener { onLong(); true }
+    }
+
+    /** Open one of our screens from the keyboard (long-press shortcuts). */
+    private fun open(activity: Class<*>) {
+        try {
+            startActivity(Intent(this, activity).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (t: Throwable) {
+            DebugLog.w(TAG, "ime: open ${activity.simpleName} failed (${t.javaClass.simpleName})")
+        }
     }
 
     private fun weight(w: Float = 1f) =
