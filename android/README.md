@@ -69,6 +69,11 @@ Quality/speed ladder (per ~4s clip), validated against recorded takes:
 small/medium are the untested sweet spot. base is bundled as the fast default;
 push a larger model to use it (see below).
 
+To mitigate the tech-vocab fumble without a bigger model, **Réglages → Vocabulaire
+(prompt)** sets whisper's `initial_prompt` (e.g. `pipeline, refactor, commit, deploy`):
+it biases spelling of your terms without rewriting meaning. Default empty (no bias);
+its quality effect is yours to measure against the code-switch eval.
+
 ## The capture harness (experimental POC)
 
 A 12-prompt FR/EN code-switch corpus, each with a record button. Per take it runs
