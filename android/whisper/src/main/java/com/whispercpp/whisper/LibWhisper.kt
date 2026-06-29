@@ -16,7 +16,7 @@ class WhisperContext private constructor(private var ptr: Long) {
         Executors.newSingleThreadExecutor().asCoroutineDispatcher()
     )
 
-    suspend fun transcribeData(data: FloatArray, printTimestamp: Boolean = true, language: String = "auto", threads: Int = 0): String = withContext(scope.coroutineContext) {
+    suspend fun transcribeData(data: FloatArray, printTimestamp: Boolean = true, language: String = "auto", threads: Int = 0, prompt: String = ""): String = withContext(scope.coroutineContext) {
         require(ptr != 0L)
         // threads <= 0 means "auto" (the high-perf core count); a positive override is
         // clamped to the actual core count so a bad setting can't oversubscribe.
@@ -26,7 +26,7 @@ class WhisperContext private constructor(private var ptr: Long) {
             WhisperCpuConfig.preferredThreadCount
         }
         Log.d(LOG_TAG, "Selecting $numThreads threads, language=$language")
-        WhisperLib.fullTranscribe(ptr, numThreads, data, language)
+        WhisperLib.fullTranscribe(ptr, numThreads, data, language, prompt)
         val textCount = WhisperLib.getTextSegmentCount(ptr)
         return@withContext buildString {
             for (i in 0 until textCount) {
@@ -140,7 +140,7 @@ private class WhisperLib {
         external fun initContextFromAsset(assetManager: AssetManager, assetPath: String): Long
         external fun initContext(modelPath: String): Long
         external fun freeContext(contextPtr: Long)
-        external fun fullTranscribe(contextPtr: Long, numThreads: Int, audioData: FloatArray, language: String)
+        external fun fullTranscribe(contextPtr: Long, numThreads: Int, audioData: FloatArray, language: String, prompt: String)
         external fun getTextSegmentCount(contextPtr: Long): Int
         external fun getTextSegment(contextPtr: Long, index: Int): String
         external fun getTextSegmentT0(contextPtr: Long, index: Int): Long

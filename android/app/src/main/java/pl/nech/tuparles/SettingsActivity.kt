@@ -7,6 +7,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Switch
@@ -50,6 +51,7 @@ class SettingsActivity : AppCompatActivity() {
         choiceRow("Modèle", Engine.loadedFrom.ifEmpty { "—" }, "Le rung GGML : base intégré (rapide) ou un modèle poussé (précis)") { pickModel() }
         choiceRow("Langue", Settings.lang(this), "auto détecte ; fr/en force la langue") { pickLang() }
         choiceRow("Threads de décodage", threadLabel(), "0 = auto (cœurs perf). Plus = plus rapide, plus de batterie") { pickThreads() }
+        choiceRow("Vocabulaire (prompt)", promptLabel(), "biaise l'orthographe de vos termes (pipeline, refactor…) ; ne réécrit pas le sens") { pickPrompt() }
         toggleRow("Post-traitement", "Lexique + corrections fr/en sur le texte décodé",
             Settings.postprocessOn(this)) { Settings.set(this, Settings.KEY_POSTPROCESS, it) }
 
@@ -131,6 +133,29 @@ class SettingsActivity : AppCompatActivity() {
                 Settings.set(this, Settings.KEY_THREADS, values[which]); d.dismiss(); build()
                 DomovoyAnalytics.metric("setting_threads", mapOf("threads" to values[which], "cores" to cores))
             }.show()
+    }
+
+    private fun pickPrompt() {
+        val input = EditText(this).apply {
+            setText(Settings.prompt(this@SettingsActivity))
+            hint = "pipeline, refactor, commit, deploy, async…"
+            setSelection(text.length)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Vocabulaire (initial_prompt)")
+            .setMessage("Quelques mots/termes que le modèle a tendance à mal orthographier. Laisser vide pour aucun biais.")
+            .setView(input)
+            .setPositiveButton("Enregistrer") { _, _ ->
+                Settings.set(this, Settings.KEY_PROMPT, input.text.toString().trim()); build()
+            }
+            .setNeutralButton("Effacer") { _, _ -> Settings.set(this, Settings.KEY_PROMPT, ""); build() }
+            .setNegativeButton("Annuler", null)
+            .show()
+    }
+
+    private fun promptLabel(): String {
+        val p = Settings.prompt(this)
+        return if (p.isBlank()) "aucun" else if (p.length <= 18) p else p.take(16) + "…"
     }
 
     private fun threadLabel(): String {
