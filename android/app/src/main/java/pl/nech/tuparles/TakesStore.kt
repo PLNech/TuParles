@@ -119,7 +119,7 @@ object TakesStore {
         )
     }
 
-    private fun toJson(r: TakeRecord) = JSONObject().apply {
+    internal fun toJson(r: TakeRecord) = JSONObject().apply {
         put("id", r.id); put("ts", r.ts); put("model", r.model); put("lang", r.lang)
         put("audio_s", r.audioS.toDouble()); put("decode_ms", r.decodeMs)
         put("rtf", r.rtf.toDouble()); put("chars", r.chars)
@@ -129,7 +129,7 @@ object TakesStore {
         if (r.error != null) put("error", r.error)
     }
 
-    private fun fromJson(line: String): TakeRecord? = try {
+    internal fun fromJson(line: String): TakeRecord? = try {
         val o = JSONObject(line)
         TakeRecord(
             id = o.optLong("id"), ts = o.optLong("ts"),
