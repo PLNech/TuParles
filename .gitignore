@@ -29,3 +29,6 @@ vocab.txt
 # Coverage artefacts
 .coverage
 htmlcov/
+
+# Meeting QA reports — real names, real quotes: never public
+docs/reports/
