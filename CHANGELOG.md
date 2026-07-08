@@ -34,6 +34,17 @@ offline batch transcriber — without a second engine.
     `h:mm:ss` past the hour), empty-segment dropping, lexicon application, and
     device selection.
 
+- **Take consent review** (#130) — `scripts/review_takes.py`: walk your own
+  dev-captured takes (transcript + `takes/<id>.wav` playback), flag each
+  `o`=shareable-with-the-local-assistant / `x`=private / skip. Consent lives in
+  a new `share_ok` column (NULL = unreviewed = no; migration-safe), misses get a
+  sidecar `misses/consent.json` (atomic, additive, never moves a WAV). The
+  assistant reads only `history.shared_rows()` — *"read only what was granted"
+  is a WHERE clause, not a discipline.* A grant is per-take, reversible
+  (`--redo`), local-only, and never authorises committing speech to git. This is
+  the gate that turns real takes into the real-human FR/EN eval corpus the
+  synthetic TTS one can't be (see today's research note).
+
 ### Fixed
 - **Decode-time GPU-wedge fallback** (#129) — the post-suspend CUDA wedge can
   lie: the probe answers, the model *loads*, then the decode throws (or the
