@@ -59,3 +59,130 @@ def test_decode_to_pcm_missing_ffmpeg_raises_human_message(monkeypatch):
     monkeypatch.setattr(ft.subprocess, "run", boom)
     with pytest.raises(RuntimeError, match="ffmpeg introuvable"):
         ft.decode_to_pcm(Path("nope.m4a"))
+
+
+# --- device probing (ct2, not torch) ------------------------------------
+
+
+def _poison_torch(monkeypatch):
+    """Inject a torch stub that detonates on any attribute access, so a test
+    proves `pick_device` reaches the ct2 probe and never touches torch."""
+    import sys
+    import types
+
+    class _Poison(types.ModuleType):
+        def __getattr__(self, name):
+            raise AssertionError("torch must not be used")
+
+    monkeypatch.setitem(sys.modules, "torch", _Poison("torch"))
+
+
+def test_pick_device_auto_uses_ctranslate2_not_torch_cpu(monkeypatch):
+    import ctranslate2
+
+    _poison_torch(monkeypatch)
+    monkeypatch.setattr(ctranslate2, "get_cuda_device_count", lambda: 0)
+    assert ft.pick_device("auto") == ("cpu", "int8", ft.CPU_FILE_MODEL)
+
+
+def test_pick_device_auto_uses_ctranslate2_not_torch_cuda(monkeypatch):
+    import ctranslate2
+
+    _poison_torch(monkeypatch)
+    monkeypatch.setattr(ctranslate2, "get_cuda_device_count", lambda: 1)
+    assert ft.pick_device("auto") == ("cuda", "float16", "large-v3-turbo")
+
+
+# --- decode-time GPU-wedge fallback --------------------------------------
+
+
+class _FakeSeg:
+    def __init__(self, start, end, text):
+        self.start = start
+        self.end = end
+        self.text = text
+
+
+class _FakeBatchedOK:
+    """A working batched pipeline yielding a couple of fake segments."""
+
+    def transcribe(self, pcm, **kw):
+        segs = [_FakeSeg(0.0, 1.0, " bonjour "), _FakeSeg(1.0, 2.0, " monde ")]
+        return iter(segs), object()
+
+
+class _FakeBatchedWedged:
+    """A CUDA context that loaded fine but throws on decode (suspend/resume)."""
+
+    def transcribe(self, pcm, **kw):
+        raise RuntimeError("CUDA failed with error out of memory")
+
+
+def _bare_transcriber(monkeypatch, *, device, batched, model_override=None):
+    """A FileTranscriber built without loading real models. Keeps the decode
+    hermetic: no user glossary, no language config."""
+    monkeypatch.setattr(ft.settings, "get", lambda *a, **k: [])
+    monkeypatch.setattr(ft, "_vocab_prompt", lambda: None)
+    t = ft.FileTranscriber.__new__(ft.FileTranscriber)
+    t.device = device
+    t.model_name = "large-v3-turbo" if device == "cuda" else ft.CPU_FILE_MODEL
+    t._model_override = model_override
+    t._batched = batched
+    return t
+
+
+def test_decode_wedge_on_cuda_falls_back_to_cpu(monkeypatch, capsys):
+    t = _bare_transcriber(monkeypatch, device="cuda", batched=_FakeBatchedWedged())
+
+    def fake_load(self, dev, compute, model_name):
+        self.device = dev
+        self.model_name = model_name
+        self._batched = _FakeBatchedOK()
+
+    monkeypatch.setattr(ft.FileTranscriber, "_load", fake_load)
+
+    import numpy as np
+
+    segs, _info = t.transcribe(np.zeros(16, dtype=np.float32))
+    assert [s.text for s in segs] == ["bonjour", "monde"]  # decode restarted OK
+    assert t.device == "cpu"  # self-healed onto CPU
+    assert t.model_name == ft.CPU_FILE_MODEL  # no --model → CPU default
+    assert "repli sur CPU" in capsys.readouterr().err
+
+
+def test_decode_wedge_honours_forced_model_on_fallback(monkeypatch, capsys):
+    t = _bare_transcriber(
+        monkeypatch,
+        device="cuda",
+        batched=_FakeBatchedWedged(),
+        model_override="medium",
+    )
+    loaded_with = {}
+
+    def fake_load(self, dev, compute, model_name):
+        loaded_with["model"] = model_name
+        self.device = dev
+        self.model_name = model_name
+        self._batched = _FakeBatchedOK()
+
+    monkeypatch.setattr(ft.FileTranscriber, "_load", fake_load)
+
+    import numpy as np
+
+    t.transcribe(np.zeros(16, dtype=np.float32))
+    assert loaded_with["model"] == "medium"  # explicit --model survives fallback
+    assert t.device == "cpu"
+
+
+def test_decode_failure_on_cpu_reraises_no_retry(monkeypatch):
+    t = _bare_transcriber(monkeypatch, device="cpu", batched=_FakeBatchedWedged())
+
+    def fail_load(self, *a, **k):  # must never be called: no fallback from CPU
+        raise AssertionError("must not reload when already on CPU")
+
+    monkeypatch.setattr(ft.FileTranscriber, "_load", fail_load)
+
+    import numpy as np
+
+    with pytest.raises(RuntimeError, match="CUDA failed"):
+        t.transcribe(np.zeros(16, dtype=np.float32))

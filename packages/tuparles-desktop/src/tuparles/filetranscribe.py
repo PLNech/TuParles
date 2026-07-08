@@ -83,17 +83,22 @@ def decode_to_pcm(path: Path) -> np.ndarray:
 def pick_device(prefer: str = "auto") -> tuple[str, str, str]:
     """(device, compute_type, default_model) for the requested preference.
 
-    `auto` uses the GPU when torch reports a CUDA device, else CPU — the same
+    `auto` uses the GPU when a CUDA device answers, else CPU — the same
     "GPU if it answers, CPU otherwise" rule the daemon follows.
+
+    We probe via ctranslate2, not torch: ct2 is what actually decodes here, and
+    torch was pulling in ~2 GB of wheels for a single boolean — a lean-install /
+    mobile portability blocker and a slow import. This mirrors the eval harness's
+    `_cuda_available()` probe (tests/test_codeswitch_eval.py).
     """
     if prefer == "cpu":
         return "cpu", "int8", CPU_FILE_MODEL
     want_gpu = prefer == "cuda"
     if prefer == "auto":
         try:
-            import torch
+            import ctranslate2
 
-            want_gpu = torch.cuda.is_available()
+            want_gpu = ctranslate2.get_cuda_device_count() > 0
         except Exception:
             want_gpu = False
     if want_gpu:
@@ -111,6 +116,10 @@ class FileTranscriber:
     """
 
     def __init__(self, device: str = "auto", model: str | None = None) -> None:
+        # Remember an explicit `--model`: on a decode-time CPU fallback we honour
+        # a forced model but otherwise drop to the CPU default (turbo won't fit /
+        # perform on CPU). None == "user didn't force one".
+        self._model_override = model
         dev, compute, default_model = pick_device(device)
         try:
             self._load(dev, compute, model or default_model)
@@ -143,7 +152,38 @@ class FileTranscriber:
 
     def transcribe(self, pcm, progress=None) -> tuple[list[Segment], object]:
         """float32 PCM → (segments, info). `progress(end_seconds)` fires as each
-        segment lands, so a caller can render a running percentage."""
+        segment lands, so a caller can render a running percentage.
+
+        Guarded against a decode-time CUDA wedge, not just a load-time one:
+        after suspend/resume ct2 reports the GPU available and the model *loads*
+        fine, then the lazy segment generator throws mid-drain (see
+        ResilientEngine's docstring). `__init__` already self-heals on load
+        failure, but a 28-minute transcription must not sink on the first bad
+        `next()` either. So on a CUDA decode failure we reload on CPU and restart
+        from zero — offline has no partial-progress contract, so a progress
+        callback simply starts over, which is acceptable. If we're already on
+        CPU there's nowhere left to fall back to, so we re-raise.
+        """
+        try:
+            return self._decode(pcm, progress)
+        except Exception as exc:
+            if self.device != "cuda":
+                raise
+            import sys
+
+            print(
+                f"GPU indisponible en cours de décodage ({str(exc)[:120]}) — "
+                "repli sur CPU.",
+                file=sys.stderr,
+            )
+            cpu_dev, cpu_compute, cpu_model = pick_device("cpu")
+            # Honour an explicit `--model`; otherwise take the CPU default.
+            self._load(cpu_dev, cpu_compute, self._model_override or cpu_model)
+            return self._decode(pcm, progress)
+
+    def _decode(self, pcm, progress=None) -> tuple[list[Segment], object]:
+        """The actual decode + generator drain — factored out so transcribe()
+        can retry the whole thing on a fresh (CPU) pipeline after a GPU wedge."""
         language, multilingual = decode_language_opts(settings.get("languages") or [])
         segments, info = self._batched.transcribe(
             pcm,
