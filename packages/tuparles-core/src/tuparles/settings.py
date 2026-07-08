@@ -160,6 +160,21 @@ _DEFAULTS: dict[str, object] = {
     # steady red dot so it never runs silently. The TUPARLES_DEV env var
     # overrides this (set = wins). Local-only, self-pruning by byte budget.
     "dev_recording": False,
+    # Turn-seam gap for offline `transcribe`. A long silence in a meeting
+    # is a turn boundary far more often than an intra-sentence breath: unbroken
+    # spoken sentences rarely pause more than ~1 s, while a speaker handing the
+    # floor to another leaves a clearly longer beat. So a gap above this many
+    # seconds — between two decoded words, or across a segment boundary — splits
+    # the fused block and marks the seam with a visible "— " (language-neutral,
+    # reads naturally in FR). This is the cheap structural fix for the real harm
+    # in a real-meeting QA pass (2026-07-08, local report): three speakers' turns
+    # fused into one unlabelled paragraph, and a downstream reader mis-attributed
+    # a quote. It is NOT diarization (no speaker identity) — just a boundary a
+    # reader can see. 1.2 s is a conservative default (bias toward NOT
+    # over-splitting a natural pause); 0 disables entirely. Offline batch path
+    # only — the live dictation daemon is untouched. It's a setting: smart
+    # default on, total override via `--turn-gap`.
+    "turn_gap_s": 1.2,
 }
 
 

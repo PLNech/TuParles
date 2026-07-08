@@ -65,6 +65,14 @@ def main() -> None:
     )
     tr.add_argument("--model", help="forcer un modèle Whisper (ex. small, medium)")
     tr.add_argument(
+        "--turn-gap",
+        type=float,
+        default=None,
+        metavar="SECONDES",
+        help="silence (s) marquant un changement de tour « — » "
+        "(défaut : réglage turn_gap_s, 1.2 ; 0 = désactivé)",
+    )
+    tr.add_argument(
         "--stdout", action="store_true", help="afficher aussi le transcript"
     )
     args = parser.parse_args()
@@ -284,6 +292,7 @@ def _transcribe(args) -> None:
             device=tr.device,
             duration=total,
             date=date.today().isoformat(),
+            turn_gap=args.turn_gap,  # None → the turn_gap_s setting (1.2 default)
         )
         out.write_text(text, encoding="utf-8")
         print(f"✓ {out}  ({len(segments)} segments · {format_ts(total)})")

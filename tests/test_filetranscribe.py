@@ -186,3 +186,93 @@ def test_decode_failure_on_cpu_reraises_no_retry(monkeypatch):
 
     with pytest.raises(RuntimeError, match="CUDA failed"):
         t.transcribe(np.zeros(16, dtype=np.float32))
+
+
+# --- turn seams: silence gaps split fused blocks ------------------
+#
+# The offline path decodes with word timestamps so a long word-to-word gap
+# (a likely speaker hand-off) splits one fused block into visibly separate
+# turns, each seamed with "— ". These are model-free: synthetic Segment/Word
+# fixtures exercise render_transcript's heuristic directly.
+
+
+def _render(segments, turn_gap):
+    out = ft.render_transcript(
+        segments,
+        source="x.m4a",
+        model="m",
+        device="cpu",
+        duration=60.0,
+        date="2026-07-08",
+        turn_gap=turn_gap,
+    )
+    return [line for line in out.splitlines()[2:] if line]  # body only
+
+
+def test_word_gap_splits_fused_segment_into_two_turns():
+    # A 1.5 s silence (2.0 → 3.5) inside one decoded segment marks a turn change.
+    words = (
+        ft.Word(0.0, 0.5, " Bonjour"),
+        ft.Word(0.5, 1.0, " tout"),
+        ft.Word(1.0, 1.5, " le"),
+        ft.Word(1.5, 2.0, " monde."),
+        ft.Word(3.5, 4.0, " Oui"),
+        ft.Word(4.0, 4.5, " salut."),
+    )
+    seg = ft.Segment(0.0, 4.5, "Bonjour tout le monde. Oui salut.", words)
+    body = _render([seg], turn_gap=1.2)
+    assert body == ["[00:00] Bonjour tout le monde.", "[00:03] — Oui salut."]
+
+
+def test_word_gap_below_threshold_does_not_split():
+    # Every intra-word gap is <= 1.0 s (an ordinary breath), so no seam appears.
+    words = (
+        ft.Word(0.0, 0.8, " Bonjour"),
+        ft.Word(1.5, 2.3, " tout"),  # 0.7 s gap — under 1.2
+        ft.Word(3.0, 3.8, " monde."),  # 0.7 s gap — under 1.2
+    )
+    seg = ft.Segment(0.0, 3.8, "Bonjour tout monde.", words)
+    body = _render([seg], turn_gap=1.2)
+    assert body == ["[00:00] Bonjour tout monde."]  # one block, no seam
+
+
+def test_turn_gap_zero_is_byte_identical_to_legacy():
+    # 0 disables the split entirely: output must match the pre-seam renderer even
+    # when word gaps AND segment gaps are present.
+    words = (
+        ft.Word(0.0, 0.5, " un"),
+        ft.Word(5.0, 5.5, " deux"),  # huge gap that WOULD split if enabled
+    )
+    segs = [
+        ft.Segment(0.0, 5.5, "un deux", words),
+        ft.Segment(30.0, 31.0, "trois", None),  # huge segment gap too
+    ]
+    body = _render(segs, turn_gap=0)
+    assert body == ["[00:00] un deux", "[00:30] trois"]  # no seams, no splits
+    assert "—" not in "\n".join(body)
+
+
+def test_segment_to_segment_gap_gets_seam():
+    # No word timings; a 2.0 s gap BETWEEN segments (2.0 → 4.0) still seams.
+    segs = [
+        ft.Segment(0.0, 2.0, "Première partie."),
+        ft.Segment(4.0, 6.0, "Deuxième partie."),
+    ]
+    body = _render(segs, turn_gap=1.2)
+    assert body == ["[00:00] Première partie.", "[00:04] — Deuxième partie."]
+
+
+def test_words_missing_falls_back_without_crashing():
+    # words=None (engine gave no word timings) must never crash: intra-segment
+    # splitting is simply skipped, segment-boundary gaps still seam.
+    segs = [
+        ft.Segment(0.0, 1.0, "alpha", None),
+        ft.Segment(1.2, 2.0, "beta", None),  # 0.2 s gap — no seam
+        ft.Segment(10.0, 11.0, "gamma", None),  # 8 s gap — seam
+    ]
+    body = _render(segs, turn_gap=1.2)
+    assert body == [
+        "[00:00] alpha",
+        "[00:01] beta",
+        "[00:10] — gamma",
+    ]

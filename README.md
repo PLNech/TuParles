@@ -313,6 +313,7 @@ tuparles transcribe meeting.m4a          # → meeting-transcript.txt (next to i
 tuparles transcribe a.m4a b.m4a          # several at once, one model load
 tuparles transcribe --device cpu talk.wav   # force CPU (battery-friendly)
 tuparles transcribe --model medium x.m4a     # heavier model for a kept transcript
+tuparles transcribe --turn-gap 0 x.m4a       # disable turn seams (one block per segment)
 ```
 
 Each file becomes a sibling `<name>-transcript.txt` of `[mm:ss] text` lines,
@@ -324,3 +325,13 @@ is **faithful**: known-mishear fixes from your lexicon, but no spoken-punctuatio
 rewriting or command parsing — a meeting is not a dictation. An existing
 transcript is never overwritten without `--force`. Like everything else, the
 audio never leaves your box.
+
+**Turn seams.** Whisper often fuses several speakers' turns into one unbroken
+paragraph, which reads (to a human or an LLM) as a single person's train of
+thought — and once cost a real quote its true author. So a silence longer than
+`--turn-gap` seconds (default 1.2, a conversational hand-off beat; intra-sentence
+pauses rarely exceed ~1 s) splits the block and marks the new turn with a visible
+`— ` at its own `[mm:ss]`. This is not diarization — no names, no speaker
+identity — just a boundary you can see, so fused turns stop reading as one voice.
+It's a setting (smart default on): `--turn-gap 0` turns it off, or set
+`turn_gap_s` in your config.
