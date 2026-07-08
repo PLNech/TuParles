@@ -1,6 +1,7 @@
 """Entry point: `tuparles` runs the daemon, `tuparles history` searches it."""
 
 import argparse
+from pathlib import Path
 
 
 def main() -> None:
@@ -48,6 +49,24 @@ def main() -> None:
     onb.add_argument(
         "--replay", action="store_true", help="rejouer même si déjà configuré"
     )
+    tr = sub.add_parser(
+        "transcribe",
+        help="Transcrire des fichiers audio/vidéo → <nom>-transcript.txt",
+    )
+    tr.add_argument("files", nargs="+", help="fichier(s) audio/vidéo (m4a, wav, mp3…)")
+    tr.add_argument(
+        "--force", action="store_true", help="écraser un transcript existant"
+    )
+    tr.add_argument(
+        "--device",
+        choices=["auto", "cuda", "cpu"],
+        default="auto",
+        help="silicium à utiliser (défaut : auto — GPU si dispo, sinon CPU)",
+    )
+    tr.add_argument("--model", help="forcer un modèle Whisper (ex. small, medium)")
+    tr.add_argument(
+        "--stdout", action="store_true", help="afficher aussi le transcript"
+    )
     args = parser.parse_args()
 
     if args.cmd == "history":
@@ -72,6 +91,8 @@ def main() -> None:
         _cheatsheet(args)
     elif args.cmd == "onboarding":
         _onboarding(args)
+    elif args.cmd == "transcribe":
+        _transcribe(args)
     else:
         from tuparles.daemon import run
 
@@ -204,6 +225,70 @@ def _onboarding(args) -> None:
 
     onboarding.apply_choices(chosen)
     print("C'est noté. `tuparles onboarding --replay` pour recommencer.")
+
+
+def _transcribe(args) -> None:
+    """Offline file transcription (#…): each FILE → a sibling
+    `<stem>-transcript.txt` of `[mm:ss] text` lines. Never overwrites an
+    existing transcript without `--force`, and writes to a NEW path (never the
+    input). Progress + model chatter go to stderr so `--stdout` stays clean."""
+    import sys
+    from datetime import date
+
+    from tuparles.config import SAMPLE_RATE
+    from tuparles.filetranscribe import (
+        FileTranscriber,
+        decode_to_pcm,
+        format_ts,
+        render_transcript,
+    )
+
+    paths = [Path(p) for p in args.files]
+    missing = [p for p in paths if not p.exists()]
+    for p in missing:
+        print(f"Introuvable : {p}", file=sys.stderr)
+    if missing:
+        return
+
+    # Refuse to clobber a transcript we didn't just make (implicit destruction is
+    # still destruction). --force opts in per run.
+    todo: list[tuple[Path, Path]] = []
+    for p in paths:
+        out = p.with_name(f"{p.stem}-transcript.txt")
+        if out.exists() and not args.force:
+            print(f"Existe déjà (--force pour écraser) : {out}", file=sys.stderr)
+            continue
+        todo.append((p, out))
+    if not todo:
+        return
+
+    print("Chargement du modèle…", file=sys.stderr)
+    tr = FileTranscriber(device=args.device, model=args.model)
+    print(f"Modèle : {tr.model_name} ({tr.device})", file=sys.stderr)
+
+    for p, out in todo:
+        print(f"Décodage audio : {p.name}", file=sys.stderr)
+        pcm = decode_to_pcm(p)
+        total = len(pcm) / SAMPLE_RATE
+
+        def progress(end_s: float, _total: float = total, _name: str = p.name) -> None:
+            pct = min(100, int(100 * end_s / _total)) if _total else 0
+            print(f"\r  {_name} : {pct:3d}%", end="", file=sys.stderr, flush=True)
+
+        segments, _info = tr.transcribe(pcm, progress=progress)
+        print("", file=sys.stderr)
+        text = render_transcript(
+            segments,
+            source=p.name,
+            model=tr.model_name,
+            device=tr.device,
+            duration=total,
+            date=date.today().isoformat(),
+        )
+        out.write_text(text, encoding="utf-8")
+        print(f"✓ {out}  ({len(segments)} segments · {format_ts(total)})")
+        if args.stdout:
+            print(text)
 
 
 def _whatsnew() -> None:
