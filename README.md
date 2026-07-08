@@ -282,6 +282,7 @@ steps. Changes take effect on the next take, no restart.
 
 ```bash
 tuparles                  # start the daemon (or launch from your app launcher)
+tuparles transcribe FILE… # batch-transcribe audio/video → FILE-transcript.txt
 tuparles history          # last 20 takes
 tuparles history "tokens" # search your dictations
 tuparles stats            # local telemetry: takes, débit, decode speed, language mix
@@ -300,3 +301,26 @@ tuparles onboarding --replay  # …re-run it even once configured
 
 Everything lives in `~/.local/share/tuparles/history.db` and
 `~/.config/tuparles/settings.json` — yours, on disk, never synced anywhere.
+
+### Transcribe files
+
+The same engine that powers push-to-talk also transcribes files offline — a
+Zoom recording, a voice memo, anything ffmpeg can read (m4a, mp3, wav, even a
+video's audio track):
+
+```bash
+tuparles transcribe meeting.m4a          # → meeting-transcript.txt (next to it)
+tuparles transcribe a.m4a b.m4a          # several at once, one model load
+tuparles transcribe --device cpu talk.wav   # force CPU (battery-friendly)
+tuparles transcribe --model medium x.m4a     # heavier model for a kept transcript
+```
+
+Each file becomes a sibling `<name>-transcript.txt` of `[mm:ss] text` lines,
+so you can skim and jump to a moment. It uses the RTX 4080 when one answers and
+falls back to a CPU model otherwise (never GPU-or-nothing), decodes batched with
+VAD (a 30-minute recording in a couple of minutes on the GPU), and follows your
+language selection so a code-switched meeting stays code-switched. The transcript
+is **faithful**: known-mishear fixes from your lexicon, but no spoken-punctuation
+rewriting or command parsing — a meeting is not a dictation. An existing
+transcript is never overwritten without `--force`. Like everything else, the
+audio never leaves your box.

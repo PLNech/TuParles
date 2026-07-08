@@ -1,5 +1,39 @@
 # Changelog
 
+## Sprint 29 — 2026-07-08 · Le fichier qui parle — dictée hors-ligne
+
+The daemon has always been about the live word. But the same engine can read a
+file, and a Zoom recording is just a very long take waiting for a transcript. So
+`tuparles transcribe FILE…` now exists, and the tool earns a second life as an
+offline batch transcriber — without a second engine.
+
+### Added
+- **`tuparles transcribe FILE…`** (#128) — batch-transcribe any ffmpeg-readable
+  audio/video (m4a, mp3, wav, a video's audio track) to a sibling
+  `<name>-transcript.txt` of `[mm:ss] text` lines. Several files in one model
+  load. New `tuparles.filetranscribe` module (desktop side):
+  - **Offline batch engine, not the realtime one.** Whole-file, batched +
+    VAD, keeps per-segment timestamps (the daemon joins-and-forgets them). A
+    30-minute recording decodes in ~a couple of minutes on the GPU, silences
+    skipped — vs the qwen binary's one-subprocess-per-file 120 s timeout that
+    would sink a long meeting outright. ffmpeg does demux/downmix/resample, so
+    48 kHz stereo AAC and 16 kHz mono WAV reach the model identically.
+  - **GPU-or-CPU, never GPU-or-nothing** (house doctrine): large-v3-turbo on
+    CUDA when one answers, CT2 int8 `small` on CPU otherwise (heavier via
+    `--model`), a documented fallback on a wedged CUDA context. `--device`
+    forces the pick. Proven both ways: a post-suspend CUDA wedge fell straight
+    through to the CPU `small` model and still produced the transcript.
+  - **Faithful, not dictation.** Reuses the daemon's language selection (a
+    code-switched meeting stays code-switched) and personal-glossary
+    `initial_prompt`, and applies the deterministic lexicon per segment — but
+    **no** spoken-punctuation rewriting, repeat-collapse, or command parsing: a
+    meeting is not a dictation, and "virgule" said aloud is a word, not a comma.
+  - **Never clobbers.** An existing transcript is skipped unless `--force`, and
+    output is always a new `-transcript.txt` path, never the input.
+  - Model-free tests cover the ffmpeg decode, `[mm:ss]` formatting (rolls to
+    `h:mm:ss` past the hour), empty-segment dropping, lexicon application, and
+    device selection.
+
 ## Sprint 28 — 2026-06-29 · Le troisième barreau — whisper.cpp sur CPU
 
 A loose thread from the gradient plan, tied off. The overnight Android session had
@@ -137,7 +171,6 @@ carries shape, never the text.
 - **Every surface is a thin face over one backbone.** Keyboard, scratchpad, widget,
   recognizer all toggle the same service and observe the same state — they cannot
   diverge in behaviour, model, or postprocess.
-
 ## Sprint 26 — 2026-06-28 · Le déménagement — `tuparles-core` quitte le nid
 
 Step 5 of the refactor, the one the gate was built to protect: the portable IP
