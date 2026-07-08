@@ -634,5 +634,29 @@
     "subject": "Externalize backlog: 9 GitHub issues (#22-#30), TODO.md retired",
     "completedAt": "2026-07-08",
     "learnings": "An in-repo TODO.md with its own #NN numbering is a footgun once the repo is public: internal #16 != GH #16, and the internal numbers were even REUSED across sprints (Android's #16-#31 != desktop's). Migration checklist that worked: (1) grep CHANGELOG to see what already shipped, (2) dedupe against existing issues (internal spell-mode #17 was already GH #14; correction journal folded into new #23), (3) epic-with-checkboxes for chains, standalone issues for the rest, (4) CHANGELOG Infra bullet records the mapping so old #NN refs stay decodable. Tasks #5/#6 closed by externalization: delivery dance=GH#22 (diagnostic-first: Sprint 19 built ~70% of it), correction learning + two-pass=GH#23, bench matrix D1-D7=GH#24."
+  },
+  {
+    "id": "s30-legA-vocab-ab",
+    "subject": "Entity A/B + redacted scorer + corpus 29->36 + avant/apres SPA",
+    "completedAt": "2026-07-09",
+    "learnings": "Vocab seeding alone (small/CPU both arms) moved a real call from 25/24 to 50/3 correct/wrong entities: biasing beats model size for the unstable-prior class. Redacted review pattern is now standing: counts-only scorer, content-free per-block word forensics, local diff SPA over 127.0.0.1 (NEVER Artifact). PII gotcha: the first agent hardcoded the customer name + app ID into committable specs and corpus notes - operator PII sweep before commit is not optional. rg alternation including your own sentinel (FluxiCare) makes the sweep self-noisy; run the raw pattern separately."
+  },
+  {
+    "id": "s30-legB-turn-seams",
+    "subject": "Turn seams in transcribe (word-gap splits, '- ' marks)",
+    "completedAt": "2026-07-09",
+    "learnings": "Worktree isolation for a code agent while another agent RUNS from the same editable install - merge only after the measuring run finishes, else you silently change the experiment's conditions. BatchedInferencePipeline supports word_timestamps (verified in installed source, line-level). Seam invariant worth pinning: turn_gap=0 must be byte-identical to the old renderer. Post-shipping: diarization showed some >1s pauses are NOT turns - the seam is a hint, the diarizer is the arbiter."
+  },
+  {
+    "id": "s30-legC-diarization-spike",
+    "subject": "CPU diarization spike (pyannote community-1)",
+    "completedAt": "2026-07-09",
+    "learnings": "Quality: 2/2 speakers, boundary within 3s of the QA-predicted fusion point, correctly rejected a 1s-pause false alarm. Cost is footprint not compute: naive pip install pyannote.audio = ~6.5GB CUDA torch for a CPU job AND silently upgraded torch in the shared venv - spikes must pin CPU wheels or use a scratch venv. HF gating is PER PIPELINE REPO (accepting segmentation-3.0 does not unlock the pipeline). pyannote 4.x returns DiarizeOutput (.speaker_diarization), not Annotation. poetry install --sync after: revealed torch was never in the lock - suite is green torch-free."
+  },
+  {
+    "id": "s30-json-sidecar",
+    "subject": "JSON transcript sidecar (messages[] + annotations)",
+    "completedAt": "2026-07-09",
+    "learnings": "One _iter_blocks generator feeds both txt and JSON renderers so the two outputs cannot diverge - 'one story' as architecture, not discipline. The engine computed avg_logprob/no_speech_prob/word-probs all along; the plain text was throwing away the doubt signal. low_confidence floors (avg_logprob<-1, no_speech>0.5, words_per_s<0.5) would have pre-flagged the [01:41] 110->2-word collapse. Ablation lesson: the collapse reproduced WITHOUT vocab (different block!) = temperature-fallback nondeterminism; run-to-run disagreement IS a cheap uncertainty estimate."
   }
 ]
