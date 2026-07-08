@@ -604,5 +604,23 @@
     "subject": "Session close: merged to main, Domovoy pushed, GitHub triaged",
     "completedAt": "2026-06-29",
     "learnings": "INTERNAL task IDs != GitHub issue numbers — the public repo had its own #2-14 roadmap; most of the #2 Android epic (#3,#5,#6,#7,#8,#12) was actually completed by this work and got closed with refs. New desktop/engine/test work filed as GH #15-21. nech.pl /stt API (#6,#7 internal) kept OFF the public tracker per user (personal infra, revive later). Domovoy push needed pull --rebase --autostash (teammate had pushed; autostash preserved the user's unrelated WIP)."
+  },
+  {
+    "id": "s29-research-fanout",
+    "subject": "CPU/edge ASR SOTA research fan-out (3 WS agents + Opus code review)",
+    "completedAt": "2026-07-08",
+    "learnings": "Fan-out pattern paid again: 3 orthogonal web sweeps + 1 fresh-eyes source review converged independently on the same verdicts, which is the signal. Biggest catch came from READING INSTALLED PACKAGE SOURCE, not the web: BatchedInferencePipeline silently disables temperature fallback / hallucination-silence / prev-text conditioning (verified in faster-whisper 1.2.1) — we paid beam_size=5 while the rescue machinery was off. Meta-lesson: many 2026-dated 'benchmarks' are SEO/LLM aggregator blogs with internal date contradictions; cross-check primary sources and flag confidence inline. Landscape: parakeet.cpp/Qwen3-ASR-0.6B/Kyutai stt-1b-en_fr earn spikes; nobody publishes FR/EN code-switch numbers — the corpus is the moat. SSOT: docs/research/2026-07-08-cpu-asr-sota-and-decode-review.md."
+  },
+  {
+    "id": "s29-synthesis",
+    "subject": "Synthesize research to docs/research bibliography + CPU plan",
+    "completedAt": "2026-07-08",
+    "learnings": "Dedupe against prior notes BEFORE writing (2026-06-28 gradient note already owned the whisper.cpp N-rung decision; the new note extends, not repeats). Bench items became a D-series matrix extending the EXISTING bench_cpu_stt.py harness rather than proposing a new one. User mid-flight added D7 (two-pass fast-transcript-with-error-recovery) — leave synthesis open until the user has reacted to interim findings."
+  },
+  {
+    "id": "s29-wedge-fix",
+    "subject": "Decode-time GPU-wedge fallback + torch-free probe (#129)",
+    "completedAt": "2026-07-08",
+    "learnings": "The wedge lies TWICE: probe answers AND model loads, then decode throws mid-generator — so guarding __init__ is half a guard; wrap the generator DRAIN. Field truth from user: modprobe -r nvidia_uvm fails 'in use', only reboot clears it → CPU is co-primary, not fallback. Also: pick_device imported ~2GB of torch for one boolean; ctranslate2.get_cuda_device_count() is what actually decodes (eval harness had it right all along). Poisoned-module test pattern (sys.modules stub raising on getattr) proves an import is truly gone."
   }
 ]
