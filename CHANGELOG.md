@@ -1,5 +1,73 @@
 # Changelog
 
+## Sprint 30 — 2026-07-09 · Les coutures et les voix — la réunion comme banc d'essai
+
+A real meeting transcript failed in the wild (a fused block mis-attributed a
+quote), and the QA pass over it became the night's work order: make the failure
+impossible to miss, measure the cheapest fix, and let the machine say *who*
+spoke without reading *what* was said.
+
+### Added
+- **Turn seams in `tuparles transcribe`** — the batch path decodes with word
+  timestamps and splits any block at a word-to-word or segment gap longer than
+  `turn_gap_s` (default 1.2 s), marking each new turn with a visible `— ` at
+  its own `[mm:ss]`. Not diarization — a boundary a reader can see, so three
+  voices stop reading as one train of thought. `--turn-gap` overrides; `0`
+  restores the old output byte-for-byte; degrades to segment-boundary seams
+  when word timings are absent.
+- **JSON transcript sidecar** — `transcribe` now also writes
+  `<name>-transcript.json` (schema v1, default on, `--no-json` /
+  `transcribe_json` setting): `messages[]` at the same block granularity as
+  the txt (one `_iter_blocks` source of truth, the two files cannot diverge),
+  each with `content` + annotations the plain text discards — per-word
+  probabilities, per-segment QC (`avg_logprob`, `no_speech_prob`,
+  `compression_ratio`), `words_per_s`, a `low_confidence` flag (first-cut
+  floors from the QA pass, #31), `turn_seam`. `speakers: null` is a documented
+  placeholder for diarization (#32). Invents nothing: None where the decode
+  was silent.
+- **Redacted entity scorer** (`scripts/score_transcript_entities.py`) — counts
+  correct-vs-known-wrong entity forms in a transcript, emits aggregate counts
+  ONLY (input may be private; output is safe to paste). Generic tech-brand
+  spec built in; `--spec` JSON loads a meeting-specific list kept out of the
+  repo.
+- **Avant/après diff page** (`scripts/render_ab_diff.py`) — renders two
+  transcripts as a local self-contained HTML page: unified word-level diff,
+  entity badges, seam styling, changes-only folding, embedded chart. Output
+  stays in the gitignored reports dir; only the generator ships.
+- **Code-switch corpus 29 → 36** — seven real misfires from the meeting QA
+  (query/quarry, coût/coup, Haiku/Aiku, n8n/N8AIN, Opus/OPUZ, Gemini/Gmini,
+  Anthropic/Anthropy), same shape as ship/chip and cache/cash.
+
+### Fixed
+- **Tray version label actually committed** — Sprint 29's "La version dans le
+  menu" entry described code that had never landed; it now has.
+
+### Research
+- **Vocab seeding A/B on the real call** (small/CPU both arms, the only
+  variable moved): entity counts went 25 correct / 24 wrong → **50 / 3**;
+  14 of 16 entities to zero wrong forms. The "unstable prior" theory holds —
+  the model knew the words, it needed odds. Residuals: one brand still mangled
+  2×, alphanumeric IDs still truncate (spell-mode territory, #14). n=1 call:
+  direction solid, magnitudes anecdote.
+- **The [01:41] collapse** (a ~30 s block decoding to 2 words) reproduced in a
+  4-arm ablation — including the no-vocab arm, which collapsed a *different*
+  block: decode instability (temperature-fallback nondeterminism), not the
+  vocab prompt. Evidence on #31; the words/sec floor now shipping in the JSON
+  sidecar would have flagged every collapsed arm at transcribe time.
+- **CPU diarization spike validated** (pyannote community-1, CPU-only): 2/2
+  speakers on both files, a boundary within ~3 s of the QA-predicted fusion
+  point, a suspected turn at ~08:07 correctly rejected as a pause, ~0.7×
+  realtime contended. The cost is footprint (a naive install drags ~6.5 GB of
+  CUDA-flavored torch for a CPU job), not compute — productization checklist
+  in #32.
+
+### Infra
+- `docs/reports/` gitignored — meeting QA reports carry real names and real
+  quotes; they never enter the public repo. The entity spec and diff pages
+  live there too.
+- Filed #31 (doubt flags on the batch path) and #32 (diarization
+  productization); backlog remains GitHub-issues-only.
+
 ## Sprint 29 — 2026-07-08 · Le fichier qui parle — dictée hors-ligne
 
 The daemon has always been about the live word. But the same engine can read a
