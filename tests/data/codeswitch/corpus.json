@@ -262,6 +262,69 @@
       "must_contain": ["paul louis nech"],
       "must_not_contain": ["neck", "nèche", "naish"],
       "note": "Identity gate. Mishandling the user's own name is the worst failure mode (doctrine: the differentiator is where your voice lives afterward). 'Nech' must not become 'Neck'/'nèche'. Recall-driven: bias via the gitignored vocab.txt so the name stays local. Hyphen is invisible to the scorer, so we gate on the three tokens surviving in order."
+    },
+    {
+      "id": "query-not-quarry",
+      "text": "Le coût par mille query de ton modèle.",
+      "difficulty": "hard",
+      "category": "homophone",
+      "must_contain": ["query"],
+      "must_not_contain": ["quarry", "quéris", "carrier"],
+      "note": "REAL MISFIRE 2026-07-08 (meeting-transcript QA). The English 'query' collapsed two different ways in one call: 'quarry' (F2 [10:46]) and 'quéris' (F2 [03:07], 'coût par mille quéris'). Two distinct mangles of the same loanword — an unstable prior, so bias-only: 'quarry'/'carrier' are real English words, no post-decode rewrite."
+    },
+    {
+      "id": "cout-not-coup",
+      "text": "Le problème, c'est plus le coût.",
+      "difficulty": "medium",
+      "category": "homophone",
+      "must_contain": ["coût"],
+      "must_not_contain": ["coup"],
+      "note": "REAL MISFIRE 2026-07-08 (meeting-transcript QA). F2 [10:19] 'Le problème, c'est plus le coup' — 'coût' (cost) and 'coup' are a pure French near-homophone, and the money sense is exactly the register of this call. Bias-only: 'le coup' is a legitimate French phrase, so no post-decode rewrite."
+    },
+    {
+      "id": "haiku-not-aiku",
+      "text": "Si je mets Claude Haiku, je suis 7% moins bon.",
+      "difficulty": "medium",
+      "category": "proper-noun-borrow",
+      "must_contain": ["Haiku"],
+      "must_not_contain": ["Aiku"],
+      "note": "REAL MISFIRE 2026-07-08 (meeting-transcript QA). 'Haiku' (the Claude model) lost its aspirated H twice: F1 [02:37] 'Claude Aiku', F2 [00:20] 'tournait sur Aiku'. Bias via vocab.txt — the model name is a shared-tech-register prior."
+    },
+    {
+      "id": "n8n-not-n8ain",
+      "text": "Je ne veux pas remplacer n8n.",
+      "difficulty": "hard",
+      "category": "proper-noun-borrow",
+      "must_contain": ["n8n"],
+      "must_not_contain": ["N8AIN", "en 8 ain"],
+      "note": "REAL MISFIRE 2026-07-08 (meeting-transcript QA). F2 [25:38] 'je ne veux pas remplacer N8AIN' — the alphanumeric product name n8n (spoken 'n-eight-n') re-lexicalised into 'N8AIN'. Bias-only via vocab.txt."
+    },
+    {
+      "id": "opus-not-opuz",
+      "text": "Opus 4.8, il match.",
+      "difficulty": "hard",
+      "category": "proper-noun-borrow",
+      "must_contain": ["Opus"],
+      "must_not_contain": ["OPUZ", "K-8"],
+      "note": "REAL MISFIRE 2026-07-08 (meeting-transcript QA). F2 [03:36]/[04:06] spelled the Claude model 'OPUZ' and even 'K-8' four words apart, yet 'Opus' is correct in full at F2 [03:07] — the textbook unstable prior. Bias raises the odds of the right form; 'K-8' is a legit token so no rewrite."
+    },
+    {
+      "id": "gemini-not-gmini",
+      "text": "Le nouveau Gemini 3 Pro.",
+      "difficulty": "medium",
+      "category": "proper-noun-borrow",
+      "must_contain": ["Gemini"],
+      "must_not_contain": ["Gmini"],
+      "note": "REAL MISFIRE 2026-07-08 (meeting-transcript QA). 'Gmini' at F2 [00:20], dropping the first vowel, while 'Gemini' is spelled correctly twice in F1 [02:37]. Same call, both forms — bias via vocab.txt."
+    },
+    {
+      "id": "anthropic-not-anthropy",
+      "text": "Tu as dit à Anthropic, prompt caché ou pas ?",
+      "difficulty": "hard",
+      "category": "proper-noun-borrow",
+      "must_contain": ["Anthropic"],
+      "must_not_contain": ["Anthropy", "en tropique"],
+      "note": "REAL MISFIRE 2026-07-08 (meeting-transcript QA). Two mangles of the brand within eleven blocks: 'Anthropy' (F2 [13:10]) and 'en tropique' (F2 [15:24]). Bias-only: 'en tropique' is real French, and 'Anthropique' at F2 [13:56] is genuine French adjectival usage (not counted), so post-decode rewrite would false-positive."
     }
   ]
 }
