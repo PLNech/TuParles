@@ -276,3 +276,283 @@ def test_words_missing_falls_back_without_crashing():
         "[00:01] beta",
         "[00:10] — gamma",
     ]
+
+
+# --- Segment / Word back-compat (new trailing fields) --------------------
+#
+# The JSON sidecar added `p` to Word and QC fields to Segment. All are trailing
+# + optional so positional construction — and the _FakeSeg decode path, which
+# supplies none of them — keeps working, degrading to None (never crash).
+
+
+def test_segment_positional_construction_defaults_qc_to_none():
+    seg = ft.Segment(0.0, 2.0, "bonjour")  # 3 positional args, pre-JSON style
+    assert seg.words is None
+    assert seg.avg_logprob is None
+    assert seg.no_speech_prob is None
+    assert seg.compression_ratio is None
+    seg2 = ft.Segment(0.0, 2.0, "bonjour", (ft.Word(0.0, 1.0, " bonjour"),))
+    assert seg2.words is not None  # 4th positional (words) still lands
+
+
+def test_word_positional_construction_defaults_p_to_none():
+    w = ft.Word(0.0, 0.4, " mot")  # 3 positional args, pre-JSON style
+    assert w.p is None
+    assert ft.Word(0.0, 0.4, " mot", 0.9).p == 0.9
+
+
+# --- low_confidence heuristic floors (GH #31 cheap tier) -----------------
+
+
+def test_low_confidence_floors_each_clause_and_none_safe():
+    # Each floor trips independently; every clause is None-safe (an absent metric
+    # can't flag a block — we never invent a value to judge).
+    assert ft._low_confidence(None, None, None) is False  # all unknown → not flagged
+    assert ft._low_confidence(-1.5, 0.0, 5.0) is True  # avg_logprob < -1.0
+    assert ft._low_confidence(-0.2, 0.6, 5.0) is True  # no_speech_prob > 0.5
+    assert ft._low_confidence(-0.2, 0.0, 0.3) is True  # words_per_s < 0.5
+    assert ft._low_confidence(-0.2, 0.0, 5.0) is False  # all healthy
+    # A very low avg_logprob with the other two unknown still flags.
+    assert ft._low_confidence(-2.0, None, None) is True
+
+
+# --- render_json: schema golden + QC capture -----------------------------
+
+
+def _one_seg_with_words():
+    """A single fused segment carrying two turns split by a 2.5 s silence, with
+    per-word probabilities and per-segment QC — the raw material for the sidecar.
+    """
+    words = (
+        ft.Word(0.0, 0.5, " Bonjour", 0.9),
+        ft.Word(0.5, 1.0, " monde.", 0.8),
+        ft.Word(3.5, 4.0, " Oui", 0.95),  # 2.5 s gap from prev word → seam
+        ft.Word(4.0, 4.5, " salut.", 0.7),
+    )
+    return ft.Segment(
+        0.0,
+        4.5,
+        "Bonjour monde. Oui salut.",
+        words,
+        avg_logprob=-0.31,
+        no_speech_prob=0.02,
+        compression_ratio=1.4,
+    )
+
+
+def test_render_json_schema_golden_with_seam_split():
+    seg = _one_seg_with_words()
+    data = ft.render_json(
+        [seg],
+        source="meeting.m4a",
+        model="small",
+        device="cpu",
+        duration=4.53,
+        date="2026-07-08",
+        language="fr",
+        turn_gap=1.2,
+    )
+    assert data["schema_version"] == 1
+    assert data["source"] == "meeting.m4a"
+    assert data["duration_s"] == 4.5  # rounded to 1 dp
+    assert data["model"] == "small"
+    assert data["device"] == "cpu"
+    assert data["language"] == "fr"
+    assert data["created"] == "2026-07-08"
+    assert data["speakers"] is None  # diarization placeholder
+
+    # SAME granularity as the txt: the seam split → two messages.
+    assert len(data["messages"]) == 2
+    m0, m1 = data["messages"]
+
+    # Block 0: first turn, no seam, clean content (no "— " prefix — txt-only).
+    assert m0["start"] == 0.0
+    assert m0["end"] == 1.0
+    assert m0["content"] == "Bonjour monde."
+    a0 = m0["annotations"]
+    assert a0["turn_seam"] is False
+    assert a0["avg_logprob"] == -0.31  # parent-segment QC, passed through
+    assert a0["no_speech_prob"] == 0.02
+    assert a0["compression_ratio"] == 1.4
+    assert a0["words_per_s"] == 2.0  # 2 words / (1.0 - 0.0) s
+    assert a0["low_confidence"] is False
+    assert a0["words"] == [
+        {"w": "Bonjour", "s": 0.0, "e": 0.5, "p": 0.9},
+        {"w": "monde.", "s": 0.5, "e": 1.0, "p": 0.8},
+    ]
+
+    # Block 1: second turn, seam opened by the 2.5 s silence.
+    assert m1["start"] == 3.5
+    assert m1["end"] == 4.5
+    assert m1["content"] == "Oui salut."
+    a1 = m1["annotations"]
+    assert a1["turn_seam"] is True
+    # QC repeats the parent segment on the split block (documented behaviour).
+    assert a1["avg_logprob"] == -0.31
+    assert a1["compression_ratio"] == 1.4
+    assert a1["words"][0] == {"w": "Oui", "s": 3.5, "e": 4.0, "p": 0.95}
+
+
+def test_render_json_matches_txt_block_granularity():
+    # The sidecar's message texts must equal the txt body lines (minus the seam
+    # glyph + timestamp) — one story, two outputs, via the shared _iter_blocks.
+    seg = _one_seg_with_words()
+    kw = {
+        "source": "x.m4a",
+        "model": "m",
+        "device": "cpu",
+        "duration": 4.5,
+        "date": "2026-07-08",
+        "turn_gap": 1.2,
+    }
+    data = ft.render_json([seg], language="fr", **kw)
+    body = [ln for ln in ft.render_transcript([seg], **kw).splitlines()[2:] if ln]
+    txt_texts = [ln.split("] ", 1)[1].removeprefix(ft.TURN_SEAM) for ln in body]
+    json_texts = [m["content"] for m in data["messages"]]
+    assert json_texts == txt_texts == ["Bonjour monde.", "Oui salut."]
+
+
+def test_render_json_sparse_block_flags_low_confidence():
+    # A ~30 s block that decoded to 2 words → words_per_s ~0.07 < 0.5 (the real
+    # meeting failure the floor was cut for). low_confidence must flag it.
+    words = (ft.Word(0.0, 0.4, " euh", 0.3), ft.Word(29.6, 30.0, " voilà", 0.4))
+    seg = ft.Segment(
+        0.0, 30.0, "euh voilà", words, avg_logprob=-0.5, no_speech_prob=0.1
+    )
+    # turn_gap=0: keep it as ONE fused block (the real meeting failure was a
+    # single sparse block, not a seam-split one) so words_per_s spans the 30 s.
+    data = ft.render_json(
+        [seg],
+        source="x.m4a",
+        model="m",
+        device="cpu",
+        duration=30.0,
+        date="d",
+        turn_gap=0,
+    )
+    ann = data["messages"][0]["annotations"]
+    assert ann["words_per_s"] is not None and ann["words_per_s"] < 0.5
+    assert ann["low_confidence"] is True
+
+
+def test_render_json_invents_nothing_when_decode_is_silent():
+    # No words, no QC (words=None, QC defaulted None): the sidecar must carry
+    # None, never a fabricated number. words_per_s is None (no word count).
+    seg = ft.Segment(0.0, 2.0, "bonjour")  # bare positional, pre-JSON style
+    data = ft.render_json(
+        [seg], source="x.m4a", model="m", device="cpu", duration=2.0, date="d"
+    )
+    (m,) = data["messages"]
+    a = m["annotations"]
+    assert data["language"] is None  # not passed → None, not guessed
+    assert a["avg_logprob"] is None
+    assert a["no_speech_prob"] is None
+    assert a["compression_ratio"] is None
+    assert a["words_per_s"] is None
+    assert a["words"] is None
+    assert a["low_confidence"] is False  # nothing known → nothing flagged
+
+
+# --- cli sidecar wiring: default on, --no-json, non-clobber ---------------
+
+
+def _run_transcribe(tmp_path, monkeypatch, **overrides):
+    """Drive cli._transcribe model-free: a fake transcriber yields one synthetic
+    segment, decode_to_pcm is stubbed, settings answer in-memory. Returns the
+    input path so a test can assert on its sibling sidecars."""
+    import argparse
+
+    import numpy as np
+
+    from tuparles import cli
+
+    src = tmp_path / "talk.m4a"
+    src.write_bytes(b"not-real-audio")
+
+    class _Info:
+        language = "fr"
+
+    class _FakeTranscriber:
+        def __init__(self, device="auto", model=None):
+            self.model_name = "small"
+            self.device = "cpu"
+
+        def transcribe(self, pcm, progress=None):
+            seg = ft.Segment(
+                0.0, 1.0, "bonjour", None, avg_logprob=-0.2, no_speech_prob=0.01
+            )
+            return [seg], _Info()
+
+    monkeypatch.setattr(ft, "FileTranscriber", _FakeTranscriber)
+    monkeypatch.setattr(
+        ft, "decode_to_pcm", lambda p: np.zeros(16000, dtype=np.float32)
+    )
+    fake = {"transcribe_json": True, "turn_gap_s": 1.2, "languages": []}
+    fake.update(overrides.pop("settings", {}))
+    monkeypatch.setattr(ft.settings, "get", lambda key, *a: fake.get(key))
+
+    args = argparse.Namespace(
+        files=[str(src)],
+        force=False,
+        device="auto",
+        model=None,
+        turn_gap=None,
+        no_json=False,
+        stdout=False,
+    )
+    for k, v in overrides.items():
+        setattr(args, k, v)
+    cli._transcribe(args)
+    return src
+
+
+def test_cli_writes_both_txt_and_json_by_default(tmp_path, monkeypatch):
+    src = _run_transcribe(tmp_path, monkeypatch)
+    txt = src.with_name("talk-transcript.txt")
+    js = src.with_name("talk-transcript.json")
+    assert txt.exists() and js.exists()
+    import json
+
+    data = json.loads(js.read_text(encoding="utf-8"))
+    assert data["schema_version"] == 1
+    assert data["language"] == "fr"  # info.language flows through
+    assert data["messages"][0]["content"] == "bonjour"
+
+
+def test_cli_no_json_flag_skips_sidecar(tmp_path, monkeypatch):
+    src = _run_transcribe(tmp_path, monkeypatch, no_json=True)
+    assert src.with_name("talk-transcript.txt").exists()
+    assert not src.with_name("talk-transcript.json").exists()
+
+
+def test_cli_transcribe_json_setting_off_skips_sidecar(tmp_path, monkeypatch):
+    src = _run_transcribe(tmp_path, monkeypatch, settings={"transcribe_json": False})
+    assert src.with_name("talk-transcript.txt").exists()
+    assert not src.with_name("talk-transcript.json").exists()
+
+
+def test_cli_non_clobber_preserves_existing_json(tmp_path, monkeypatch):
+    # A pre-existing sidecar we didn't just make must survive a run without
+    # --force (implicit destruction is still destruction); the txt still writes.
+    src = tmp_path / "talk.m4a"
+    js = tmp_path / "talk-transcript.json"
+    js.write_text('{"schema_version": 1, "mine": true}\n', encoding="utf-8")
+    _run_transcribe(tmp_path, monkeypatch)  # writes src, decodes, honours skip
+    import json
+
+    assert json.loads(js.read_text(encoding="utf-8")) == {
+        "schema_version": 1,
+        "mine": True,
+    }  # untouched
+    assert src.with_name("talk-transcript.txt").exists()  # txt still produced
+
+
+def test_cli_force_overwrites_existing_json(tmp_path, monkeypatch):
+    js = tmp_path / "talk-transcript.json"
+    js.write_text('{"mine": true}\n', encoding="utf-8")
+    _run_transcribe(tmp_path, monkeypatch, force=True)
+    import json
+
+    data = json.loads(js.read_text(encoding="utf-8"))
+    assert data["schema_version"] == 1  # regenerated, not the stub
+    assert "mine" not in data

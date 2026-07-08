@@ -12,6 +12,19 @@ int8 model on CPU — but never through the qwen binary: that decodes a whole
 file in one subprocess with a 120 s timeout and emits no timestamps, which is
 the wrong tool for a long recording. ffmpeg does the demux/resample so any
 audio (or video) container it understands is fair game, not just 16 kHz WAV.
+
+Two outputs, one story: `render_transcript` writes the human `[mm:ss] text`
+body and `render_json` writes a machine-readable sidecar (schema_version 1) at
+the SAME block granularity (post turn-seam split), so the two never diverge.
+The JSON carries what the txt throws away — per-word probabilities, per-segment
+QC (avg_logprob / no_speech_prob / compression_ratio), turn-seam flags — and
+invents nothing: a value the decode didn't supply is `null`, never guessed.
+
+`speakers` is a deliberate `null` placeholder: diarization lands there later as
+`{"SPEAKER_00": {"talk_s": ...}}` plus a per-message `"speaker"` annotation.
+Both are pure additions (a new top-level value in place of null, a new key in
+an existing annotations dict), so a consumer written against v1 keeps working —
+the schema is designed for that growth without a version bump breaking readers.
 """
 
 import subprocess
@@ -36,13 +49,17 @@ CPU_FILE_MODEL = "small"
 
 @dataclass(frozen=True)
 class Word:
-    """One decoded word with its wall-clock span — the raw material for the
-    turn-seam heuristic (`render_transcript`). Mirrors faster-whisper's own
-    `Word` (start/end/word) minus the probability we don't use here."""
+    """One decoded word with its wall-clock span. Mirrors faster-whisper's own
+    `Word` (start/end/word/probability): `word` timings drive the turn-seam
+    heuristic (`render_transcript`); `p` (the model's per-word probability, None
+    when the engine didn't supply one) surfaces in the JSON sidecar so a reader
+    can spot a shaky word. `p` is trailing + optional so positional construction
+    (`Word(s, e, w)`) still works."""
 
     start: float
     end: float
     word: str
+    p: float | None = None
 
 
 @dataclass(frozen=True)
@@ -51,12 +68,22 @@ class Segment:
 
     `words` carries per-word timings when the decode ran with word-level
     timestamps (the offline default), else None — the turn-seam split degrades
-    to segment-boundary gaps only when it's absent (never crashes)."""
+    to segment-boundary gaps only when it's absent (never crashes).
+
+    The trailing QC fields mirror faster-whisper's own per-segment metrics
+    (`avg_logprob`, `no_speech_prob`, `compression_ratio`) — captured for the
+    JSON sidecar's `low_confidence` heuristic, None when unknown. All are
+    trailing + optional so positional construction (`Segment(s, e, text)` or
+    `Segment(s, e, text, words)`) still works and the `_FakeSeg` decode fakes,
+    which carry none of them, degrade to None via getattr defaults."""
 
     start: float
     end: float
     text: str
     words: tuple[Word, ...] | None = None
+    avg_logprob: float | None = None
+    no_speech_prob: float | None = None
+    compression_ratio: float | None = None
 
 
 def decode_to_pcm(path: Path) -> np.ndarray:
@@ -219,11 +246,26 @@ class FileTranscriber:
         for seg in segments:  # generator: consuming it drives the decode
             raw_words = getattr(seg, "words", None)
             words = (
-                tuple(Word(w.start, w.end, w.word) for w in raw_words)
+                tuple(
+                    Word(w.start, w.end, w.word, getattr(w, "probability", None))
+                    for w in raw_words
+                )
                 if raw_words
                 else None
             )
-            out.append(Segment(seg.start, seg.end, seg.text.strip(), words))
+            # QC metrics via getattr: real faster-whisper segments carry them;
+            # the _FakeSeg decode fakes don't, and degrade to None (no crash).
+            out.append(
+                Segment(
+                    seg.start,
+                    seg.end,
+                    seg.text.strip(),
+                    words,
+                    avg_logprob=getattr(seg, "avg_logprob", None),
+                    no_speech_prob=getattr(seg, "no_speech_prob", None),
+                    compression_ratio=getattr(seg, "compression_ratio", None),
+                )
+            )
             if progress is not None:
                 progress(seg.end)
         return out, info
@@ -240,27 +282,65 @@ def format_ts(seconds: float) -> str:
 TURN_SEAM = "— "  # visible, unlabelled turn boundary (language-neutral, FR-natural)
 
 
-def _split_at_gaps(seg: Segment, threshold: float) -> list[tuple[float, str]]:
-    """Split one segment into (start, text) blocks at internal word-gaps above
-    `threshold` seconds. The first block keeps the segment's natural start; each
-    later block starts at the first word after a long silence — a likely turn
-    change. Degrades to a single block (the whole segment) when word timings are
-    absent or splitting is disabled (`threshold <= 0`), so the caller's output is
+@dataclass(frozen=True)
+class _Block:
+    """One rendered block: a whole segment, or a turn-split slice of one. Carries
+    its own span + word subset (for the JSON sidecar's per-block word list and
+    words_per_s), while its QC comes from the parent segment (shared across a
+    segment's splits). `text` is raw (pre-lexicon); callers apply the lexicon."""
+
+    start: float
+    end: float
+    text: str
+    words: tuple[Word, ...] | None
+
+
+def _mk_block(words: list[Word]) -> _Block:
+    return _Block(
+        words[0].start,
+        words[-1].end,
+        "".join(w.word for w in words).strip(),
+        tuple(words),
+    )
+
+
+def _split_at_gaps(seg: Segment, threshold: float) -> list[_Block]:
+    """Split one segment into blocks at internal word-gaps above `threshold`
+    seconds. The first block keeps the segment's natural start; each later block
+    starts at the first word after a long silence — a likely turn change.
+    Degrades to a single block (the whole segment) when word timings are absent
+    or splitting is disabled (`threshold <= 0`), so the caller's output is
     unchanged in those cases."""
     if threshold <= 0 or not seg.words:
-        return [(seg.start, seg.text)]
-    blocks: list[tuple[float, str]] = []
+        return [_Block(seg.start, seg.end, seg.text, seg.words)]
+    blocks: list[_Block] = []
     cur: list[Word] = []
     prev_end: float | None = None
     for w in seg.words:
         if prev_end is not None and (w.start - prev_end) > threshold:
-            blocks.append((cur[0].start, "".join(x.word for x in cur).strip()))
+            blocks.append(_mk_block(cur))
             cur = []
         cur.append(w)
         prev_end = w.end
     if cur:
-        blocks.append((cur[0].start, "".join(x.word for x in cur).strip()))
+        blocks.append(_mk_block(cur))
     return blocks
+
+
+def _iter_blocks(segments: list[Segment], threshold: float):
+    """Walk segments → (seam, block, parent_segment) in render order. The single
+    source of truth for block granularity + seam placement, so the txt body and
+    the JSON sidecar can never tell two different stories. A seam opens on any
+    post-split continuation (block index > 0) or a first block that starts more
+    than `threshold` seconds after the previous segment ended."""
+    prev_end: float | None = None
+    for seg in segments:
+        for i, blk in enumerate(_split_at_gaps(seg, threshold)):
+            seam = threshold > 0 and (
+                i > 0 or (prev_end is not None and (blk.start - prev_end) > threshold)
+            )
+            yield seam, blk, seg
+        prev_end = seg.end
 
 
 def render_transcript(
@@ -296,18 +376,117 @@ def render_transcript(
         f"# {source}  ·  {format_ts(duration)}  ·  {model} ({device})  ·  {date}",
         "",
     ]
-    prev_end: float | None = None
-    for seg in segments:
-        for i, (start, raw) in enumerate(_split_at_gaps(seg, threshold)):
-            text = apply_lexicon(raw)
-            if not text:
-                continue
-            # A seam prefixes any post-split continuation (i > 0) and any first
-            # block that opens after a long gap from the previous segment.
-            seam = threshold > 0 and (
-                i > 0 or (prev_end is not None and (start - prev_end) > threshold)
-            )
-            prefix = TURN_SEAM if seam else ""
-            lines.append(f"[{format_ts(start)}] {prefix}{text}")
-        prev_end = seg.end
+    for seam, blk, _seg in _iter_blocks(segments, threshold):
+        text = apply_lexicon(blk.text)
+        if not text:
+            continue
+        prefix = TURN_SEAM if seam else ""
+        lines.append(f"[{format_ts(blk.start)}] {prefix}{text}")
     return "\n".join(lines) + "\n"
+
+
+JSON_SCHEMA_VERSION = 1
+
+# `low_confidence` floors — first-cut heuristics from a real-meeting QA pass
+# (2026-07-08, local report) where a ~30 s block decoded to just 2 words: a
+# block trips the flag when its per-segment avg_logprob is very low, the model
+# thought it was mostly non-speech, or it decoded implausibly few words per
+# second. Cheap, transparent, deterministic — the "cheap tier" QC of GH #31, not
+# a learned confidence model. Each is None-safe: a metric the decode didn't
+# supply simply can't trip its clause (we never invent a value to judge).
+_LOW_AVG_LOGPROB = -1.0  # below this: the decode is unsure of the words
+_HIGH_NO_SPEECH = 0.5  # above this: the model leaned "this isn't speech"
+_LOW_WORDS_PER_S = 0.5  # below this: implausibly sparse for real speech
+
+
+def _low_confidence(
+    avg_logprob: float | None,
+    no_speech_prob: float | None,
+    words_per_s: float | None,
+) -> bool:
+    return bool(
+        (avg_logprob is not None and avg_logprob < _LOW_AVG_LOGPROB)
+        or (no_speech_prob is not None and no_speech_prob > _HIGH_NO_SPEECH)
+        or (words_per_s is not None and words_per_s < _LOW_WORDS_PER_S)
+    )
+
+
+def _message(blk: _Block, seg: Segment, content: str, seam: bool) -> dict:
+    """One block → a schema-v1 message. Per-block: span, word list, words_per_s.
+    Shared-from-parent-segment: the QC metrics (a split block can't re-derive its
+    own avg_logprob, so it repeats the segment's — documented, not invented)."""
+    span = blk.end - blk.start
+    n_words = len(blk.words) if blk.words is not None else None
+    words_per_s = (
+        round(n_words / span, 2) if (n_words is not None and span > 0) else None
+    )
+    words_json = (
+        [{"w": w.word.strip(), "s": w.start, "e": w.end, "p": w.p} for w in blk.words]
+        if blk.words is not None
+        else None
+    )
+    return {
+        "start": blk.start,
+        "end": blk.end,
+        "content": content,
+        "annotations": {
+            "turn_seam": seam,
+            "avg_logprob": seg.avg_logprob,
+            "no_speech_prob": seg.no_speech_prob,
+            "compression_ratio": seg.compression_ratio,
+            "words_per_s": words_per_s,
+            "low_confidence": _low_confidence(
+                seg.avg_logprob, seg.no_speech_prob, words_per_s
+            ),
+            "words": words_json,
+        },
+    }
+
+
+def render_json(
+    segments: list[Segment],
+    *,
+    source: str,
+    model: str,
+    device: str,
+    duration: float,
+    date: str,
+    language: str | None = None,
+    turn_gap: float | None = None,
+) -> dict:
+    """Segments → the schema-v1 sidecar dict (see the module docstring for the
+    shape and the diarization-ready `speakers` placeholder). `messages` are the
+    SAME blocks `render_transcript` renders — post turn-seam split, empty blocks
+    dropped, lexicon applied to `content` — via the shared `_iter_blocks`, so the
+    two files tell one story. `turn_seam: true` marks a block the seam heuristic
+    opened; the seam's visible "— " is a txt-only concern (content stays clean).
+    `turn_gap=None` reads the `turn_gap_s` setting, matching the txt path.
+
+    Invents nothing: `language` is `info.language` or None; per-segment QC and
+    per-word `p` are passed straight through (None where the decode was silent);
+    only `words_per_s` and `duration_s` are computed, and are None / rounded, not
+    fabricated."""
+    from tuparles.lexicon import apply_lexicon
+
+    if turn_gap is None:
+        turn_gap = settings.get("turn_gap_s")
+    threshold = float(turn_gap or 0.0)
+
+    messages = []
+    for seam, blk, seg in _iter_blocks(segments, threshold):
+        content = apply_lexicon(blk.text)
+        if not content:
+            continue
+        messages.append(_message(blk, seg, content, seam))
+
+    return {
+        "schema_version": JSON_SCHEMA_VERSION,
+        "source": source,
+        "duration_s": round(duration, 1),
+        "model": model,
+        "device": device,
+        "language": language,
+        "created": date,
+        "speakers": None,  # diarization lands here later (non-breaking; see docstring)
+        "messages": messages,
+    }

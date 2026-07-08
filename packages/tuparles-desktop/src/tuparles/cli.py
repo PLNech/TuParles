@@ -73,6 +73,12 @@ def main() -> None:
         "(défaut : réglage turn_gap_s, 1.2 ; 0 = désactivé)",
     )
     tr.add_argument(
+        "--no-json",
+        action="store_true",
+        help="ne pas écrire le sidecar JSON <nom>-transcript.json "
+        "(défaut : réglage transcribe_json, activé)",
+    )
+    tr.add_argument(
         "--stdout", action="store_true", help="afficher aussi le transcript"
     )
     args = parser.parse_args()
@@ -237,19 +243,26 @@ def _onboarding(args) -> None:
 
 def _transcribe(args) -> None:
     """Offline file transcription (#…): each FILE → a sibling
-    `<stem>-transcript.txt` of `[mm:ss] text` lines. Never overwrites an
-    existing transcript without `--force`, and writes to a NEW path (never the
-    input). Progress + model chatter go to stderr so `--stdout` stays clean."""
+    `<stem>-transcript.txt` of `[mm:ss] text` lines and (default on, `--no-json`
+    to skip) a `<stem>-transcript.json` schema-v1 sidecar carrying the QC/word
+    detail the txt drops. Never overwrites an existing sidecar without `--force`,
+    and writes to NEW paths (never the input). Progress + model chatter go to
+    stderr so `--stdout` stays clean."""
+    import json
     import sys
     from datetime import date
 
+    from tuparles import settings
     from tuparles.config import SAMPLE_RATE
     from tuparles.filetranscribe import (
         FileTranscriber,
         decode_to_pcm,
         format_ts,
+        render_json,
         render_transcript,
     )
+
+    want_json = bool(settings.get("transcribe_json")) and not args.no_json
 
     paths = [Path(p) for p in args.files]
     missing = [p for p in paths if not p.exists()]
@@ -258,15 +271,24 @@ def _transcribe(args) -> None:
     if missing:
         return
 
-    # Refuse to clobber a transcript we didn't just make (implicit destruction is
-    # still destruction). --force opts in per run.
-    todo: list[tuple[Path, Path]] = []
-    for p in paths:
-        out = p.with_name(f"{p.stem}-transcript.txt")
+    # Refuse to clobber a sidecar we didn't just make (implicit destruction is
+    # still destruction). --force opts in per run. Each output is gated on its
+    # own: if only the .txt exists we still write a missing .json (and vice
+    # versa), so a file is decoded whenever any of its sidecars needs writing.
+    def _wanted(out: Path) -> bool:
         if out.exists() and not args.force:
             print(f"Existe déjà (--force pour écraser) : {out}", file=sys.stderr)
-            continue
-        todo.append((p, out))
+            return False
+        return True
+
+    todo: list[tuple[Path, Path | None, Path | None]] = []
+    for p in paths:
+        txt_out = p.with_name(f"{p.stem}-transcript.txt")
+        json_out = p.with_name(f"{p.stem}-transcript.json")
+        do_txt = txt_out if _wanted(txt_out) else None
+        do_json = (json_out if _wanted(json_out) else None) if want_json else None
+        if do_txt or do_json:
+            todo.append((p, do_txt, do_json))
     if not todo:
         return
 
@@ -274,7 +296,7 @@ def _transcribe(args) -> None:
     tr = FileTranscriber(device=args.device, model=args.model)
     print(f"Modèle : {tr.model_name} ({tr.device})", file=sys.stderr)
 
-    for p, out in todo:
+    for p, txt_out, json_out in todo:
         print(f"Décodage audio : {p.name}", file=sys.stderr)
         pcm = decode_to_pcm(p)
         total = len(pcm) / SAMPLE_RATE
@@ -283,19 +305,40 @@ def _transcribe(args) -> None:
             pct = min(100, int(100 * end_s / _total)) if _total else 0
             print(f"\r  {_name} : {pct:3d}%", end="", file=sys.stderr, flush=True)
 
-        segments, _info = tr.transcribe(pcm, progress=progress)
+        segments, info = tr.transcribe(pcm, progress=progress)
         print("", file=sys.stderr)
+        today = date.today().isoformat()
+        written: list[Path] = []
         text = render_transcript(
             segments,
             source=p.name,
             model=tr.model_name,
             device=tr.device,
             duration=total,
-            date=date.today().isoformat(),
+            date=today,
             turn_gap=args.turn_gap,  # None → the turn_gap_s setting (1.2 default)
         )
-        out.write_text(text, encoding="utf-8")
-        print(f"✓ {out}  ({len(segments)} segments · {format_ts(total)})")
+        if txt_out is not None:
+            txt_out.write_text(text, encoding="utf-8")
+            written.append(txt_out)
+        if json_out is not None:
+            data = render_json(
+                segments,
+                source=p.name,
+                model=tr.model_name,
+                device=tr.device,
+                duration=total,
+                date=today,
+                language=getattr(info, "language", None),
+                turn_gap=args.turn_gap,
+            )
+            json_out.write_text(
+                json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            written.append(json_out)
+        summary = " + ".join(str(w) for w in written)
+        print(f"✓ {summary}  ({len(segments)} segments · {format_ts(total)})")
         if args.stdout:
             print(text)
 
