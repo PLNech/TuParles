@@ -29,6 +29,12 @@ _META_COLUMNS = [
     ("wpm", "REAL"),
     ("lang", "TEXT"),
     ("lang_prob", "REAL"),
+    # Consent gate for assistant-assisted forensics on real takes (#130). The
+    # transcript is the user's own speech; the flag is theirs to grant per-take.
+    # NULL = unreviewed (the default, and what the assistant must treat as "no"),
+    # 1 = shareable with the local assistant, 0 = private. Added by migration so
+    # pre-existing DBs pick it up as NULL on next open, reviewable at any time.
+    ("share_ok", "INTEGER"),
 ]
 
 
@@ -122,6 +128,41 @@ def texts(limit: int | None = None) -> list[str]:
         params.append(limit)
     with closing(_conn()) as conn:
         return [row[0] for row in conn.execute(sql, params).fetchall()]
+
+
+def set_share_ok(row_id: int, ok: bool) -> None:
+    """Record the user's per-take consent decision.
+
+    ``ok=True`` marks the take shareable with the local assistant (share_ok=1),
+    ``ok=False`` marks it private (share_ok=0). This is the *only* thing that ever
+    lifts a transcript out of "unreviewed" — the assistant treats NULL as no. The
+    grant is per-take and reversible (review again to change your mind); it never
+    leaves this machine and never authorises committing the speech to git.
+    """
+    with closing(_conn()) as conn, conn:
+        conn.execute(
+            "UPDATE dictations SET share_ok = ? WHERE id = ?",
+            (1 if ok else 0, row_id),
+        )
+
+
+def shared_rows(limit: int | None = None) -> list[tuple]:
+    """The takes the user explicitly flagged OK, newest first: [(id, ts, lang, text), …].
+
+    This is the assistant's consent gate made queryable — the one view it may read
+    when it wants real speech for forensics. Rows the user never reviewed (NULL) or
+    marked private (0) are absent by construction, so "read only what was granted"
+    is a WHERE clause, not a discipline.
+    """
+    sql = (
+        "SELECT id, ts, lang, text FROM dictations WHERE share_ok = 1 ORDER BY id DESC"
+    )
+    params: list = []
+    if limit is not None:
+        sql += " LIMIT ?"
+        params.append(limit)
+    with closing(_conn()) as conn:
+        return conn.execute(sql, params).fetchall()
 
 
 def summarize() -> dict:
