@@ -15,6 +15,7 @@ from PySide6.QtGui import QColor, QDesktopServices, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import QMenu, QSystemTrayIcon
 
 from tuparles import history, settings, takes
+from tuparles.bugreport import version_label
 from tuparles.delivery import to_clipboard
 
 _IDLE = QColor(205, 214, 244)
@@ -107,6 +108,12 @@ class Tray(QObject):
         self._full_act.toggled.connect(self._on_view_toggled)
 
         self._menu.addSeparator()
+        # The running build, visible: after "Redémarrer" the user can check this
+        # line changed (commit hash on a dev checkout) instead of wondering
+        # whether the restart actually picked up new code. Resolved at startup,
+        # so the label is the code that's running, not the code on disk.
+        self._version_act = self._menu.addAction(f"TuParles {version_label()}")
+        self._version_act.setEnabled(False)
         self._menu.addAction("À propos").triggered.connect(
             lambda: QDesktopServices.openUrl(QUrl(_README_URL))
         )

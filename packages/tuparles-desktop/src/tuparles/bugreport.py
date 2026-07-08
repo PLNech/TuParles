@@ -13,6 +13,8 @@ browser or network. The daemon/tray opens the URL; the CLI prints it.
 from __future__ import annotations
 
 import platform
+import subprocess
+from pathlib import Path
 from urllib.parse import quote
 
 from tuparles.config import IS_WAYLAND
@@ -29,6 +31,38 @@ def app_version() -> str:
         return version("tuparles")
     except Exception:
         return "?"
+
+
+def _git_ref() -> str | None:
+    """Short commit hash when running from a checkout, else None.
+
+    Guarded: git absent, a pip-installed tree (site-packages isn't a repo), or a
+    slow probe must never break the caller — the label just falls back to semver.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(Path(__file__).parent), "rev-parse", "--short", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        ref = out.stdout.strip()
+        return ref if out.returncode == 0 and ref else None
+    except Exception:
+        return None
+
+
+def version_label() -> str:
+    """Human-facing version for the tray menu: `v0.3.0` or `v0.3.0 (7e161b9)`.
+
+    Why the hash: after "Redémarrer" the user needs to *see* whether the restart
+    picked up new code. The semver only moves at release time, so on a dev
+    checkout it can't answer that — the commit hash can. Resolved once per
+    process (the menu is built at startup), so the label IS the running code.
+    """
+    label = f"v{app_version()}"
+    ref = _git_ref()
+    return f"{label} ({ref})" if ref else label
 
 
 def _capabilities_line() -> str:
