@@ -622,5 +622,17 @@
     "subject": "Decode-time GPU-wedge fallback + torch-free probe (#129)",
     "completedAt": "2026-07-08",
     "learnings": "The wedge lies TWICE: probe answers AND model loads, then decode throws mid-generator — so guarding __init__ is half a guard; wrap the generator DRAIN. Field truth from user: modprobe -r nvidia_uvm fails 'in use', only reboot clears it → CPU is co-primary, not fallback. Also: pick_device imported ~2GB of torch for one boolean; ctranslate2.get_cuda_device_count() is what actually decodes (eval harness had it right all along). Poisoned-module test pattern (sys.modules stub raising on getattr) proves an import is truly gone."
+  },
+  {
+    "id": "s29-consent-tool",
+    "subject": "Consent-review tool for dev takes (#130 / scripts/review_takes.py)",
+    "completedAt": "2026-07-08",
+    "learnings": "Consent as schema, not discipline: a share_ok column (NULL=unreviewed=no) makes 'read only what was granted' a WHERE clause. Injectable review_items(items, ask, play, apply) core over a Take dataclass = 21 headless tests without touching the real DB. Misses have no rows -> sidecar consent.json (atomic tmp+os.replace, additive, never moves a WAV). Open loop (user runs the review) lives in project memory + a comment on GH issue #19, NOT in a session task."
+  },
+  {
+    "id": "s29-backlog-to-issues",
+    "subject": "Externalize backlog: 9 GitHub issues (#22-#30), TODO.md retired",
+    "completedAt": "2026-07-08",
+    "learnings": "An in-repo TODO.md with its own #NN numbering is a footgun once the repo is public: internal #16 != GH #16, and the internal numbers were even REUSED across sprints (Android's #16-#31 != desktop's). Migration checklist that worked: (1) grep CHANGELOG to see what already shipped, (2) dedupe against existing issues (internal spell-mode #17 was already GH #14; correction journal folded into new #23), (3) epic-with-checkboxes for chains, standalone issues for the rest, (4) CHANGELOG Infra bullet records the mapping so old #NN refs stay decodable. Tasks #5/#6 closed by externalization: delivery dance=GH#22 (diagnostic-first: Sprint 19 built ~70% of it), correction learning + two-pass=GH#23, bench matrix D1-D7=GH#24."
   }
 ]
