@@ -34,6 +34,30 @@ offline batch transcriber — without a second engine.
     `h:mm:ss` past the hour), empty-segment dropping, lexicon application, and
     device selection.
 
+### Fixed
+- **Decode-time GPU-wedge fallback** (#129) — the post-suspend CUDA wedge can
+  lie: the probe answers, the model *loads*, then the decode throws (or the
+  daemon-less box needs a reboot for the GPU to truly return). `FileTranscriber`
+  guarded only the load; now `transcribe()` catches a mid-drain CUDA failure,
+  warns, reloads on CPU (honouring an explicit `--model`) and restarts the file
+  from zero — a 28-minute meeting no longer sinks on the first bad `next()`.
+  Mirrors ResilientEngine's self-heal; tested with wedged fakes.
+- **`tuparles transcribe` no longer imports torch** — the `auto` device probe
+  now asks `ctranslate2.get_cuda_device_count()` (what actually decodes) instead
+  of dragging ~2 GB of torch wheels into the file path for one boolean. Same
+  probe the eval harness uses; lean installs and the mobile trajectory both care.
+
+### Research
+- **CPU/edge ASR fan-out** (`docs/research/2026-07-08-cpu-asr-sota-and-decode-review.md`)
+  — four parallel reviews (Whisper-CPU ecosystem, new ASR actors, mobile/edge
+  runtimes, and a source-level review of our own decode path against installed
+  faster-whisper 1.2.1). Verdicts: the whisper.cpp gradient plan survives 2026;
+  `BatchedInferencePipeline` silently disables temperature fallback +
+  hallucination-silence + prev-text conditioning (bench D1 will price it);
+  parakeet.cpp / Qwen3-ASR-0.6B / Kyutai stt-1b-en_fr earn code-switch-eval
+  spikes; nobody industry-wide publishes an FR/EN code-switch number — the
+  corpus moat holds. Bibliography in `SOURCES.md`.
+
 ## Sprint 28 — 2026-06-29 · Le troisième barreau — whisper.cpp sur CPU
 
 A loose thread from the gradient plan, tied off. The overnight Android session had
