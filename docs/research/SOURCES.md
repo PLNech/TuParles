@@ -3,6 +3,50 @@
 External links cited across the research briefs, grouped by topic. Kept
 separately so a brief stays readable and the link-extract is reusable.
 
+## CPU/edge ASR landscape (2026-07 fan-out)
+### Models & runtimes
+- NVIDIA Parakeet TDT 0.6B v3 (25 langs incl. FR, CC-BY-4.0): https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3
+- parakeet.cpp (ggml port, MIT, v0.4.0 2026-07): https://github.com/mudler/parakeet.cpp — Show HN: https://news.ycombinator.com/item?id=47176239
+- Qwen3-ASR (0.6B/1.7B, Apache 2.0, 2026-01): https://github.com/QwenLM/Qwen3-ASR — report: https://huggingface.co/papers/2601.21337
+- Kyutai stt-1b-en_fr (native bilingual, word ts): https://kyutai.org/stt/ — https://huggingface.co/kyutai/stt-1b-en_fr
+- Mistral Voxtral (Mini 3B / Realtime 4B 2026-02, Apache 2.0): https://mistral.ai/news/voxtral/ — realtime paper: https://arxiv.org/abs/2602.11298
+- Moonshine v2 (2026-02, MIT, per-language doctrine): https://github.com/moonshine-ai/moonshine — community FR: https://huggingface.co/Cornebidouil/moonshine-tiny-fr
+- SenseVoice / FunASR: https://github.com/FunAudioLLM/SenseVoice (⚠ FR support contested across sweeps — verify)
+- IBM Granite Speech 4.1 (2026-04, Apache 2.0)
+- distil-large-v3.5 (EN-only): https://huggingface.co/distil-whisper/distil-large-v3.5 — FR distils (2024, unrefreshed): https://huggingface.co/bofenghuang/whisper-large-v3-french-distil-dec16
+- OpenVINO int8 Whisper (NNCF): https://blog.openvino.ai/blog-posts/optimizing-whisper-and-distil-whisper-for-speech-recognition-with-openvino-and-nncf
+- onnx-asr unifying layer (OpenVoiceOS, 2026-02): https://blog.openvoiceos.org/posts/2026-02-16-onnx-asr
+
+### faster-whisper / whisper.cpp CPU specifics
+- CTranslate2 (v4.8.1 2026-07): https://github.com/OpenNMT/CTranslate2
+- faster-whisper releases (1.1.0 VAD 3×, BatchedInferencePipeline; 1.2.0 distil-v3.5): https://github.com/SYSTRAN/faster-whisper/releases
+- CPU batching bench (14.6× RT CPU batched): https://mobiusml.github.io/batched_whisper_blog/
+- cpu_threads/num_workers contention: https://github.com/SYSTRAN/faster-whisper/pull/965 + issues #629, discussion #346
+- AVX512 modest on small models: https://github.com/ggml-org/whisper.cpp/discussions/589
+- Silero VAD v6.x (−11-16% errors vs v5): https://github.com/snakers4/silero-vad/releases
+- sherpa-onnx Whisper ONNX accuracy drift: https://github.com/k2-fsa/sherpa-onnx/issues/2900 — FR zipformer weak on 4GB phone: https://github.com/k2-fsa/sherpa-onnx/issues/3144
+
+### Mobile / NPU
+- Qualcomm AI Hub Whisper-Small w8a16 per-chipset latency: https://huggingface.co/qualcomm/Whisper-Small-Quantized
+- whisper.cpp Vulkan-on-Android still open: https://github.com/ggml-org/whisper.cpp/issues/2370
+- Argmax Pro SDK on LiteRT (NPU-vendor unification, 2026-03): https://www.argmaxinc.com/blog/argmax-pro-sdk-for-android — WhisperKitAndroid archived 2026-01
+- ExecuTorch Whisper/ASR on-device (2026-03): https://pytorch.org/blog/building-voice-agents-with-executorch-a-cross-platform-foundation-for-on-device-audio/ — https://github.com/pytorch/executorch/blob/main/examples/models/whisper/README.md
+- Play on-device AI model delivery (beta): https://developer.android.com/google/play/on-device-ai
+- Android 15/16 mic-FGS restrictions: https://developer.android.com/develop/background-work/services/fgs/restrictions-bg-start
+- ML Kit GenAI speech (FR beta; advanced = Pixel-10-only): https://developers.google.com/ml-kit/genai/speech-recognition/android
+- WhisperKit ANE techniques (ICML 2025): https://arxiv.org/html/2507.10860v1
+
+### Papers (bibliography)
+- Open ASR Leaderboard (SSOT for WER/RTFx): https://arxiv.org/abs/2510.06961 — blog: https://huggingface.co/blog/open-asr-leaderboard
+- CS-FLEURS code-switch dataset (113 pairs — FR-EN membership TBC): https://arxiv.org/abs/2509.14161
+- Adding robust code-switching to multilingual ASR (KIT, 2026-06): https://arxiv.org/abs/2606.21990
+- Adapting language balance in code-switching (KIT, 2025-10): https://arxiv.org/abs/2510.18724
+- CS generalization to unseen pairs (2026-06): https://arxiv.org/abs/2606.05846
+- Quantizing Whisper-small: granularity & calibration dominate (2025-11): https://arxiv.org/abs/2511.08093
+- BaldWhisper: shear+merge compression, code-switch-aware (2025-10): https://arxiv.org/abs/2510.08599
+- Self-speculative decoding for LLM-ASR (IBM, 2026-03): https://arxiv.org/abs/2603.11243
+- Compact streaming transducer for edge (NVIDIA, 2026-04): https://arxiv.org/pdf/2604.14493
+
 ## Linux audio capture (PipeWire / PulseAudio)
 - PipeWire — module-combine-stream: https://docs.pipewire.org/page_module_combine_stream.html
 - PipeWire — module-loopback: https://docs.pipewire.org/page_module_loopback.html
