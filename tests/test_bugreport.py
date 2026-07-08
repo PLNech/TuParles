@@ -44,3 +44,26 @@ def test_include_env_false_omits_block():
         "body"
     ][0]
     assert "Environnement" not in body
+
+
+class TestVersionLabel:
+    """The tray's "did Redémarrer actually update?" answer: semver, plus the
+    commit hash on a dev checkout (semver alone is static between dev restarts)."""
+
+    def test_with_git_ref_appends_hash(self, monkeypatch):
+        monkeypatch.setattr(bugreport, "_git_ref", lambda: "abc1234")
+        label = bugreport.version_label()
+        assert label.startswith(f"v{bugreport.app_version()}")
+        assert label.endswith("(abc1234)")
+
+    def test_without_git_ref_is_plain_semver(self, monkeypatch):
+        monkeypatch.setattr(bugreport, "_git_ref", lambda: None)
+        assert bugreport.version_label() == f"v{bugreport.app_version()}"
+
+    def test_git_ref_survives_git_absent(self, monkeypatch):
+        # a missing git binary must degrade to None, never raise
+        def boom(*a, **k):
+            raise FileNotFoundError("git")
+
+        monkeypatch.setattr(bugreport.subprocess, "run", boom)
+        assert bugreport._git_ref() is None
