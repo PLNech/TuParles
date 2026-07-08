@@ -282,7 +282,7 @@ steps. Changes take effect on the next take, no restart.
 
 ```bash
 tuparles                  # start the daemon (or launch from your app launcher)
-tuparles transcribe FILE… # batch-transcribe audio/video → FILE-transcript.txt
+tuparles transcribe FILE… # batch-transcribe audio/video → FILE-transcript.{txt,json}
 tuparles history          # last 20 takes
 tuparles history "tokens" # search your dictations
 tuparles stats            # local telemetry: takes, débit, decode speed, language mix
@@ -314,6 +314,7 @@ tuparles transcribe a.m4a b.m4a          # several at once, one model load
 tuparles transcribe --device cpu talk.wav   # force CPU (battery-friendly)
 tuparles transcribe --model medium x.m4a     # heavier model for a kept transcript
 tuparles transcribe --turn-gap 0 x.m4a       # disable turn seams (one block per segment)
+tuparles transcribe --no-json x.m4a          # skip the JSON sidecar (txt only)
 ```
 
 Each file becomes a sibling `<name>-transcript.txt` of `[mm:ss] text` lines,
@@ -335,3 +336,23 @@ pauses rarely exceed ~1 s) splits the block and marks the new turn with a visibl
 identity — just a boundary you can see, so fused turns stop reading as one voice.
 It's a setting (smart default on): `--turn-gap 0` turns it off, or set
 `turn_gap_s` in your config.
+
+**JSON sidecar.** Alongside the `.txt`, each file also gets a
+`<name>-transcript.json` (schema v1) carrying what the human transcript throws
+away: per-word probabilities, per-segment QC (`avg_logprob`, `no_speech_prob`,
+`compression_ratio`), a computed `words_per_s` and a `low_confidence` flag, and
+the turn-seam boundaries — at the **same block granularity** as the txt, so the
+two files tell one story. It invents nothing (`null` where the decode was
+silent) and reserves a `speakers` placeholder for future diarization. Handy for
+`jq`, a QA pass, or any downstream tooling:
+
+```json
+{ "schema_version": 1, "source": "meeting.m4a", "duration_s": 1693.2,
+  "model": "small", "device": "cpu", "language": "fr", "speakers": null,
+  "messages": [ { "start": 0.0, "end": 12.3, "content": "…",
+    "annotations": { "turn_seam": false, "avg_logprob": -0.31,
+      "low_confidence": false, "words": [ { "w": "mot", "s": 0.0, "e": 0.4,
+      "p": 0.97 } ] } } ] }
+```
+
+Default on; `--no-json` (or `transcribe_json: false` in your config) skips it.

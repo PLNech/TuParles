@@ -175,6 +175,20 @@ _DEFAULTS: dict[str, object] = {
     # only — the live dictation daemon is untouched. It's a setting: smart
     # default on, total override via `--turn-gap`.
     "turn_gap_s": 1.2,
+    # JSON sidecar for offline `transcribe` (#31 cheap-tier QC). Alongside the
+    # human `<name>-transcript.txt`, write a machine-readable
+    # `<name>-transcript.json` (schema_version 1) carrying what the txt throws
+    # away: per-word probabilities, per-segment QC (avg_logprob, no_speech_prob,
+    # compression_ratio), a computed words_per_s + a low_confidence flag, and the
+    # turn-seam boundaries — at the SAME block granularity as the txt, so the two
+    # files tell one story. It invents nothing (null where the decode was
+    # silent) and reserves a `speakers` placeholder for future diarization. Cheap
+    # to produce (no extra decode — just what the engine already returned) and
+    # useful for grep/jq, downstream tooling, or a later QA review, so default
+    # on; a reader who only wants the txt turns it off. It's a setting: smart
+    # default on, total override via `--no-json`. Offline batch path only — the
+    # live dictation daemon is untouched.
+    "transcribe_json": True,
 }
 
 
