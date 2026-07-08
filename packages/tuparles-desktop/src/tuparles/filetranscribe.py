@@ -35,12 +35,28 @@ CPU_FILE_MODEL = "small"
 
 
 @dataclass(frozen=True)
+class Word:
+    """One decoded word with its wall-clock span — the raw material for the
+    turn-seam heuristic (`render_transcript`). Mirrors faster-whisper's own
+    `Word` (start/end/word) minus the probability we don't use here."""
+
+    start: float
+    end: float
+    word: str
+
+
+@dataclass(frozen=True)
 class Segment:
-    """One VAD-delimited chunk of speech, with its wall-clock offsets."""
+    """One VAD-delimited chunk of speech, with its wall-clock offsets.
+
+    `words` carries per-word timings when the decode ran with word-level
+    timestamps (the offline default), else None — the turn-seam split degrades
+    to segment-boundary gaps only when it's absent (never crashes)."""
 
     start: float
     end: float
     text: str
+    words: tuple[Word, ...] | None = None
 
 
 def decode_to_pcm(path: Path) -> np.ndarray:
@@ -190,13 +206,24 @@ class FileTranscriber:
             batch_size=16,
             beam_size=5,
             vad_filter=True,
+            # Word-level timings power the turn-seam heuristic (render_transcript):
+            # a long word-to-word gap inside a fused block is a likely turn change.
+            # If the engine can't supply them, `seg.words` is None and the seam
+            # logic degrades to segment-boundary gaps only — never GPU-or-nothing.
+            word_timestamps=True,
             initial_prompt=_vocab_prompt(),
             language=language,
             multilingual=multilingual,
         )
         out: list[Segment] = []
         for seg in segments:  # generator: consuming it drives the decode
-            out.append(Segment(seg.start, seg.end, seg.text.strip()))
+            raw_words = getattr(seg, "words", None)
+            words = (
+                tuple(Word(w.start, w.end, w.word) for w in raw_words)
+                if raw_words
+                else None
+            )
+            out.append(Segment(seg.start, seg.end, seg.text.strip(), words))
             if progress is not None:
                 progress(seg.end)
         return out, info
@@ -210,6 +237,32 @@ def format_ts(seconds: float) -> str:
     return f"{h}:{m:02d}:{s:02d}" if h else f"{m:02d}:{s:02d}"
 
 
+TURN_SEAM = "— "  # visible, unlabelled turn boundary (language-neutral, FR-natural)
+
+
+def _split_at_gaps(seg: Segment, threshold: float) -> list[tuple[float, str]]:
+    """Split one segment into (start, text) blocks at internal word-gaps above
+    `threshold` seconds. The first block keeps the segment's natural start; each
+    later block starts at the first word after a long silence — a likely turn
+    change. Degrades to a single block (the whole segment) when word timings are
+    absent or splitting is disabled (`threshold <= 0`), so the caller's output is
+    unchanged in those cases."""
+    if threshold <= 0 or not seg.words:
+        return [(seg.start, seg.text)]
+    blocks: list[tuple[float, str]] = []
+    cur: list[Word] = []
+    prev_end: float | None = None
+    for w in seg.words:
+        if prev_end is not None and (w.start - prev_end) > threshold:
+            blocks.append((cur[0].start, "".join(x.word for x in cur).strip()))
+            cur = []
+        cur.append(w)
+        prev_end = w.end
+    if cur:
+        blocks.append((cur[0].start, "".join(x.word for x in cur).strip()))
+    return blocks
+
+
 def render_transcript(
     segments: list[Segment],
     *,
@@ -218,19 +271,43 @@ def render_transcript(
     device: str,
     duration: float,
     date: str,
+    turn_gap: float | None = None,
 ) -> str:
     """Segments → the `[mm:ss] text` transcript body, with a one-line provenance
     header. Each line gets the deterministic lexicon (known mishears) but no
     spoken-punctuation / repeat-collapse / command parsing — a meeting is not a
-    dictation, so we stay faithful to what was said."""
+    dictation, so we stay faithful to what was said.
+
+    Turn seams: a silence gap longer than `turn_gap` seconds — inside a
+    fused segment (via word timings) or across a segment boundary — splits the
+    block and marks the new turn with a leading "— ", so three speakers' fused
+    sentences read as three visibly separate turns rather than one train of
+    thought. `turn_gap=None` reads the `turn_gap_s` setting (default 1.2); 0
+    disables the split entirely (byte-identical to the pre-seam output). This is
+    a boundary a reader can see, not diarization — no speaker identity attached.
+    """
     from tuparles.lexicon import apply_lexicon
+
+    if turn_gap is None:
+        turn_gap = settings.get("turn_gap_s")
+    threshold = float(turn_gap or 0.0)
 
     lines = [
         f"# {source}  ·  {format_ts(duration)}  ·  {model} ({device})  ·  {date}",
         "",
     ]
+    prev_end: float | None = None
     for seg in segments:
-        text = apply_lexicon(seg.text)
-        if text:
-            lines.append(f"[{format_ts(seg.start)}] {text}")
+        for i, (start, raw) in enumerate(_split_at_gaps(seg, threshold)):
+            text = apply_lexicon(raw)
+            if not text:
+                continue
+            # A seam prefixes any post-split continuation (i > 0) and any first
+            # block that opens after a long gap from the previous segment.
+            seam = threshold > 0 and (
+                i > 0 or (prev_end is not None and (start - prev_end) > threshold)
+            )
+            prefix = TURN_SEAM if seam else ""
+            lines.append(f"[{format_ts(start)}] {prefix}{text}")
+        prev_end = seg.end
     return "\n".join(lines) + "\n"
