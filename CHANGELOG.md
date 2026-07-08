@@ -45,6 +45,13 @@ offline batch transcriber — without a second engine.
   the gate that turns real takes into the real-human FR/EN eval corpus the
   synthetic TTS one can't be (see today's research note).
 
+- **La version dans le menu** — the tray shows `TuParles v0.3.0 (<commit>)`
+  above "À propos": semver from package metadata, commit hash when running from
+  a checkout (`bugreport.version_label()`). Why: "Redémarrer" execs a fresh
+  daemon, and the user shouldn't have to *wonder* whether it picked up new code
+  — the label is resolved at startup, so it names the build that is actually
+  running, and the hash moves when the semver doesn't (dev restarts).
+
 ### Fixed
 - **Decode-time GPU-wedge fallback** (#129) — the post-suspend CUDA wedge can
   lie: the probe answers, the model *loads*, then the decode throws (or the
@@ -57,6 +64,16 @@ offline batch transcriber — without a second engine.
   now asks `ctranslate2.get_cuda_device_count()` (what actually decodes) instead
   of dragging ~2 GB of torch wheels into the file path for one boolean. Same
   probe the eval harness uses; lean installs and the mobile trajectory both care.
+
+### Infra
+- **Backlog moved to GitHub issues; `TODO.md` retired** — the in-repo backlog
+  mirror carried its own `#NN` numbering that collided with (and was even
+  reused across) GitHub's issue numbers on a now-public repo. Every live item
+  migrated: doubt-rendering epic (#25), engine-lock priority (#26), delivery
+  live-validation (#27), continuous capture (#28), capture cues (#29),
+  snapshot lock hygiene (#30) — joining delivery dance (#22), correction
+  learning + two-pass (#23) and the CPU bench matrix (#24) filed today. One
+  numbering system from here on: if it's worth remembering, it's an issue.
 
 ### Research
 - **CPU/edge ASR fan-out** (`docs/research/2026-07-08-cpu-asr-sota-and-decode-review.md`)
