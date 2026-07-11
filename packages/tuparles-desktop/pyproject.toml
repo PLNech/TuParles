@@ -35,6 +35,17 @@ optional = true
 [tool.poetry.group.whispercpp.dependencies]
 pywhispercpp = ">=1.2"
 
+# Silence-trim VAD (#131): silero-vad (ONNX CPU) is the primary lead/tail trim
+# tier for `preprocess.trim_silence`. Optional + lazy-imported so the lean
+# install never pays for onnxruntime — trim degrades to a deterministic RMS cut
+# without it (GPU-or-CPU, never GPU-or-nothing). `poetry install --with trim`.
+[tool.poetry.group.trim]
+optional = true
+
+[tool.poetry.group.trim.dependencies]
+silero-vad = ">=5.1"
+onnxruntime = ">=1.17"
+
 [tool.poetry.scripts]
 tuparles = "tuparles.cli:main"
 
