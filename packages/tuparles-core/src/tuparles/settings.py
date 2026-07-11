@@ -63,6 +63,23 @@ _DEFAULTS: dict[str, object] = {
     # ui.resolve_screens + BubbleGroup), so every mode — mirror included —
     # applies live, no restart.
     "bubble_screen": "primary",
+    # The ribbon (#132): the "full" view grows WIDE first — it widens along the
+    # bottom edge before ever adding a second line, so a long take's whole
+    # overview stays visible (beginning intact) in ~76 px instead of a 300 px
+    # tower planted over the code. « Largeur du bandeau »: the screen fraction
+    # the ribbon may fill (0.92 default). 0 pins it to the fixed 460 px pill —
+    # the total override for people who liked the small footprint. Read fresh
+    # each layout pass, so a Réglages change lands on the next partial.
+    "bubble_max_width": 0.92,
+    # « Lignes du bandeau » (1..3): the ribbon's line cap. 2 (default) = a bright
+    # live tail + one dim, smaller compressed-history line above it (recency =
+    # brightness + size, never a hue change). 1 = a single strip, no history
+    # register (least motion). 3 = two history lines for more overview.
+    "bubble_lines": 2,
+    # « Taille du texte »: the live tail's point size (the compressed history
+    # renders smaller). The missing accessibility knob and the HiDPI escape
+    # hatch — 10.5 is the historical default. Applies live, no restart.
+    "bubble_font_pt": 10.5,
     # Tray "breathing creature": the menubar glyph gently animates (a calm
     # breath at rest, livelier while recording, a travelling pulse while
     # decoding) for an alive feel. ~10 Hz icon updates travel over DBus on SNI

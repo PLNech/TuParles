@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QDoubleSpinBox,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -217,6 +218,40 @@ class SettingsDialog(QDialog):
             self._screen.setCurrentIndex(self._screen.count() - 1)
         layout.addWidget(self._screen)
 
+        layout.addWidget(QLabel("<b>Bandeau d'aperçu</b>"))
+        ribbon_hint = QLabel(
+            "La vue complète s'étale en <b>largeur</b> le long du bas de l'écran "
+            "avant d'ajouter une ligne, pour voir toute la prise (début compris) "
+            "sans une tour qui recouvre le code. « Largeur » = part de l'écran "
+            "occupée (0 % = petite pastille fixe de 460 px) ; « Lignes » plafonne "
+            "la hauteur (1 = une seule ligne, sans historique compressé)."
+        )
+        ribbon_hint.setWordWrap(True)
+        layout.addWidget(ribbon_hint)
+
+        layout.addWidget(QLabel("Largeur du bandeau (% de l'écran, 0 = pastille)"))
+        self._ribbon_width = QSpinBox()
+        self._ribbon_width.setRange(0, 100)
+        self._ribbon_width.setSuffix(" %")
+        # Stored as a 0..1 fraction; the spin box speaks whole percents.
+        self._ribbon_width.setValue(
+            round(float(settings.get("bubble_max_width")) * 100)
+        )
+        layout.addWidget(self._ribbon_width)
+
+        layout.addWidget(QLabel("Lignes du bandeau"))
+        self._ribbon_lines = QSpinBox()
+        self._ribbon_lines.setRange(1, 3)
+        self._ribbon_lines.setValue(int(settings.get("bubble_lines")))
+        layout.addWidget(self._ribbon_lines)
+
+        layout.addWidget(QLabel("Taille du texte (pt)"))
+        self._ribbon_font = QDoubleSpinBox()
+        self._ribbon_font.setRange(8.0, 24.0)
+        self._ribbon_font.setSingleStep(0.5)
+        self._ribbon_font.setValue(float(settings.get("bubble_font_pt")))
+        layout.addWidget(self._ribbon_font)
+
         layout.addWidget(QLabel("<b>Langues de dictée</b>"))
         hint = QLabel(
             "Aucune = détection automatique. Une seule = forcée. "
@@ -372,6 +407,9 @@ class SettingsDialog(QDialog):
         settings.put("trim_silence", self._trim_silence.isChecked())
         settings.put("clipboard_restore", self._clipboard_restore.isChecked())
         settings.put("bubble_screen", self._screen.currentData())
+        settings.put("bubble_max_width", self._ribbon_width.value() / 100)
+        settings.put("bubble_lines", self._ribbon_lines.value())
+        settings.put("bubble_font_pt", self._ribbon_font.value())
         telemetry.set_enabled(self._telemetry.isChecked())
         settings.put("pii_redact_history", self._redact.isChecked())
         settings.put("dev_recording", self._dev_recording.isChecked())

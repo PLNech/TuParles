@@ -15,6 +15,7 @@ import subprocess
 import time
 from collections import deque
 from collections.abc import Callable
+from dataclasses import dataclass
 
 from PySide6.QtCore import (
     QEasingCurve,
@@ -28,13 +29,12 @@ from PySide6.QtCore import (
     QTimer,
     Slot,
 )
-from PySide6.QtGui import QColor, QCursor, QFontMetrics, QPainter
+from PySide6.QtGui import QColor, QCursor, QFont, QFontMetrics, QPainter
 from PySide6.QtWidgets import QApplication, QWidget
 
 from tuparles import settings
 
-WIDTH, HEIGHT = 460, 56
-MAX_HEIGHT = 300  # full view stops growing here; older lines trim with …
+WIDTH, HEIGHT = 460, 56  # the pill; also the ribbon's min width + 1-line height
 V_PAD = 16  # full-view vertical text padding
 MARGIN_BOTTOM = 64  # gap between bubble and screen bottom
 BAR_COUNT, BAR_W, BAR_GAP = 18, 3, 3
@@ -178,6 +178,125 @@ def chip_color(state: str, base: QColor) -> QColor:
     return _brighten(base, 0.5) if state == "delivered" else base
 
 
+# ── the ribbon (#132): the "full" view grows WIDE first ──────────────────────
+# The old full view was a 460×300 vertical tower planted over the code. The
+# ribbon spends the abundant axis instead: it widens along the bottom edge up to
+# a fraction of the screen BEFORE it ever adds a second line, then caps at
+# `bubble_lines` (default 2, ≈76 px). Older text drops into a dim, smaller,
+# left-aligned "history" register above the bright, larger, RIGHT-anchored live
+# tail — so recency reads as brightness + size (never a hue change, house
+# doctrine `feedback-signal-more-by-brightness-not-hue`) and the freshest words
+# sit at a fixed glance point (the end of the bright line), exactly where the
+# old ElideLeft trained the eye. The beginning of the take stays visible up to
+# RIBBON_MAX_CHARS; only past that are the oldest words trimmed behind a "…".
+#
+# Every layout DECISION is a pure function here (measurement is injected as a
+# `measure(str)->px` callable), so the growth stages, the register split and the
+# char budget are tested headless with a fake measurer — the paint pass only
+# draws what these return (the house pattern, like `chip_color`/`state_color`).
+
+RIBBON_MAX_CHARS = 750  # chars kept visible before the oldest trim behind "…"
+RIBBON_HIST_SCALE = 0.78  # history register font vs the live tail (recency=size)
+
+
+@dataclass(frozen=True)
+class RibbonLayout:
+    """The decided ribbon geometry+content for one text, screen and setting set.
+
+    `width` is the widget width (wide-first growth, capped at the ceiling).
+    `single_line` is True when the whole text sits on one line (it grew to fit,
+    or a 1-line ceiling forces an elide); then `live` is the whole text and
+    `history` is "". Otherwise `live` is the right-anchored freshest tail and
+    `history` is the older leading remainder for the compressed register."""
+
+    width: int
+    live: str
+    history: str
+    single_line: bool
+
+
+def ribbon_ceiling_width(screen_w: int, frac: float, fixed_w: int) -> int:
+    """The ribbon's width ceiling: `frac`>0 → that fraction of the screen (never
+    below the fixed pill width); `frac`<=0 → the fixed pill width itself, the
+    total-override back to the 460 px footprint for people who liked it."""
+    if frac <= 0:
+        return fixed_w
+    return max(fixed_w, round(screen_w * frac))
+
+
+def ribbon_widen(content_px: int, fixed_w: int, ceiling_w: int) -> int:
+    """Wide-first growth: the widget widens with its content, from the fixed pill
+    width up to the ceiling. Clamped both ends so a one-word take stays a pill
+    and a monologue never exceeds the screen fraction."""
+    return max(fixed_w, min(ceiling_w, content_px))
+
+
+def ribbon_budget(text: str, max_chars: int = RIBBON_MAX_CHARS) -> str:
+    """Char budget: keep the beginning intact up to `max_chars`; past that, drop
+    the OLDEST characters behind a leading "…" (the tail is what you're saying
+    now). A no-op under budget, so the whole take shows until it's genuinely
+    long."""
+    if len(text) <= max_chars:
+        return text
+    return "…" + text[-(max_chars - 1) :]
+
+
+def fit_trailing_words(words: list[str], measure: Callable[[str], int], avail_px: int):
+    """The register split core: the longest SUFFIX of `words` whose joined string
+    fits `avail_px` (by the injected measurer). Returns (start_index, tail) —
+    `words[start_index:]` is the live line, `words[:start_index]` the history.
+    Bisection (monotone: a shorter tail fits whenever a longer one does), so it's
+    O(log n) measures per frame, not O(n)."""
+    if not words:
+        return 0, ""
+    lo, hi = 0, len(words)  # smallest start whose tail fits (empty tail always fits)
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if measure(" ".join(words[mid:])) <= avail_px:
+            hi = mid
+        else:
+            lo = mid + 1
+    # Never hand back an empty live line when even one word overflows: keep the
+    # last word (it will elide in paint) so the tail is never blank.
+    start = min(lo, len(words) - 1)
+    return start, " ".join(words[start:])
+
+
+def plan_ribbon(
+    text: str,
+    *,
+    measure_live: Callable[[str], int],
+    measure_hist: Callable[[str], int],
+    screen_w: int,
+    max_frac: float,
+    fixed_w: int,
+    chrome_px: int,
+    max_lines: int,
+    max_chars: int = RIBBON_MAX_CHARS,
+) -> RibbonLayout:
+    """Decide the ribbon layout for `text`. Pure: `measure_live`/`measure_hist`
+    are `str->px` (QFontMetrics.horizontalAdvance in production, a fake in tests).
+    `chrome_px` is the non-text width (bars + paddings). `max_lines` (1..3) caps
+    height; 1 = a single strip, no history register."""
+    text = text or ""
+    ceiling = ribbon_ceiling_width(screen_w, max_frac, fixed_w)
+    single_px = measure_live(text)
+    width = ribbon_widen(chrome_px + single_px, fixed_w, ceiling)
+    avail_live = width - chrome_px
+    if single_px <= avail_live or max_lines <= 1:
+        # Fits by widening, or the user pinned a single strip: one line. When a
+        # forced single strip overflows, paint elides-left (freshest visible).
+        return RibbonLayout(width=width, live=text, history="", single_line=True)
+    # Two+ registers, at the ceiling width. Budget first (drop oldest past the
+    # cap), then peel the freshest tail onto the bright line; the rest is history.
+    width = ceiling
+    avail_live = width - chrome_px
+    words = ribbon_budget(text, max_chars).split(" ")
+    start, live = fit_trailing_words(words, measure_live, avail_live)
+    history = " ".join(words[:start])
+    return RibbonLayout(width=width, live=live, history=history, single_line=False)
+
+
 class Bubble(QWidget):
     def __init__(
         self,
@@ -200,9 +319,9 @@ class Bubble(QWidget):
         self.setFixedSize(WIDTH, HEIGHT)
         self._trim_key: tuple | None = None  # _trim_to_fit memo (see below)
         self._trim_result = ""
-        font = self.font()
-        font.setPointSizeF(10.5)
-        self.setFont(font)
+        self._layout_key: tuple | None = None  # _ribbon_layout memo
+        self._layout: RibbonLayout | None = None
+        self._apply_font()  # point size from « Taille du texte » (#132)
 
         self._level_source = level_source
         # Pull source for the ambient engine colour ("gpu"|"cpu"); default to
@@ -230,7 +349,12 @@ class Bubble(QWidget):
 
         self._hide_timer = QTimer(self)
         self._hide_timer.setSingleShot(True)
-        self._hide_timer.timeout.connect(self._fade_out)
+        self._hide_timer.timeout.connect(self._on_hide_timeout)
+        # One-slot pending status toast (#132). A persistent-state notice (e.g.
+        # the GPU→CPU fallback) that arrives while a take is live can't show now,
+        # so it waits here (latest wins) and re-fires the next time the bubble
+        # would go idle — a dropped state signal is a signal forgotten.
+        self._pending_status: str | None = None
 
         self._anim: QParallelAnimationGroup | None = None
 
@@ -288,6 +412,25 @@ class Bubble(QWidget):
             self.show()
         self._hide_timer.start(2800)
 
+    def show_status(self, msg: str) -> None:
+        """A persistent-STATE notice (the GPU→CPU fallback, #27/#132), distinct
+        from a per-take transcript flash: a transcript that lands mid-next-take
+        is rightly dropped (the text went into your window regardless), but a
+        state that changed must never be lost to a well-timed glance.
+
+        So this NEVER silently drops. While a take is live it can't show, so it
+        QUEUES (one slot, latest wins) and re-fires the moment the bubble next
+        goes idle (`_on_hide_timeout`). Idle already → show it now. This closes
+        the "state assigned a transient channel, and the channel has a drop path"
+        class the project already learned for data ('record misses harder')."""
+        if self._state == "recording":
+            self._pending_status = msg
+            return
+        self._set(state="final", text=msg)
+        if not self.isVisible():
+            self.show()
+        self._hide_timer.start(1400)
+
     def cancel(self) -> None:
         """Aborted take: freeze the waveform, flash 'Annulé', fade out.
         Forces dismissal from any state (unlike show_final/show_error, which
@@ -303,39 +446,128 @@ class Bubble(QWidget):
             self._state = state
         if text is not None:
             self._text = text
+        self._apply_font()
         self._apply_size()
         self.update()
 
     def set_view(self, view: str) -> None:
         self._view = view
+        self._apply_font()
         self._apply_size()
         self.update()
 
     # ── geometry ────────────────────────────────────────────────────────
 
-    def _text_width(self) -> int:
-        bars_end = 24 + BAR_COUNT * (BAR_W + BAR_GAP)
-        return WIDTH - (bars_end + 14) - 24
+    def _font_pt(self) -> float:
+        """« Taille du texte » (#132): the live tail's point size, the missing
+        accessibility + HiDPI knob. Default 10.5 (the historical size)."""
+        try:
+            return float(settings.get("bubble_font_pt") or 10.5)
+        except (TypeError, ValueError):
+            return 10.5
 
-    def _desired_height(self) -> int:
-        if self._view != "full" or not self._text:
-            return HEIGHT
-        needed = (
-            QFontMetrics(self.font())
-            .boundingRect(
-                QRect(0, 0, self._text_width(), 10_000),
-                Qt.TextWordWrap,
+    def _apply_font(self) -> None:
+        """Sync the widget font to « Taille du texte » so a Réglages change lands
+        on the next take (no restart) and every measurement below sees it."""
+        pt = self._font_pt()
+        if abs(self.font().pointSizeF() - pt) > 0.01:
+            f = self.font()
+            f.setPointSizeF(pt)
+            self.setFont(f)
+
+    def _hist_font(self) -> QFont:
+        """The compressed-register font: smaller than the live tail so recency
+        reads as SIZE (with brightness), never a hue change (house doctrine)."""
+        f = QFont(self.font())
+        f.setPointSizeF(max(6.0, self.font().pointSizeF() * RIBBON_HIST_SCALE))
+        return f
+
+    def _chrome_px(self) -> int:
+        """Non-text width: the bars, the gap after them (14), the right pad (24).
+        The ribbon's text area is the widget width minus this."""
+        bars_end = 24 + BAR_COUNT * (BAR_W + BAR_GAP)
+        return bars_end + 14 + 24
+
+    def _max_frac(self) -> float:
+        """« Largeur du bandeau » — the screen fraction the ribbon may fill.
+        0 = the fixed 460 px pill (total override)."""
+        try:
+            return float(settings.get("bubble_max_width"))
+        except (TypeError, ValueError):
+            return 0.92
+
+    def _max_lines(self) -> int:
+        """« Lignes du bandeau » (1..3): the ribbon's line cap. 1 = a single
+        strip, no history register."""
+        try:
+            n = int(settings.get("bubble_lines"))
+        except (TypeError, ValueError):
+            return 2
+        return max(1, min(3, n))
+
+    def _ribbon_layout(self) -> RibbonLayout:
+        """Decide + memoize the ribbon layout for the current text/screen/
+        settings — O(1) per repaint (recomputed only when an input changes),
+        like `_trim_to_fit`. The pure `plan_ribbon` does the deciding; here we
+        just wire QFontMetrics as the measurer."""
+        screen = self._target_screen()
+        screen_w = screen.availableGeometry().width()
+        frac = self._max_frac()
+        max_lines = self._max_lines()
+        pt = self.font().pointSizeF()
+        key = (self._text, screen_w, frac, max_lines, pt)
+        if self._layout_key != key or self._layout is None:
+            live_fm = QFontMetrics(self.font())
+            hist_fm = QFontMetrics(self._hist_font())
+            self._layout_key = key
+            self._layout = plan_ribbon(
                 self._text,
+                measure_live=live_fm.horizontalAdvance,
+                measure_hist=hist_fm.horizontalAdvance,
+                screen_w=screen_w,
+                max_frac=frac,
+                fixed_w=WIDTH,
+                chrome_px=self._chrome_px(),
+                max_lines=max_lines,
             )
-            .height()
-        )
-        return max(HEIGHT, min(MAX_HEIGHT, needed + 2 * V_PAD))
+        return self._layout
+
+    def _hist_line_h(self) -> int:
+        return QFontMetrics(self._hist_font()).height() + 4
+
+    def _history_lines(self, layout: RibbonLayout) -> int:
+        """How many compressed lines the history wraps to: ≥1 when there's
+        history, capped at `bubble_lines`-1 (the live tail owns the last line)."""
+        if not layout.history:
+            return 0
+        cap = max(1, self._max_lines() - 1)
+        avail = max(1, layout.width - self._chrome_px())
+        fm = QFontMetrics(self._hist_font())
+        needed = fm.boundingRect(
+            QRect(0, 0, avail, 10_000), Qt.TextWordWrap, layout.history
+        ).height()
+        line_h = max(1, fm.lineSpacing())
+        return max(1, min(cap, math.ceil(needed / line_h)))
+
+    def _desired_size(self) -> tuple[int, int]:
+        """(width, height) for the current view. Minimal (and empty full) → the
+        fixed pill. A non-empty full view is the ribbon: wide-first width, and
+        height of one line (HEIGHT) until the tail overflows, then +1 line per
+        used history line up to « Lignes du bandeau »."""
+        if self._view != "full" or not self._text:
+            return WIDTH, HEIGHT
+        layout = self._ribbon_layout()
+        if layout.single_line:
+            return layout.width, HEIGHT
+        return layout.width, HEIGHT + self._history_lines(layout) * self._hist_line_h()
 
     def _apply_size(self) -> None:
-        """Grow/shrink (full view), staying anchored above the screen bottom."""
-        h = self._desired_height()
-        if h != self.height():
-            self.setFixedSize(WIDTH, h)
+        """Resize the ribbon (full view) in BOTH axes, re-centred above the
+        screen bottom on every change — width now varies too (#132), so a widen
+        must re-anchor x, not only y."""
+        w, h = self._desired_size()
+        if (w, h) != (self.width(), self.height()):
+            self.setFixedSize(w, h)
             if self.isVisible():
                 self.move(self._home_pos())
 
@@ -361,7 +593,7 @@ class Bubble(QWidget):
         screen = self._target_screen()
         geo = screen.availableGeometry()
         return QPoint(
-            geo.center().x() - WIDTH // 2,
+            geo.center().x() - self.width() // 2,  # width now varies (ribbon, #132)
             geo.bottom() - self.height() - MARGIN_BOTTOM,
         )
 
@@ -397,6 +629,17 @@ class Bubble(QWidget):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
+
+    def _on_hide_timeout(self) -> None:
+        """A shown toast's dwell elapsed. If a status notice is pending and we're
+        no longer recording, show it now — still visible, full opacity, no fade
+        gymnastics — instead of fading (#132). Consume it first so its own
+        subsequent timeout fades normally rather than looping."""
+        if self._pending_status is not None and self._state != "recording":
+            msg, self._pending_status = self._pending_status, None
+            self.show_status(msg)
+            return
+        self._fade_out()
 
     def _fade_out(self) -> None:
         self._animate(
@@ -508,16 +751,14 @@ class Bubble(QWidget):
         bars_end = 24 + BAR_COUNT * (BAR_W + BAR_GAP)
         p.setPen(color)
 
-        # Full view (once text actually wraps): the whole take, top-aligned.
-        # Overflow past MAX_HEIGHT trims oldest words behind an ellipsis.
-        if self._view == "full" and self.height() > HEIGHT:
-            rect = self.rect().adjusted(bars_end + 14, V_PAD, -24, -V_PAD)
-            p.drawText(
-                rect,
-                Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignTop,
-                self._trim_to_fit(text, rect),
-            )
-            return
+        # Full view, once the tail no longer fits one (widened) line: the ribbon's
+        # two registers (#132). A single-line full view falls through to the
+        # elide path below — it's just a pill that grew wide to fit.
+        if self._view == "full" and self._text:
+            layout = self._ribbon_layout()
+            if not layout.single_line:
+                self._paint_ribbon(p, layout, color, bars_end)
+                return
 
         rect = self.rect().adjusted(bars_end + 14, 0, -24, 0)
         fm = QFontMetrics(self.font())
@@ -537,22 +778,62 @@ class Bubble(QWidget):
         elided = fm.elidedText(text, mode, rect.width())
         p.drawText(rect, Qt.AlignVCenter | Qt.AlignLeft, elided)
 
-    def _trim_to_fit(self, text: str, rect) -> str:
-        """Oldest words behind an ellipsis so the tail fits the rect.
+    def _paint_ribbon(
+        self, p: QPainter, layout: RibbonLayout, live_color: QColor, bars_end: int
+    ) -> None:
+        """Two registers (#132): a dim, smaller, left-aligned history above a
+        bright, larger, RIGHT-anchored live tail. Recency = brightness + size;
+        the freshest words sit at a fixed glance point (the end of the bright
+        line), and the beginning of the take stays visible in the history."""
+        left = bars_end + 14
+        avail = self.width() - 24 - left
+        live_font = self.font()
+        hist_font = self._hist_font()
+        live_fm = QFontMetrics(live_font)
+        live_h = live_fm.height()
+        # Live tail: the bottom line, live font + colour, right-anchored. It
+        # already fits `avail` by construction; elide-left is a belt for the
+        # one-tick 800-char-cap edge.
+        live_rect = QRect(left, self.height() - V_PAD - live_h, avail, live_h)
+        p.setFont(live_font)
+        p.setPen(live_color)
+        p.drawText(
+            live_rect,
+            Qt.AlignRight | Qt.AlignVCenter,
+            live_fm.elidedText(layout.live, Qt.ElideLeft, avail),
+        )
+        # History: the older leading remainder, dim + smaller, left-aligned in
+        # the space above the live line. Word-wrapped; oldest trimmed behind "…"
+        # only if it overflows its lines (past the char budget on a small screen).
+        if layout.history:
+            hist_rect = QRect(left, V_PAD, avail, live_rect.top() - V_PAD)
+            p.setFont(hist_font)
+            p.setPen(_TEXT_DIM)
+            p.drawText(
+                hist_rect,
+                Qt.TextWordWrap | Qt.AlignLeft | Qt.AlignTop,
+                self._trim_to_fit(layout.history, hist_rect, hist_font),
+            )
+        p.setFont(live_font)  # restore for anything painted after
+
+    def _trim_to_fit(self, text: str, rect, font: QFont | None = None) -> str:
+        """Oldest words behind an ellipsis so the text fits the rect at `font`
+        (default the widget font — the history register passes its smaller one).
 
         Called from paintEvent (30 fps while the waveform animates), so it
-        must be O(1) on repaint: the result is cached per (text, rect) and
+        must be O(1) on repaint: the result is cached per (text, rect, size) and
         recomputed — by bisection, not word-by-word — only when a new
         partial lands or the bubble resizes.
         """
-        key = (text, rect.width(), rect.height())
+        font = font or self.font()
+        key = (text, rect.width(), rect.height(), font.pointSizeF())
         if self._trim_key != key:
             self._trim_key = key
-            self._trim_result = self._trim_compute(text, rect)
+            self._trim_result = self._trim_compute(text, rect, font)
         return self._trim_result
 
-    def _trim_compute(self, text: str, rect) -> str:
-        fm = QFontMetrics(self.font())
+    def _trim_compute(self, text: str, rect, font: QFont) -> str:
+        fm = QFontMetrics(font)
 
         def fits(t: str) -> bool:
             return fm.boundingRect(rect, Qt.TextWordWrap, t).height() <= rect.height()
@@ -805,6 +1086,10 @@ class BubbleGroup(QObject):
     def show_recovered(self, partial: str) -> None:
         for bubble in self._active:
             bubble.show_recovered(partial)
+
+    def show_status(self, msg: str) -> None:
+        for bubble in self._active:
+            bubble.show_status(msg)
 
     def cancel(self) -> None:
         for bubble in self._active:
