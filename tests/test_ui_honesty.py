@@ -102,3 +102,60 @@ class TestProcessingCounter:
         b.show_final("done")  # leaving processing clears the stamp
         assert b._processing_since is None
         assert b._badge() is None
+
+
+class TestPendingStatusToast:
+    """A persistent-state notice (the GPU→CPU fallback, #132) must survive a busy
+    bubble: queued while recording, re-fired the next time the bubble goes idle,
+    never silently dropped. The re-fire is driven by `_on_hide_timeout`, so tests
+    call it directly — no real timer, no sleep."""
+
+    def _bubble(self, tmp_path, monkeypatch):
+        _qt(tmp_path, monkeypatch)
+        from tuparles.ui import Bubble
+
+        return Bubble(level_source=lambda: 0.0, clock=lambda: 0.0)
+
+    def test_idle_shows_immediately(self, tmp_path, monkeypatch):
+        b = self._bubble(tmp_path, monkeypatch)
+        b.show_status("Passé sur CPU")
+        assert b._state == "final" and b._text == "Passé sur CPU"
+        assert b._pending_status is None  # nothing queued — it showed now
+
+    def test_recording_queues_instead_of_dropping(self, tmp_path, monkeypatch):
+        b = self._bubble(tmp_path, monkeypatch)
+        b.start_recording()
+        b.show_status("Passé sur CPU")
+        assert b._state == "recording"  # the take still owns the bubble
+        assert b._text != "Passé sur CPU"  # not shown over the live take
+        assert b._pending_status == "Passé sur CPU"  # but NOT dropped — queued
+
+    def test_latest_pending_wins(self, tmp_path, monkeypatch):
+        b = self._bubble(tmp_path, monkeypatch)
+        b.start_recording()
+        b.show_status("premier")
+        b.show_status("dernier")  # one slot: the freshest state wins
+        assert b._pending_status == "dernier"
+
+    def test_refires_on_next_idle(self, tmp_path, monkeypatch):
+        b = self._bubble(tmp_path, monkeypatch)
+        b.start_recording()
+        b.show_status("Passé sur CPU")  # queued while recording
+        b.start_processing()  # the take ends: recording → processing → final
+        b.show_final("le texte de la prise")  # transcript flashes
+        assert b._text == "le texte de la prise"
+        b._on_hide_timeout()  # the flash's dwell elapsed → the notice re-fires
+        assert b._state == "final" and b._text == "Passé sur CPU"
+        assert b._pending_status is None  # consumed exactly once
+
+    def test_consumed_once_then_fades(self, tmp_path, monkeypatch):
+        b = self._bubble(tmp_path, monkeypatch)
+        b.start_recording()
+        b.show_status("Passé sur CPU")
+        b.start_processing()
+        b.show_final("prise")
+        b._on_hide_timeout()  # shows the notice
+        # A second timeout has no pending left: it must NOT loop the notice.
+        assert b._pending_status is None
+        b._on_hide_timeout()  # would fade (no assertion on the animation itself)
+        assert b._pending_status is None
