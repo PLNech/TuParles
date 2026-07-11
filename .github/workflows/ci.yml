@@ -32,9 +32,9 @@ jobs:
       # rules can't silently drift from local: an unpinned `ruff` auto-bumped on
       # the runner once and failed the matrix on new UP rules in untouched files.
       - run: pip install pytest pytest-cov "ruff==0.9.10" "mypy==2.1.0" numpy markdown-it-py scikit-learn yake python-stdnum
-      - run: ruff check src tests scripts
-      - run: ruff format --check src tests scripts
+      - run: ruff check packages tests scripts
+      - run: ruff format --check packages tests scripts
       - run: mypy
       - run: pytest -q
         env:
-          PYTHONPATH: src
+          PYTHONPATH: packages/tuparles-core/src:packages/tuparles-desktop/src

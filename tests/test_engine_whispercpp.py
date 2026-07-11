@@ -63,7 +63,9 @@ def _engine(model, monkeypatch, *, partials_factory=FakePartials):
     """A WhisperCppEngine wired to a fake model + fake partials, and with the
     vocab glossary stubbed so prompt assertions are hermetic (no vocab files)."""
     monkeypatch.setattr(engine, "_vocab_prompt", lambda: "Glossaire : pipeline")
-    return WhisperCppEngine(model_factory=lambda name: model, partials_factory=partials_factory)
+    return WhisperCppEngine(
+        model_factory=lambda name: model, partials_factory=partials_factory
+    )
 
 
 class TestPromptIsTheWholePoint:
@@ -133,7 +135,9 @@ class TestDecodeContract:
 
 class TestFallbackChooser:
     def test_prefers_whispercpp_when_a_model_loads(self, cfg, monkeypatch):
-        monkeypatch.setattr(engine, "_default_whispercpp_model", lambda name: FakeWhisperModel())
+        monkeypatch.setattr(
+            engine, "_default_whispercpp_model", lambda name: FakeWhisperModel()
+        )
         assert isinstance(_cpu_fallback_factory(), WhisperCppEngine)
 
     def test_degrades_to_qwen_when_whispercpp_unavailable(self, cfg, monkeypatch):

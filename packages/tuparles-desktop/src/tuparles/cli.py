@@ -283,10 +283,10 @@ def _transcribe(args) -> None:
 
     todo: list[tuple[Path, Path | None, Path | None]] = []
     for p in paths:
-        txt_out = p.with_name(f"{p.stem}-transcript.txt")
-        json_out = p.with_name(f"{p.stem}-transcript.json")
-        do_txt = txt_out if _wanted(txt_out) else None
-        do_json = (json_out if _wanted(json_out) else None) if want_json else None
+        txt_target = p.with_name(f"{p.stem}-transcript.txt")
+        json_target = p.with_name(f"{p.stem}-transcript.json")
+        do_txt = txt_target if _wanted(txt_target) else None
+        do_json = (json_target if _wanted(json_target) else None) if want_json else None
         if do_txt or do_json:
             todo.append((p, do_txt, do_json))
     if not todo:

@@ -140,9 +140,7 @@ def test_core_module_does_not_import_desktop_config(module):
                 ]
         elif isinstance(node, ast.Import):
             offenders += [
-                f"import {a.name}"
-                for a in node.names
-                if a.name == "tuparles.config"
+                f"import {a.name}" for a in node.names if a.name == "tuparles.config"
             ]
     assert not offenders, (
         f"{module} imports the DESKTOP config (use tuparles.config_core): {offenders}"
