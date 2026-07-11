@@ -167,6 +167,17 @@ class SettingsDialog(QDialog):
         self._backend_toast.setChecked(bool(settings.get("backend_toast")))
         layout.addWidget(self._backend_toast)
 
+        self._trim_silence = QCheckBox("Couper les silences en début/fin de prise")
+        self._trim_silence.setToolTip(
+            "Retire le silence avant le premier mot et après le dernier, pour "
+            "décoder plus vite — surtout sans GPU, où chaque seconde muette est "
+            "décodée pour rien. Prudent : garde une marge (0,2 s au début, 0,4 s "
+            "à la fin), ne touche jamais aux pauses internes, et conserve la prise "
+            "entière au moindre doute (résultat trop court ou trop rogné)."
+        )
+        self._trim_silence.setChecked(bool(settings.get("trim_silence")))
+        layout.addWidget(self._trim_silence)
+
         self._clipboard_restore = QCheckBox("Préserver le presse-papiers")
         self._clipboard_restore.setToolTip(
             "TuParles colle via le presse-papiers, ce qui écrase ce que tu avais "
@@ -358,6 +369,7 @@ class SettingsDialog(QDialog):
         settings.put("tray_animation", self._tray_anim.isChecked())
         settings.put("cpu_partials_enabled", self._cpu_partials.isChecked())
         settings.put("backend_toast", self._backend_toast.isChecked())
+        settings.put("trim_silence", self._trim_silence.isChecked())
         settings.put("clipboard_restore", self._clipboard_restore.isChecked())
         settings.put("bubble_screen", self._screen.currentData())
         telemetry.set_enabled(self._telemetry.isChecked())

@@ -51,6 +51,7 @@ from tuparles.delivery import (
 )
 from tuparles.engine import carryover_context, load_engine
 from tuparles.pipeline import postprocess
+from tuparles.preprocess import trim_silence
 
 
 @dataclass
@@ -62,11 +63,12 @@ class _QueuedTake:
     and a monotonic seq (the mini-bubble's identity, #15)."""
 
     seq: int
-    audio: np.ndarray  # int16 mono, the raw take
+    audio: np.ndarray  # int16 mono, the take (silence-trimmed at handoff, #131)
     target: DeliveryTarget = field(default_factory=DeliveryTarget)
     partial: str = ""
     stop_s: float = 0.0
     mode: str = "toggle"  # how the take ended: "hold" (combo released) | "toggle"
+    raw_audio_s: float = 0.0  # duration BEFORE the silence trim, for forensics (#131)
 
 
 class Bridge(QObject):
@@ -315,6 +317,15 @@ class Controller(QObject):
         try:
             audio = self._recorder.stop()
             stop_s = time.monotonic() - t_stop
+            raw_s = audio.size / SAMPLE_RATE
+            # Trim dead lead/tail before the take enters the queue (#131), so EVERY
+            # engine (GPU, whisper.cpp, qwen) decodes the shorter buffer for free —
+            # the CPU rungs, which decode every silent second, gain the most. Trims
+            # the returned copy ONLY; Recorder._chunks (live capture) is untouched.
+            # Never raises (see trim_silence); off → the raw buffer, unchanged.
+            if settings.get("trim_silence"):
+                audio = trim_silence(audio)
+            trimmed_s = audio.size / SAMPLE_RATE
             self._seq += 1
             take = _QueuedTake(
                 seq=self._seq,
@@ -323,13 +334,20 @@ class Controller(QObject):
                 partial=partial,
                 stop_s=stop_s,
                 mode=mode,
+                raw_audio_s=raw_s,
             )
             with self._pending_lock:
                 self._pending += 1
             self._decode_q.put(take)
             self._bridge.queued.emit(take.seq)
+            # Forensics first-class: name the trim delta at the moment it happens.
+            trim_note = (
+                f" (trimmed {raw_s:.1f}→{trimmed_s:.1f}s)"
+                if raw_s - trimmed_s > 0.05
+                else ""
+            )
             print(
-                f"take #{take.seq} queued: {audio.size / SAMPLE_RATE:.1f}s, "
+                f"take #{take.seq} queued: {trimmed_s:.1f}s{trim_note}, "
                 f"mode={mode}, pending={self._pending}"
             )
         finally:
@@ -422,11 +440,18 @@ class Controller(QObject):
                 self._last_delivered = text
                 self._last_delivered_t = time.monotonic()
                 audio_s = audio.size / SAMPLE_RATE
+                # `from Xs` names the pre-trim length when the silence trim fired
+                # (#131) — the decode below ran on the shorter buffer.
+                trim_note = (
+                    f" (from {take.raw_audio_s:.0f}s)"
+                    if take.raw_audio_s - audio_s > 0.05
+                    else ""
+                )
                 # Full per-step breakdown: stop (GUI thread) + lock-wait +
                 # decode + post-process + deliver. The dominant term names
                 # the freeze; total ≈ perceived stop→paste latency.
                 print(
-                    f"take #{take.seq} delivered: {audio_s:.0f}s audio, "
+                    f"take #{take.seq} delivered: {audio_s:.0f}s audio{trim_note}, "
                     f"{len(text)} chars, lang={result.language}, mode={take.mode}, "
                     f"→{take.target.wm_class or '?'!r} | stop {stop_s:.2f}s, "
                     f"lock {lock_wait_s:.2f}s, decode {decode_s:.2f}s, "
