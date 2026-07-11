@@ -36,10 +36,12 @@ import numpy as np
 from tuparles import settings
 from tuparles.config import SAMPLE_RATE
 from tuparles.engine import (
+    TUNED_VAD_PARAMETERS,
     _preload_cuda_libs,
     _vocab_prompt,
     decode_language_opts,
 )
+from tuparles.preprocess import prepare_pcm
 
 # CPU fallback model: `small` (not the realtime `base`) — a kept transcript is
 # worth the extra quality, and offline we're not racing a live preview. Override
@@ -228,11 +230,17 @@ class FileTranscriber:
         """The actual decode + generator drain — factored out so transcribe()
         can retry the whole thing on a fresh (CPU) pipeline after a GPU wedge."""
         language, multilingual = decode_language_opts(settings.get("languages") or [])
+        # Same "prepare PCM for decode" seam the daemon engines use (#131): the
+        # ffmpeg f32le output is normalized level, but DC-removal + peak-normalize
+        # here keeps the offline path from silently diverging from the live one.
+        # Idempotent enough that transcribe()'s GPU-wedge retry can re-run it.
+        pcm = prepare_pcm(pcm)
         segments, info = self._batched.transcribe(
             pcm,
             batch_size=16,
             beam_size=5,
             vad_filter=True,
+            vad_parameters=TUNED_VAD_PARAMETERS,
             # Word-level timings power the turn-seam heuristic (render_transcript):
             # a long word-to-word gap inside a fused block is a likely turn change.
             # If the engine can't supply them, `seg.words` is None and the seam
