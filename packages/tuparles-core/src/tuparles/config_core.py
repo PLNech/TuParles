@@ -18,8 +18,12 @@ NORMALIZE_SILENCE_FLOOR = 0.005  # peak below this = silence, leave it alone
 TRIM_PAD_LEAD_MS = 200  # keep this much audio before the first detected speech;
 TRIM_PAD_TAIL_MS = 400  # …and after the last. VAD onsets/offsets clip tight and
 # Whisper wants a beat of room, so it doesn't shear the first/last phoneme.
-TRIM_MIN_RESULT_S = 0.5  # never hand an engine less than this: a VAD misfire on
+TRIM_MIN_RESULT_S = 1.25  # never hand an engine less than this: a VAD misfire on
 # soft speech must not starve the decode — below it, keep the original buffer.
+# Raised 0.5 → 1.25 after the real-take A/B (2026-07-11): two sub-1 s takes trimmed
+# to 0.76/0.99 s decoded to garbage — whisper is unreliable under ~1 s. So a raw
+# take already shorter than 1.25 s is a structural no-op (kept untrimmed). When in
+# doubt, keep the audio. See docs/research/2026-07-11-audio-preprocess-silence-trim.md.
 TRIM_MAX_REMOVED_FRAC = 0.95  # if a trim would delete more than this share of the
 # take, distrust it (soft speech read as silence) and keep the original.
 TRIM_RMS_TOP_DB = 30.0  # RMS-fallback silence gate: a frame quieter than the peak
