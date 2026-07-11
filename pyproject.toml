@@ -47,6 +47,18 @@ optional = true
 [tool.poetry.group.whispercpp.dependencies]
 pywhispercpp = ">=1.2"
 
+# Silence-trim VAD (#131): silero-vad on the ONNX CPU runtime is the primary
+# lead/tail trim tier. Optional + lazy — `preprocess.trim_silence` degrades to a
+# deterministic RMS cut without it, so the lean/CI install never pays for
+# onnxruntime. Install with `poetry install --with trim` to exercise the silero
+# path (the trim tests, the replay A/B bench).
+[tool.poetry.group.trim]
+optional = true
+
+[tool.poetry.group.trim.dependencies]
+silero-vad = ">=5.1"
+onnxruntime = ">=1.17"
+
 [tool.pytest.ini_options]
 # `gpu` needs a CUDA device + WAVs; `embed` needs the optional embed group.
 # Both deselected by default so the pure-python suite stays CI-portable.

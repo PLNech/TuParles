@@ -9,6 +9,24 @@ NORMALIZE_TARGET_PEAK = 0.95  # a hair of headroom below 1.0
 NORMALIZE_MAX_GAIN = 12.0  # ~+21 dB ceiling; beyond this we'd amplify hiss
 NORMALIZE_SILENCE_FLOOR = 0.005  # peak below this = silence, leave it alone
 
+# Silence trim (see preprocess.trim_silence): lop the dead lead/tail off a take
+# before decode. The payoff is the CPU rungs — qwen/whisper.cpp decode every
+# silent second (a field case: a 51.2s take → 20.8s qwen decode, ~half of it a
+# forgotten-mic tail), whereas the GPU's in-decode VAD already skips it. MVP
+# trims lead + tail ONLY, never interior pauses: a wrong trim is worse than a
+# slow decode (the house asymmetric bias — when in doubt, keep the audio).
+TRIM_PAD_LEAD_MS = 200  # keep this much audio before the first detected speech;
+TRIM_PAD_TAIL_MS = 400  # …and after the last. VAD onsets/offsets clip tight and
+# Whisper wants a beat of room, so it doesn't shear the first/last phoneme.
+TRIM_MIN_RESULT_S = 0.5  # never hand an engine less than this: a VAD misfire on
+# soft speech must not starve the decode — below it, keep the original buffer.
+TRIM_MAX_REMOVED_FRAC = 0.95  # if a trim would delete more than this share of the
+# take, distrust it (soft speech read as silence) and keep the original.
+TRIM_RMS_TOP_DB = 30.0  # RMS-fallback silence gate: a frame quieter than the peak
+# frame by more than this (dB) is silence. librosa's top_db default is 60 (a
+# studio floor); 30 is tighter, tuned for a live mic's ambient noise floor.
+TRIM_RMS_FRAME_MS = 30  # RMS-fallback analysis frame (~silero's 32 ms grain)
+
 # Waveform amplitude mapping (audio.py): mic RMS (int16, ±32768) → the bubble's
 # 0..1 bar height. We subtract a light noise gate, scale to a speech-typical
 # peak, then apply a perceptual gamma (<1) so even soft speech lifts into a
