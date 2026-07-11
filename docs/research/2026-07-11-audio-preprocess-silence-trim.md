@@ -132,7 +132,7 @@ complementary, not redundant.
 Shipped exactly the design above. `trim_silence` (preprocess.py) trims lead/tail
 only, three-tier (silero-vad in the optional `trim` poetry group → deterministic
 RMS `top_db`-style fallback → no-op), never raises, keeps 200 ms / 400 ms
-margins, and bails to the untrimmed buffer if the result is under 0.5 s or more
+margins, and bails to the untrimmed buffer if the result is under 1.25 s or more
 than 95 % would be removed. Hooked at capture handoff (`daemon._stop_and_enqueue`),
 so every engine gets the shorter buffer and the qwen normalize-bypass is closed
 as a side effect. The wider factorization landed too: one `prepare_pcm` seam
@@ -148,6 +148,8 @@ Note on the primary tier: silero-vad was **not** installed in the build
 environment (it's the optional `trim` group), so the shipped default path here is
 the RMS fallback; the silero tier is API-verified against silero-vad v5
 (`load_silero_vad(onnx=True)` + `get_speech_timestamps`) but not exercised live.
+
+**Floor raised 0.5 → 1.25 s (post-A/B, below).** The A/B's only observed damage was two sub-1 s silero-trimmed takes decoding to garbage; whisper is unreliable under ~1 s. Raising `TRIM_MIN_RESULT_S` to 1.25 s removes that failure and makes a raw take already shorter than 1.25 s a structural no-op (kept untrimmed) — when in doubt, keep the audio.
 
 ### Real-take A/B (2026-07-11, n=62 consented takes, numbers only)
 

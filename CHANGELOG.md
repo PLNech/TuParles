@@ -89,6 +89,11 @@ product's own punctuation and slashes (`#132`).
   state signal is re-queued, never forgotten (the doctrine the project already
   learned for data: "record misses harder than successes"). General mechanism,
   not a bespoke backend flag; headless-tested state machine.
+- **Silence-trim min-result floor raised 0.5 → 1.25 s** (`#132`) — the real-take
+  A/B's one defect: two sub-1 s takes (raw 1.3/1.4 s) silero-trimmed to 0.76/0.99 s
+  decoded to garbage, since whisper is unreliable under ~1 s. Below the floor the
+  trim now bails to the untrimmed buffer, so a raw take already shorter than 1.25 s
+  is a structural no-op — the asymmetric-safety bias, when in doubt keep the audio.
 
 ### Doctrine
 - **Denoising before Whisper: won't-do, now with evidence** — the two-track

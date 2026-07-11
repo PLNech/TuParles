@@ -127,7 +127,20 @@ class TestTrimSilence:
     def test_short_clip_returned_unchanged(self):
         buf = _tone(0.3)  # under TRIM_MIN_RESULT_S
         out = trim_silence(buf)
-        assert np.array_equal(out, buf)  # never hand an engine <0.5s
+        assert np.array_equal(out, buf)  # never hand an engine <1.25s
+
+    def test_trim_below_min_result_floor_kept(self, monkeypatch):
+        # Real-take A/B regression (floor 0.5 → 1.25 s): a short speech span whose
+        # trimmed+padded result would land under TRIM_MIN_RESULT_S must hand back the
+        # ORIGINAL buffer — whisper is unreliable on sub-~1 s clips, so when the trim
+        # would starve it we keep the audio (the asymmetric-safety house bias). Under
+        # the old 0.5 s floor this ~0.7 s span (→ ~1.1 s padded) WOULD have trimmed.
+        import tuparles.preprocess as pp
+
+        monkeypatch.setattr(pp, "_silero_unavailable", True)  # force the RMS tier
+        buf = np.concatenate([_tone(0.7), _silence(3.0)])
+        out = pp.trim_silence(buf)
+        assert np.array_equal(out, buf)
 
     def test_over_trim_guard_keeps_original(self):
         # 30s buffer, a 0.1s blip: a valid trim would leave <5% → distrust, keep.
