@@ -658,5 +658,47 @@
     "subject": "JSON transcript sidecar (messages[] + annotations)",
     "completedAt": "2026-07-09",
     "learnings": "One _iter_blocks generator feeds both txt and JSON renderers so the two outputs cannot diverge - 'one story' as architecture, not discipline. The engine computed avg_logprob/no_speech_prob/word-probs all along; the plain text was throwing away the doubt signal. low_confidence floors (avg_logprob<-1, no_speech>0.5, words_per_s<0.5) would have pre-flagged the [01:41] 110->2-word collapse. Ablation lesson: the collapse reproduced WITHOUT vocab (different block!) = temperature-fallback nondeterminism; run-to-run disagreement IS a cheap uncertainty estimate."
+  },
+  {
+    "id": "s31-research-sota",
+    "subject": "SOTA survey: audio preprocessing before Whisper (silence trim + noise)",
+    "completedAt": "2026-07-11",
+    "learnings": "Denoising before a frozen Whisper is evidence-AGAINST: 40/40 configs hurt (arXiv:2512.17562), larger models hurt MORE (arXiv:2603.04710) - 'looks cleaner' and 'transcribes better' diverge because enhancement artifacts beat the noise they remove. Pre-trim and faster-whisper's vad_filter are complementary, not redundant: the internal silero pass still runs over the FULL buffer, and its default min_silence_duration_ms=2000 lets short dead tails through."
+  },
+  {
+    "id": "s31-audit-audio-path",
+    "subject": "Audit audio path for trim hook points",
+    "completedAt": "2026-07-11",
+    "learnings": "The per-engine capability table (normalize? VAD? per rung) was the highest-leverage artifact of the audit: it turned 'where do we hook the trim' from opinion into arithmetic (qwen bypassed EVERYTHING; whisper.cpp had no VAD flag; only GPU was covered). Lesson: when a preprocessing step exists, audit WHO actually calls it before extending it - the silent bypass was the real bug."
+  },
+  {
+    "id": "s31-trim-build",
+    "subject": "Silence trim + prepare_pcm unification (#131)",
+    "completedAt": "2026-07-11",
+    "learnings": "Trim once at capture handoff (the stop() copy), not per-engine: every rung benefits and the bypass class of bug becomes impossible. Safety bails (never trim to <0.5s, never remove >95%) cost nothing and cap the worst case of a VAD misfire at 'slow decode', never 'lost speech'. Synthetic A/B reproduced the field case (qwen 20.7->8.4s) before any real-voice data existed."
+  },
+  {
+    "id": "s31-wedge-visibility",
+    "subject": "Persistent CPU-fallback tray signal (#131)",
+    "completedAt": "2026-07-11",
+    "learnings": "A one-shot toast is not a state signal: the GPU->CPU notice could be swallowed by the recording early-return while its announced-flag was set regardless - the SYSTEM half of a 2-day unnoticed degradation. Persistent states need persistent signals (idle tray glyph dimmed the whole time on CPU), transitions can keep toasts."
+  },
+  {
+    "id": "s31-ux-review",
+    "subject": "Preview-window UX review (impeccable)",
+    "completedAt": "2026-07-11",
+    "learnings": "The tower was a geometry error provable by arithmetic (spends the protected vertical axis, uses 24% of the abundant one, still loses the beginning) - framing UX complaints as axis-budget arithmetic made the decision undebatable. A ranked S/M/L list with effort estimates is what lets the operator cherry-pick a sprint instead of approving a monolith."
+  },
+  {
+    "id": "s31-ribbon-build",
+    "subject": "Le ruban + pipeline.preview() + toast re-fire (#132)",
+    "completedAt": "2026-07-11",
+    "learnings": "Stacked-builder pattern paid twice: builder 2 reproduced builder 1's exact test baseline (894 green) before building, independently validating the claim for free. preview() safety is BY CONSTRUCTION (pipeline module never imports the command layer), stronger than any runtime guard - 'partials are pixels, not intents'. Gotcha: builder 2's first baseline run was in the MAIN checkout not its worktree (misleading 877), root-caused to its own cd - verify which tree a number came from before comparing."
+  },
+  {
+    "id": "s31-consent-close",
+    "subject": "Take-consent review closed; real-voice corpus unlocked",
+    "completedAt": "2026-07-11",
+    "learnings": "The consent tool must run in the USER'S terminal, never via the session (it prints transcripts by design - 'you can't consent to what you can't read'); the assistant verifies counts-only afterward via share_ok. 62 shared / 7 private / 180 unreviewed; the paired real-voice A/B unblocked same-day."
   }
 ]
