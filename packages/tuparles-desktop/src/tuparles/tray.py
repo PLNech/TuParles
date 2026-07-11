@@ -22,6 +22,12 @@ _IDLE = QColor(205, 214, 244)
 # Recording/processing tint by engine, matching the bubble: green=GPU, blue=CPU.
 _GPU = QColor(122, 199, 130)
 _CPU = QColor(122, 162, 247)
+# The persistent CPU-fallback resting tint (#131): a desaturated, dimmer blue the
+# idle glyph wears the WHOLE time the engine is on the CPU rung — not a hue switch
+# (blue already is the CPU identity) but a brightness/saturation drop, per the
+# house colour doctrine. So a glance at an at-rest tray still says "slower
+# silicon", where the neutral _IDLE used to hide a two-day post-suspend fallback.
+_CPU_IDLE = QColor(96, 112, 156)
 # Dev raw-audio capture indicator: a steady red dot on the glyph the whole time
 # it's armed, so "your unredacted voice is being written to disk" is never silent.
 _DEV_DOT = QColor(243, 139, 168)
@@ -58,6 +64,27 @@ def _glyph(
         p.drawEllipse(QRectF(15.0, 1.0, 6.0, 6.0))  # top-right, clear of the bars
     p.end()
     return QIcon(pm)
+
+
+def state_color(state: str, backend: str) -> QColor:
+    """Tray glyph colour for (pipeline state, live engine). Pure → headless-tested.
+
+    Hue is the engine IDENTITY (green=GPU, blue=CPU), matching the bubble. The
+    degraded CPU fallback is signalled *persistently* — even at idle — by a
+    desaturated, dimmer blue (`_CPU_IDLE`), so a glance at an at-rest tray still
+    says "you're on the slower silicon", not just the one-shot green→blue flash
+    during an active take (#131). The operator ran two days on the CPU rung after
+    a suspend precisely because idle looked neutral. Idle on GPU stays the neutral
+    resting colour — there's nothing to flag."""
+    on_cpu = backend == "cpu"
+    if state == "recording":
+        return QColor(_CPU if on_cpu else _GPU)  # full engine colour: clearly live
+    if state == "processing":
+        color = QColor(_CPU if on_cpu else _GPU)
+        color.setAlpha(160)  # dimmer engine colour: "working, settling"
+        return color
+    # idle: GPU rests neutral; the CPU fallback keeps its persistent muted signal.
+    return QColor(_CPU_IDLE) if on_cpu else QColor(_IDLE)
 
 
 class Tray(QObject):
@@ -135,17 +162,8 @@ class Tray(QObject):
         if self._animate:
             self._timer.start()
 
-    def _engine_color(self) -> QColor:
-        return _GPU if self._backend_source() == "gpu" else _CPU
-
     def _state_color(self) -> QColor:
-        if self._state == "recording":
-            return self._engine_color()  # full engine colour: clearly "live"
-        if self._state == "processing":
-            color = QColor(self._engine_color())
-            color.setAlpha(160)  # dimmer engine colour: "working, settling"
-            return color
-        return _IDLE
+        return state_color(self._state, self._backend_source())
 
     def _pose(self) -> tuple[tuple[float, ...], float]:
         """(bar heights, vertical lift) for this frame. A calm breath at rest,

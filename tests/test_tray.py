@@ -42,3 +42,38 @@ def test_dev_dot_is_the_warning_hue(monkeypatch):
         _DEV_DOT.green(),
         _DEV_DOT.blue(),
     )
+
+
+def _rgb(c):
+    return (c.red(), c.green(), c.blue())
+
+
+def test_state_color_recording_is_full_engine_hue(monkeypatch):
+    _qt(monkeypatch)
+    from tuparles.tray import _CPU, _GPU, state_color
+
+    # hue is the engine identity: green=GPU, blue=CPU, at full strength while live
+    assert _rgb(state_color("recording", "gpu")) == _rgb(_GPU)
+    assert _rgb(state_color("recording", "cpu")) == _rgb(_CPU)
+
+
+def test_state_color_cpu_idle_is_a_persistent_signal(monkeypatch):
+    _qt(monkeypatch)
+    from tuparles.tray import _CPU_IDLE, _IDLE, state_color
+
+    # GPU at rest = neutral; CPU at rest = a persistent muted-blue signal (#131),
+    # so a glance at the idle tray still tells you you're on the fallback rung.
+    assert _rgb(state_color("idle", "gpu")) == _rgb(_IDLE)
+    assert _rgb(state_color("idle", "cpu")) == _rgb(_CPU_IDLE)
+    assert _rgb(state_color("idle", "cpu")) != _rgb(_IDLE)
+
+
+def test_state_color_cpu_idle_is_dimmer_than_active(monkeypatch):
+    _qt(monkeypatch)
+    from tuparles.tray import state_color
+
+    # the second-state signal is brightness/saturation, not a hue flip: the idle
+    # CPU tint is visibly darker than the active CPU tint.
+    active = state_color("recording", "cpu")
+    idle = state_color("idle", "cpu")
+    assert sum(_rgb(idle)) < sum(_rgb(active))
