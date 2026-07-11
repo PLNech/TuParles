@@ -1,6 +1,49 @@
 # Changelog
 
-## Sprint 30 — 2026-07-09 · Les coutures et les voix — la réunion comme banc d'essai
+## Sprint 31 — 2026-07-11 · Trancher le silence — et l'unifier
+
+A forgotten mic keyed for seconds after the last word inflates decode time, and
+the field forensics found the cost lands squarely on the CPU rungs (qwen decodes
+every silent second — a 51.2 s take → 20.8 s decode, half of it dead tail),
+where the GPU's in-decode VAD already skips it. This sprint trims the dead
+lead/tail once at capture handoff, unifies the audio-prep path every engine
+shares, and makes a two-day CUDA-wedged fallback impossible to miss.
+
+### Added
+- **Silence trim before decode** (`preprocess.trim_silence`, `#131`) — lops the
+  dead lead/tail off a take at capture handoff, so every engine (GPU,
+  whisper.cpp, qwen) decodes the shorter buffer for free. Three-tier,
+  GPU-or-CPU by construction: silero-vad (optional `trim` poetry group, ONNX
+  CPU) when installed, else a deterministic RMS lead/tail cut (no new dep), else
+  a no-op — never raises. Conservative by the house bias: lead/tail ONLY (never
+  interior pauses), keeps 200 ms / 400 ms margins, and bails to the untrimmed
+  buffer at the first doubt (result under 0.5 s, or more than 95 % removed). On
+  by default; Réglages toggle *« Couper les silences en début/fin de prise »*.
+  The trim delta is named in the take journal (`trimmed 31.0→6.4s`).
+- **`replay_takes.py --trim`** — a numbers-only A/B of the trim over CONSENTED
+  takes (`share_ok=1`): per-take + aggregate ΔWER, Δdecode_s, trimmed-seconds
+  distribution. No transcript text, no content-bearing filenames. Skips the GPU
+  leg on battery (CPU A/B only) per the no-GPU-on-battery house rule, and says
+  why.
+
+### Changed
+- **One audio-prep seam for every engine** (`preprocess.prepare_pcm`, `#131`) —
+  int16→float32 + normalize now lives in a single function the GPU, whisper.cpp,
+  qwen AND the offline file path all call. `QwenCpuEngine` used to bypass
+  normalization entirely and the ffmpeg file path skipped it too; both go
+  through `prepare_pcm` now (qwen normalizes, then back to int16 for its WAV) —
+  no silent divergence between rungs.
+- **Tuned faster-whisper VAD** at every call site (`TUNED_VAD_PARAMETERS`,
+  the D-series item from 2026-07-08): `min_silence_duration_ms=500`,
+  `speech_pad_ms=200`, `max_speech_duration_s=30`, replacing the library
+  default (`min_silence_duration_ms=2000`) that let a 0.5–1.5 s dead tail sail
+  through. Complementary to the pre-trim, not redundant.
+- **Persistent CPU-fallback tray signal** (`#131`) — the tray glyph now wears a
+  desaturated, dimmer blue the *whole* time the engine is on the CPU rung, even
+  at idle, not just the one-shot green→blue flash during a take. Signalled by
+  brightness/saturation, not a hue switch (blue already is the CPU identity).
+  The operator ran two days on a suspend-wedged CUDA context without noticing
+  precisely because the idle glyph looked neutral.
 
 A real meeting transcript failed in the wild (a fused block mis-attributed a
 quote), and the QA pass over it became the night's work order: make the failure

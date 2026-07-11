@@ -28,6 +28,13 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
   preview of the last few seconds; on stop, the whole take gets a full
   beam decode. On a long take that final pass runs batched (VAD-chunked,
   parallel on GPU): a 3-minute monologue lands in about a second.
+- **Trims the silence for you** — if you leave the mic keyed after the last
+  word, the dead lead/tail is trimmed off before decode, so a forgotten-mic
+  take doesn't pay to decode empty seconds. The win is biggest without a GPU
+  (the CPU engines decode every silent second — a 30 s tail can halve a qwen
+  decode). Conservative by design: it only ever trims the ends, keeps a margin,
+  and hands the engine the whole take at the least doubt. On by default; toggle
+  in *Réglages* (*« Couper les silences en début/fin de prise »*).
 - **A bubble that tells you what's happening** — the waveform tracks your
   voice on a perceptual scale, so even quiet speech visibly moves the bars
   ("I hear you"); the bars are **green on GPU, blue on CPU**, so you always
@@ -44,7 +51,9 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
   frozen; and if a final is ever lost after a preview was shown, the bubble
   **never recants** — it holds the salvaged words in **amber** with a `Ctrl+V`
   hint (it was copied) instead of red-flashing a failure. If the GPU drops to
-  CPU mid-session, a one-time note says so (the bars go green→blue anyway).
+  CPU mid-session, a one-time note says so (the bars go green→blue anyway), and
+  the **tray glyph stays a muted blue** the whole time you're on the CPU rung —
+  even at rest — so a wedged GPU never hides behind a neutral idle icon.
   On multi-monitor,
   pick which screen the bubble uses in *Réglages* — pin it to a monitor
   (default: primary), follow the mouse, follow the active window (where your
