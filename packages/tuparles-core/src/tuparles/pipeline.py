@@ -43,3 +43,33 @@ def postprocess(
     text = apply_syntax(text, ctx, on_fire=on_syntax_fire)
     text = collapse_repeats(text)
     return apply_casing(text)
+
+
+def preview(text: str) -> str:
+    """Display-only fidelity for a live partial: the pure text stages, so the
+    bubble shows the product's own headline features *as they'll land* — spoken
+    punctuation ("virgule" → ","), the caught mishears, and the spoken-syntax
+    rewrites (the reported "slash impeccable" → "/impeccable") — instead of raw
+    decoder words the final would then quietly fix (#132).
+
+    Two stages of `postprocess` are deliberately dropped:
+
+    - `collapse_repeats` — sentence-level, "needs the (near-)final text"
+      (see above). On a sliding tail window a run straddling the window edge
+      would collapse this tick and un-collapse the next: visible flapping for
+      zero preview value.
+    - telemetry — `on_fire` is left None so `syntax.used` stays final-only; a
+      partial re-decodes ~1 Hz, and counting each tick would inflate the metric
+      by an order of magnitude. `postprocess` (the daemon + eval harness path)
+      is untouched, so the two never drift.
+
+    NEVER followed by command parsing. `parse_command`/quick-chat are daemon
+    steps (daemon.py), not pipeline stages — this module doesn't even import
+    them — so a previewed partial *cannot* execute a command by construction:
+    the safety interlocks (doubled trigger, length guard, literal escape —
+    docs/research/2026-06-23-voice-commands-design.md) are never reached because
+    that code simply isn't on this path. Partials are pixels, not intents.
+    """
+    text = apply_lexicon(apply_spoken_punctuation(text))
+    text = apply_syntax(text, None, on_fire=None)
+    return apply_casing(text)
