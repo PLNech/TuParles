@@ -48,6 +48,7 @@ class _Bridge:
             "partial",
             "final",
             "command",
+            "status",
             "error",
             "recovered",
             "state",
@@ -174,10 +175,13 @@ def test_recover_with_partial_copies_to_clipboard(monkeypatch):
     bridge = _Bridge()
     c = _controller(SimpleNamespace(), _Recorder(), bridge)
     assert c._recover_with_partial("Rien entendu", "  un partiel sauvé  ") is True
-    assert clip["text"] == "un partiel sauvé"  # stripped, never auto-pasted
+    # Stripped, never auto-pasted, and PREVIEWED (#132) — the line-head capital is
+    # exactly what the bubble showed and what the final would have delivered, so
+    # the salvage never silently recants to the raw decoder text.
+    assert clip["text"] == "Un partiel sauvé"
     # Never recant (#27): the salvage rides the amber `recovered` channel carrying
     # the partial itself, NOT a red error flip. The 'Ctrl+V' hint is the badge now.
-    assert bridge.recovered.emits == [("un partiel sauvé",)]
+    assert bridge.recovered.emits == [("Un partiel sauvé",)]
     assert not bridge.error.emits
 
 
@@ -224,9 +228,10 @@ def test_empty_final_with_partial_recovers(monkeypatch):
     bridge = _Bridge()
     c = _controller(_Eng(), _Recorder(recording=False), bridge)
     c._finish(_take(partial="le partiel visible"))
-    assert clip["text"] == "le partiel visible"
+    # Recovered text is the PREVIEWED partial (#132: what the eye saw), not raw.
+    assert clip["text"] == "Le partiel visible"
     # Recovery rides the amber `recovered` channel (the partial), not a red error.
-    assert bridge.recovered.emits == [("le partiel visible",)]
+    assert bridge.recovered.emits == [("Le partiel visible",)]
 
 
 # ── backend-shift toast (#27) ───────────────────────────────────────────────
@@ -256,8 +261,11 @@ def test_finish_announces_cpu_fallback_once(monkeypatch):
     c = _controller(_Eng(), _Recorder(recording=False), bridge)
     c._finish(_take(seq=1))
     c._finish(_take(seq=2))
-    toasts = [e[0] for e in bridge.command.emits if "CPU" in e[0]]
+    # Routed through the persistent-STATE channel (#132), not `command`→show_final
+    # (which early-returns while recording and could swallow it for the session).
+    toasts = [e[0] for e in bridge.status.emits if "CPU" in e[0]]
     assert toasts == ["Passé sur CPU — un peu plus lent"]
+    assert not any("CPU" in e[0] for e in bridge.command.emits)
     assert c._backend_announced is True
 
 
