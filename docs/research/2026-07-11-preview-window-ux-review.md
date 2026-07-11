@@ -407,3 +407,56 @@ Serve over HTTP to view (Firefox blocks file:// in sandboxed dirs):
 *(Note: the impeccable context script reported NO_PRODUCT_MD for this repo;
 its init flow was skipped deliberately — this study's write scope is this
 report plus scratchpad mockups only.)*
+
+---
+
+## 7. Implementation addendum (shipped, Sprint 31 · `#132`)
+
+The user validated the primary recommendation ("le ruban", option A) verbatim.
+It shipped on the `preview-ribbon` branch (on top of the silence-trim work),
+along with items #1 (the preview seam) and #4-F2 (the toast re-fire). What
+landed vs the study:
+
+- **§2-A — le ruban (item #2, M).** Built as recommended, entirely inside the
+  existing custom `paintEvent`. The full view grows wide-first (`ribbon_widen`)
+  up to `bubble_max_width` (default 0.92) before wrapping to at most
+  `bubble_lines` (default 2). The compressed history register (dim `_TEXT_DIM`,
+  ~0.78× the live point size) sits above the bright, right-anchored live tail —
+  recency = brightness + size. Char budget `RIBBON_MAX_CHARS = 750`; oldest
+  trimmed behind "…" past it. Every layout decision is a pure function
+  (`plan_ribbon`, `ribbon_ceiling_width`, `ribbon_widen`, `ribbon_budget`,
+  `fit_trailing_words`) with an injected `measure(str)->px`, headless-tested
+  with a fake measurer — the paint pass only draws what they return, exactly the
+  `chip_color`/`state_color` pattern the study praised. The anchor/multi-monitor
+  logic was kept untouched, as recommended. Three knobs shipped with the French
+  labels from the §2 table — « Largeur du bandeau » (0 = the fixed 460 px pill,
+  the total override), « Lignes du bandeau » (1–3), « Taille du texte » (the
+  missing accessibility/HiDPI point size) — all live, no restart.
+
+- **§3 — `pipeline.preview()` (item #1, S).** Shipped as specified: the pure
+  stages minus `collapse_repeats`, `on_fire=None`, next to `postprocess` so they
+  can't drift. Confirmed safe *by construction* — a test asserts the command
+  layer isn't even in the pipeline module's namespace. `_last_partial` stays raw
+  for miss-forensics; `_recover_with_partial` previews what it salvages so the
+  amber recant matches the pixels. `partials_preview` was NOT added as a knob:
+  the discrepancy is a defect (the study's own framing), and preview() is pure +
+  display-only + telemetry-free, so there is nothing to opt out of — one fewer
+  setting to reason about beats a toggle for a bug fix. (Reconsider if a user
+  ever wants to watch raw decoder output for debugging; a dev-mode escape hatch,
+  not a user knob.)
+
+- **§4 Finding 2 — pending status re-fire (item #4, S).** Shipped: a dedicated
+  `status` bridge channel + `Bubble.show_status` with a one-slot pending toast
+  that re-fires on the next idle (`_on_hide_timeout`), general to any status
+  toast. `_backend_announced` is now honest (the notice is deferred, never
+  dropped). Finding 1 (the `show_status` dim/no-bar-brighten *register* split)
+  and Finding 3 (the error sound) were left for a later pass — out of scope for
+  this change, which fixes the *drop path*, not the visual vocabulary. The
+  tray's persistent-CPU-blue half (the study's companion) shipped in `#131`.
+
+- **Deferred.** The queue-chip strip still anchors to the fixed `HEIGHT`, so on
+  a 2-line ribbon it overlaps the ribbon's top ~20 px; chips almost never show
+  with a fast GPU (Sprint 19) and re-anchoring needs a handle to the bubble's
+  live height, so it was left as a known cosmetic. README screenshots still show
+  the old tower (a committed PNG asset; regenerate with
+  `scripts/readme_screens.py`).
