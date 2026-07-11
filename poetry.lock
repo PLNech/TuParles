@@ -3692,7 +3692,7 @@ tutorials = ["matplotlib", "pandas", "tabulate"]
 
 [[package]]
 name = "tuparles"
-version = "0.3.0"
+version = "0.4.0"
 description = "Local push-to-talk dictation for Fr-En code-switchers. Speak, see, ship."
 optional = false
 python-versions = ">=3.11,<3.15"
@@ -3717,7 +3717,7 @@ url = "packages/tuparles-desktop"
 
 [[package]]
 name = "tuparles-core"
-version = "0.3.0"
+version = "0.4.0"
 description = "Portable, stdlib-first core of TuParles: postprocess chain, privacy firewall, voice-command grammar, settings, telemetry. No GUI / mic / GPU deps — importable under Chaquopy on Android and inside the /stt/ server."
 optional = false
 python-versions = ">=3.11,<3.15"
