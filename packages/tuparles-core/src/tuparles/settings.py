@@ -143,6 +143,16 @@ _DEFAULTS: dict[str, object] = {
     # as honest, not broken. Sticky for the session (the fallback is), shown once.
     # It's a setting: on by default, silence it if you know what blue means.
     "backend_toast": True,
+    # Trim leading/trailing silence off a take before decode (#131). The win is
+    # the CPU rungs: qwen/whisper.cpp decode every silent second (a field case —
+    # a 51.2 s take → 20.8 s qwen decode, roughly half of it a forgotten-mic
+    # tail), while the GPU's in-decode VAD already skips silence. silero-vad when
+    # the optional `trim` group is installed, else a deterministic RMS lead/tail
+    # cut, else a no-op — GPU-or-CPU by construction. Conservative: lead/tail
+    # ONLY (never interior pauses), keeps 200 ms / 400 ms margins, and bails to
+    # the untrimmed buffer at the first doubt (result <0.5 s, or >95% removed).
+    # It's a setting: smart default on, total override.
+    "trim_silence": True,
     # Preserve and restore the user's clipboard around a take (#28). TuParles
     # pastes via the clipboard, which clobbers whatever you had copied. With this
     # on, we snapshot the clipboard before delivery and put it back after the paste
