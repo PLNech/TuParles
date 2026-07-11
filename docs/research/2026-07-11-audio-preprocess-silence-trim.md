@@ -126,3 +126,52 @@ complementary, not redundant.
 - TEN VAD: plausible marginal RTF win, unproven; not worth a second VAD dep.
 - demucs / MP-SENet / diffusion SE: wrong tool or research-stage.
 - Generic denoising by default: actively harmful per 40/40 sweep above.
+
+## Implemented (2026-07-11, #131)
+
+Shipped exactly the design above. `trim_silence` (preprocess.py) trims lead/tail
+only, three-tier (silero-vad in the optional `trim` poetry group → deterministic
+RMS `top_db`-style fallback → no-op), never raises, keeps 200 ms / 400 ms
+margins, and bails to the untrimmed buffer if the result is under 0.5 s or more
+than 95 % would be removed. Hooked at capture handoff (`daemon._stop_and_enqueue`),
+so every engine gets the shorter buffer and the qwen normalize-bypass is closed
+as a side effect. The wider factorization landed too: one `prepare_pcm` seam
+(int16→float32 + normalize) now serves the GPU, whisper.cpp, qwen AND the offline
+file path (qwen used to skip normalization entirely). Tuned `VadOptions`
+(`min_silence_duration_ms=500`, `speech_pad_ms=200`, `max_speech_duration_s=30`,
+verified against faster-whisper 1.2.1's `VadOptions` fields) replaced the bare
+`vad_filter=True` at all four faster-whisper call sites. The CPU-fallback tray
+signal is now persistent (a desaturated idle blue), so a suspend-wedged CUDA
+context can't hide behind a neutral idle glyph.
+
+Note on the primary tier: silero-vad was **not** installed in the build
+environment (it's the optional `trim` group), so the shipped default path here is
+the RMS fallback; the silero tier is API-verified against silero-vad v5
+(`load_silero_vad(onnx=True)` + `get_speech_timestamps`) but not exercised live.
+
+### A/B numbers (numbers only)
+
+Real-take WER A/B (`replay_takes.py --trim`) is **not run**: zero takes are
+consented (`share_ok=1`) yet, and the harness gates on that by construction, so
+it correctly reports `n=0`. The WER-drift half of the validation gate awaits the
+pending take-consent review. What the harness needs is built and privacy-safe
+(numbers only, GPU-leg skipped on battery).
+
+To validate the *decode-time* mechanism without user audio, a synthetic PII-free
+A/B (amplitude-modulated noise as a speech stand-in + a silent tail, decode timed
+raw vs trimmed) reproduces the field case in miniature:
+
+| Engine | tail removed | decode raw → trimmed | Δdecode |
+|---|---|---|---|
+| qwen-CPU | 4.6 s | 12.90 → 8.52 s | −4.38 s |
+| qwen-CPU | 14.6 s | 17.98 → 9.22 s | −8.75 s |
+| qwen-CPU | 24.6 s | 20.69 → 8.38 s | **−12.31 s** |
+| GPU (turbo) | 4.6–24.6 s | ~0.5 → ~0.4 s | ~−0.15 s (mean) |
+
+The CPU rung's decode time scales with buffer length, so trimming a forgotten-mic
+tail is close to linear savings (the 24.6 s case ≈ the reported 51 s→20.8 s field
+take, scaled). The GPU is ~neutral: its in-decode VAD already skips silence — the
+trim is a CPU-path win, exactly Finding 1. Caveat (calibrated): n=3, one synthetic
+signal, no WER (synthetic audio has no ground truth); read as *direction and
+magnitude of the decode-time effect*, not a WER verdict. The WER-no-harm claim
+still needs the consented real-take A/B.
