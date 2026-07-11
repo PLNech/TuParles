@@ -78,7 +78,7 @@ def _poison_torch(monkeypatch):
 
 
 def test_pick_device_auto_uses_ctranslate2_not_torch_cpu(monkeypatch):
-    import ctranslate2
+    ctranslate2 = pytest.importorskip("ctranslate2")
 
     _poison_torch(monkeypatch)
     monkeypatch.setattr(ctranslate2, "get_cuda_device_count", lambda: 0)
@@ -86,7 +86,7 @@ def test_pick_device_auto_uses_ctranslate2_not_torch_cpu(monkeypatch):
 
 
 def test_pick_device_auto_uses_ctranslate2_not_torch_cuda(monkeypatch):
-    import ctranslate2
+    ctranslate2 = pytest.importorskip("ctranslate2")
 
     _poison_torch(monkeypatch)
     monkeypatch.setattr(ctranslate2, "get_cuda_device_count", lambda: 1)

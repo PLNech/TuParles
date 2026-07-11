@@ -190,6 +190,7 @@ class TestBubbleRibbonWiring:
         return b
 
     def test_short_take_stays_the_pill(self, tmp_path, monkeypatch):
+        pytest.importorskip("PySide6")
         from tuparles.ui import HEIGHT, WIDTH
 
         b = self._bubble(tmp_path, monkeypatch)
@@ -198,6 +199,7 @@ class TestBubbleRibbonWiring:
         assert b.height() == HEIGHT
 
     def test_long_take_widens_and_grows_to_two_lines(self, tmp_path, monkeypatch):
+        pytest.importorskip("PySide6")
         from tuparles.ui import HEIGHT, WIDTH
 
         b = self._bubble(tmp_path, monkeypatch)
@@ -210,6 +212,7 @@ class TestBubbleRibbonWiring:
         assert layout.history and layout.live
 
     def test_width_setting_zero_pins_the_pill(self, tmp_path, monkeypatch):
+        pytest.importorskip("PySide6")
         from tuparles import settings
         from tuparles.ui import WIDTH
 
