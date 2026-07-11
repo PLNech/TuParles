@@ -50,7 +50,7 @@ from tuparles.delivery import (
     to_clipboard,
 )
 from tuparles.engine import carryover_context, load_engine
-from tuparles.pipeline import postprocess
+from tuparles.pipeline import postprocess, preview
 from tuparles.preprocess import trim_silence
 
 
@@ -80,6 +80,8 @@ class Bridge(QObject):
     partial = Signal(str)
     final = Signal(str)
     command = Signal(str)  # a voice edit ran — short label for the toast
+    status = Signal(str)  # a persistent-STATE notice (e.g. GPU→CPU) — survives a
+    # busy bubble by queuing + re-firing on idle, never a silent drop (#132)
     error = Signal(str)
     state = Signal(str)  # idle | recording | processing — tray glyph follows
     queued = Signal(int)  # a take entered the decode queue (seq) — mini-bubble (#15)
@@ -283,8 +285,13 @@ class Controller(QObject):
                     # frame. The bubble shows ~600 chars at most anyway.
                     if len(text) > 800:
                         text = "…" + text[-800:]
-                    self._last_partial = text  # remember for miss-forensics (#10)
-                    self._bridge.partial.emit(text)
+                    # Miss-forensics keep the RAW decoder text (what it actually
+                    # said, #10); the bubble shows the display-only preview so
+                    # what you watch matches what will land — punctuation,
+                    # slashes, lexicon fixes live, no repeat-collapse, no command
+                    # parsing (#132). The two stay separate on purpose.
+                    self._last_partial = text
+                    self._bridge.partial.emit(preview(text))
             elapsed = time.monotonic() - started
             self._stop_partials.wait(max(0.1, PARTIAL_PERIOD_S - elapsed))
 
@@ -499,8 +506,14 @@ class Controller(QObject):
                     self._backend_announced,
                 )
                 if msg and settings.get("backend_toast"):
+                    # The status channel queues-and-re-fires if the bubble is
+                    # busy, so marking it announced here is honest: the notice is
+                    # never dropped, only deferred (#132). It used to ride
+                    # `command`→show_final, which early-returns while recording —
+                    # so a fallback landing mid-take-N+1 was announced-yet-unshown,
+                    # the anatomy of "GPU→CPU went unnoticed for two days".
                     self._backend_announced = True
-                    self._bridge.command.emit(msg)
+                    self._bridge.status.emit(msg)
             else:
                 # Empty final decode — the "Rien entendu" black hole. It records
                 # no history row (and so no id-keyed WAV), so without this the
@@ -539,6 +552,12 @@ class Controller(QObject):
         partial = partial.strip()
         if not partial:
             return False
+        # Match what the eye saw: the bubble painted the previewed partial (#132),
+        # so preview it here too — the words copied to the clipboard (and re-shown
+        # in amber below) are byte-for-byte what was on screen, never a silent
+        # recant to the raw decoder text. preview() is display-only + pure, so
+        # this stays clipboard-safe and never parses a command.
+        partial = preview(partial)
         try:
             to_clipboard(partial)
         except Exception:
@@ -666,6 +685,7 @@ def run() -> None:
     bridge.partial.connect(bubble.set_partial)
     bridge.final.connect(bubble.show_final)
     bridge.command.connect(bubble.show_final)  # edit confirmation toast
+    bridge.status.connect(bubble.show_status)  # persistent-state notice (#132)
     bridge.error.connect(bubble.show_error)
     bridge.recovered.connect(bubble.show_recovered)  # never-recant salvage (#27)
     bridge.queued.connect(bubble.on_queued)  # queue chips (#15)
