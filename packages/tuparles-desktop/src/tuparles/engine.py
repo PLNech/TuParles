@@ -33,12 +33,25 @@ from tuparles.config import (
     WHISPERCPP_THREADS,
 )
 from tuparles.partials import sanitize_partial
-from tuparles.preprocess import normalize_audio
+from tuparles.preprocess import prepare_pcm, to_int16
 from tuparles.transcription import (  # result types + Protocol now live in core
     Transcription,
     Word,  # noqa: F401  re-exported for back-compat (tests import it from here)
     words_from_segments,
 )
+
+# Tuned faster-whisper VAD (the D-series item, 2026-07-08 CPU review): the library
+# default min_silence_duration_ms=2000 lets a 0.5-1.5s dead tail sail through, and
+# a 30ms pad shears phonemes. 500ms / 200ms is tighter without clipping speech;
+# capping a chunk at 30s matches Whisper's window so a long unbroken stretch still
+# batches cleanly. Passed as a plain dict (faster-whisper 1.2.x builds VadOptions
+# from it) so we don't couple to the VadOptions constructor. Complementary to
+# trim_silence: this is in-decode VAD, trim is the upstream lead/tail cut.
+TUNED_VAD_PARAMETERS = {
+    "min_silence_duration_ms": 500,
+    "speech_pad_ms": 200,
+    "max_speech_duration_s": 30,
+}
 
 
 def decode_language_opts(selected: list[str]) -> tuple[str | None, bool]:
@@ -138,13 +151,14 @@ class GpuEngine:
         the previous take's tail, carried in for onset left-context (#18)."""
         if audio.size == 0:
             return Transcription("")
-        pcm = normalize_audio(audio.astype(np.float32) / 32768.0)
+        pcm = prepare_pcm(audio)
         language, multilingual = self._decode_language_opts()
         segments, info = self._batched.transcribe(
             pcm,
             batch_size=16,
             beam_size=5,
             vad_filter=True,
+            vad_parameters=TUNED_VAD_PARAMETERS,
             # Re-read per decode: `tuparles vocab add` applies to the next
             # take, no restart (like the language setting). Carryover context
             # rides the tail (#18).
@@ -181,12 +195,13 @@ class GpuEngine:
         """
         if audio.size == 0:
             return ""
-        pcm = normalize_audio(audio.astype(np.float32) / 32768.0)
+        pcm = prepare_pcm(audio)
         language, multilingual = self._decode_language_opts()
         segments, _ = self._model.transcribe(
             pcm,
             beam_size=1,
             vad_filter=True,
+            vad_parameters=TUNED_VAD_PARAMETERS,
             condition_on_previous_text=False,
             without_timestamps=True,
             language=language,
@@ -229,12 +244,13 @@ class CpuPartialsEngine:
     def transcribe_partial(self, audio: np.ndarray) -> str:
         if audio.size == 0:
             return ""
-        pcm = normalize_audio(audio.astype(np.float32) / 32768.0)
+        pcm = prepare_pcm(audio)
         language, multilingual = decode_language_opts(settings.get("languages") or [])
         segments, info = self._model.transcribe(
             pcm,
             beam_size=1,
             vad_filter=True,
+            vad_parameters=TUNED_VAD_PARAMETERS,
             condition_on_previous_text=False,
             without_timestamps=True,
             language=language,
@@ -318,7 +334,11 @@ class QwenCpuEngine(_CpuPartialsMixin):
         os.close(fd)
         tmp_path = Path(tmp_name)
         try:
-            _write_wav(tmp_path, audio)
+            # Route qwen through the shared decode-prep too (#131): it used to
+            # write the raw int16 buffer — the one engine that bypassed
+            # normalization. Normalize on CPU, then back to int16 for the WAV the
+            # C binary reads, so every rung conditions audio identically now.
+            _write_wav(tmp_path, to_int16(prepare_pcm(audio)))
             result = subprocess.run(
                 [
                     str(QWEN_BINARY),
@@ -412,7 +432,7 @@ class WhisperCppEngine(_CpuPartialsMixin):
         qwen structurally can't take."""
         if audio.size == 0:
             return Transcription("")
-        pcm = normalize_audio(audio.astype(np.float32) / 32768.0)
+        pcm = prepare_pcm(audio)
         language, _multilingual = decode_language_opts(settings.get("languages") or [])
         # whisper.cpp has no per-segment `multilingual` flag (that's a
         # faster-whisper extension), so we can't follow a mid-sentence switch the
