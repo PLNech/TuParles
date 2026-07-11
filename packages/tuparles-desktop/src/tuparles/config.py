@@ -26,6 +26,7 @@ PARTIAL_WINDOW_S = _core.PARTIAL_WINDOW_S
 PARTIAL_MIN_AUDIO_S = _core.PARTIAL_MIN_AUDIO_S
 PARTIAL_PERIOD_S = _core.PARTIAL_PERIOD_S
 
+
 def _repo_root() -> Path:
     """The git-checkout root — home of vendor/, models/, vocab.txt, docs/.
 

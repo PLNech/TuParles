@@ -129,10 +129,18 @@ class QwenCpu:
                 w.writeframes(audio.astype(np.int16).tobytes())
             result = subprocess.run(
                 [
-                    str(QWEN_BINARY), "-d", str(QWEN_MODEL_DIR),
-                    "-i", str(tmp_path), "-t", str(THREADS), "--silent",
+                    str(QWEN_BINARY),
+                    "-d",
+                    str(QWEN_MODEL_DIR),
+                    "-i",
+                    str(tmp_path),
+                    "-t",
+                    str(THREADS),
+                    "--silent",
                 ],
-                capture_output=True, text=True, timeout=180,
+                capture_output=True,
+                text=True,
+                timeout=180,
             )
         finally:
             tmp_path.unlink(missing_ok=True)
@@ -185,8 +193,7 @@ def build_engines(only: list[str] | None) -> list[EngineSpec]:
     for spec in selected:
         (live if spec.available() else skipped).append(spec)
     for spec in skipped:
-        print(f"[bench] skip {spec.key} ({spec.rung}): backend unavailable",
-              flush=True)
+        print(f"[bench] skip {spec.key} ({spec.rung}): backend unavailable", flush=True)
     return live
 
 
@@ -200,8 +207,9 @@ def percentile(xs: list[float], p: float) -> float:
     return s[lo] + (s[hi] - s[lo]) * (k - lo)
 
 
-def decode_one(engine, key: str, rung: str, entry: dict, audio, dur: float,
-               case: dict) -> dict:
+def decode_one(
+    engine, key: str, rung: str, entry: dict, audio, dur: float, case: dict
+) -> dict:
     """One timed decode → postprocess → score, as a JSONL-ready row. A decode
     that throws is recorded (empty text, error string) rather than aborting the
     run — one bad WAV shouldn't cost the whole engine's numbers."""
@@ -250,8 +258,10 @@ def main() -> None:
         entries = entries[: args.limit]
 
     engines = build_engines(args.only)
-    print(f"[bench] {len(entries)} WAVs x {len(engines)} engines, threads={THREADS}",
-          flush=True)
+    print(
+        f"[bench] {len(entries)} WAVs x {len(engines)} engines, threads={THREADS}",
+        flush=True,
+    )
     print(f"[bench] engines: {[s.key for s in engines]}", flush=True)
 
     # Preload audio once (shared across engines for identical inputs).
@@ -268,8 +278,9 @@ def main() -> None:
             print(f"[bench] {key} loaded in {load_s:.1f}s", flush=True)
             for i, entry in enumerate(entries, 1):
                 audio, dur = audio_cache[entry["file"]]
-                row = decode_one(engine, key, spec.rung, entry, audio, dur,
-                                 cases[entry["case_id"]])
+                row = decode_one(
+                    engine, key, spec.rung, entry, audio, dur, cases[entry["case_id"]]
+                )
                 results.append(row)
                 jf.write(json.dumps(row) + "\n")
                 jf.flush()
@@ -298,8 +309,11 @@ def main() -> None:
     print(json.dumps(summary, indent=2), flush=True)
 
     _plot(summary, png_path)
-    print(f"\n[bench] wrote {jsonl}\n[bench] wrote {summary_path}\n"
-          f"[bench] wrote {png_path}", flush=True)
+    print(
+        f"\n[bench] wrote {jsonl}\n[bench] wrote {summary_path}\n"
+        f"[bench] wrote {png_path}",
+        flush=True,
+    )
 
 
 def _plot(summary: dict, png_path: Path) -> None:
@@ -323,11 +337,17 @@ def _plot(summary: dict, png_path: Path) -> None:
 
     ax1.scatter(rtfs, passes, s=120)
     for k, x, y in zip(keys, rtfs, passes, strict=False):
-        ax1.annotate(k, (x, y), textcoords="offset points", xytext=(6, 4),
-                     fontsize=9)
+        ax1.annotate(k, (x, y), textcoords="offset points", xytext=(6, 4), fontsize=9)
     ax1.axvline(1.0, ls="--", color="grey", lw=1)
-    ax1.text(1.02, ax1.get_ylim()[0], "1x realtime", color="grey", fontsize=8,
-             rotation=90, va="bottom")
+    ax1.text(
+        1.02,
+        ax1.get_ylim()[0],
+        "1x realtime",
+        color="grey",
+        fontsize=8,
+        rotation=90,
+        va="bottom",
+    )
     ax1.set_xlabel("mean RTF  (lower = faster; <1 = faster than realtime)")
     ax1.set_ylabel("code-switch pass-rate  (%)")
     ax1.set_title("Quality vs speed — sweet spot is top-left")
@@ -341,8 +361,9 @@ def _plot(summary: dict, png_path: Path) -> None:
     ax2.set_title("Word error rate by rung")
     ax2.grid(alpha=0.3, axis="y")
 
-    fig.suptitle("TuParles CPU STT bench (6 cores / 30%) — code-switch corpus",
-                 fontsize=12)
+    fig.suptitle(
+        "TuParles CPU STT bench (6 cores / 30%) — code-switch corpus", fontsize=12
+    )
     fig.tight_layout()
     fig.savefig(png_path, dpi=110)
     print(f"[bench] chart -> {png_path}", flush=True)

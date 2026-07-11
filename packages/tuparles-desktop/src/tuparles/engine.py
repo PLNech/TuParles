@@ -489,7 +489,9 @@ class ResilientEngine:
     Factories are injectable so the recovery logic is testable without a GPU.
     """
 
-    def __init__(self, gpu_factory=GpuEngine, cpu_factory=_cpu_fallback_factory) -> None:
+    def __init__(
+        self, gpu_factory=GpuEngine, cpu_factory=_cpu_fallback_factory
+    ) -> None:
         self._gpu_factory = gpu_factory
         self._cpu_factory = cpu_factory
         self._gpu = gpu_factory()  # may raise — load_engine() handles it
