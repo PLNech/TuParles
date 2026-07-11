@@ -27,7 +27,10 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
 - **Live transcript** — while you speak, the bubble streams a ~1 Hz greedy
   preview of the last few seconds; on stop, the whole take gets a full
   beam decode. On a long take that final pass runs batched (VAD-chunked,
-  parallel on GPU): a 3-minute monologue lands in about a second.
+  parallel on GPU): a 3-minute monologue lands in about a second. The live
+  preview shows spoken punctuation, slashes and known mishears *as they'll
+  land* ("slash impeccable" reads "/impeccable" while you speak), not the raw
+  decoder words the final would then quietly fix.
 - **Trims the silence for you** — if you leave the mic keyed after the last
   word, the dead lead/tail is trimmed off before decode, so a forgotten-mic
   take doesn't pay to decode empty seconds. The win is biggest without a GPU
@@ -41,9 +44,14 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
   know which silicon is decoding (and a red flash for errors). That hue holds
   from first frame to last — while it decodes, a bright pulse sweeps across the
   bars ("I'm working"), and the take lands on a *brighter* flash of the **same**
-  colour (so green only ever means GPU). By default the bubble shows your **whole take**,
-  word-wrapped and growing as you speak (switch to the discreet one-line
-  *minimal* pill in the tray or *Réglages*). The **tray glyph breathes** —
+  colour (so green only ever means GPU). By default the bubble shows your **whole take**
+  as a **ribbon** that grows *wide* along the bottom edge before it ever adds a
+  line (up to 2 lines, ≈76 px): the freshest words stay bright and right-anchored,
+  older text dims into a smaller history line above, and the beginning stays
+  visible — the whole overview without a tower planted over your code. Tune
+  « Largeur du bandeau » (0 = the discreet fixed pill), « Lignes du bandeau »
+  and « Taille du texte » in *Réglages*, or switch to the one-line *minimal*
+  pill. The **tray glyph breathes** —
   calm at rest, livelier while recording, a travelling pulse while decoding, in
   the engine colour (toggle off in *Réglages*). Optional soft **start tick**
   (*Réglages*, off by default) confirms recording has begun. A slow decode

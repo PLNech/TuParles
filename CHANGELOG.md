@@ -9,7 +9,39 @@ where the GPU's in-decode VAD already skips it. This sprint trims the dead
 lead/tail once at capture handoff, unifies the audio-prep path every engine
 shares, and makes a two-day CUDA-wedged fallback impossible to miss.
 
+It also answers a dictated complaint — *"I'm not seeing the beginning of the
+text anymore… we should spread horizontally"* — by rebuilding the preview
+window: the full view stops growing UP into a tower over the code and grows OUT
+along the bottom edge instead, and the live preview stops lying about the
+product's own punctuation and slashes (`#132`).
+
 ### Added
+- **Le ruban — the preview window grows wide-first** (`#132`) — the "full" view
+  is now a bottom-edge ribbon: it widens along the bottom (up to
+  « Largeur du bandeau », default 92 % of the screen) BEFORE it ever adds a
+  second line, capped at « Lignes du bandeau » (default 2, ≈76 px). Older text
+  drops into a dim, smaller, left-aligned history register above the bright,
+  larger, RIGHT-anchored live tail — recency = brightness + size, never a hue
+  change (house doctrine). The beginning of the take stays visible up to ~750
+  chars; only past that are the oldest words trimmed behind "…". Replaces the
+  460×300 vertical tower that spent the scarce axis (over your code) and wasted
+  the abundant one, and still lost the beginning past ~600 chars. The
+  anchor/multi-monitor logic is unchanged. All geometry is pure, headless-tested
+  (`plan_ribbon`, `ribbon_widen`, `ribbon_budget`, `fit_trailing_words`). New
+  knobs, all live (no restart): « Largeur du bandeau » (0 = the fixed 460 px
+  pill, total override), « Lignes du bandeau » (1–3), « Taille du texte » (the
+  missing accessibility / HiDPI point-size knob).
+- **`pipeline.preview()` — display-only fidelity for live partials** (`#132`) —
+  partials shipped RAW decoder text, so "slash impeccable" painted literally
+  while the final delivered "/impeccable". The daemon now paints `preview(text)`:
+  the pure text stages (punctuation, lexicon, spoken syntax incl. slashes,
+  casing) so the preview shows what will land — but NOT `collapse_repeats`
+  (flaps on a sliding tail window) and, by construction, NEVER command parsing
+  (that layer lives in the daemon, not the pipeline — the safety interlocks are
+  simply never on this path). Telemetry stays final-only (`on_fire=None`), so no
+  ~1 Hz double counting; `postprocess` is untouched, so daemon + eval can't
+  drift. Miss-forensics keep the RAW partial; `_recover_with_partial` previews
+  what it salvages, so what you saw amber is byte-for-byte what Ctrl+V pastes.
 - **Silence trim before decode** (`preprocess.trim_silence`, `#131`) — lops the
   dead lead/tail off a take at capture handoff, so every engine (GPU,
   whisper.cpp, qwen) decodes the shorter buffer for free. Three-tier,
@@ -44,6 +76,19 @@ shares, and makes a two-day CUDA-wedged fallback impossible to miss.
   brightness/saturation, not a hue switch (blue already is the CPU identity).
   The operator ran two days on a suspend-wedged CUDA context without noticing
   precisely because the idle glyph looked neutral.
+
+### Fixed
+- **Status toasts no longer swallowed during back-to-back dictation** (`#132`) —
+  the one-per-session GPU→CPU notice rode the same transient channel as a
+  transcript flash (`command`→`show_final`), which early-returns while
+  recording, yet `_backend_announced` was set regardless: if you were already
+  speaking the next take when the fallback landed, the notice was gone for the
+  session (the system half of "the degradation went unnoticed for two days").
+  Persistent-state notices now ride a dedicated `status` channel with a one-slot
+  pending toast that re-fires the next time the bubble goes idle — a dropped
+  state signal is re-queued, never forgotten (the doctrine the project already
+  learned for data: "record misses harder than successes"). General mechanism,
+  not a bespoke backend flag; headless-tested state machine.
 
 A real meeting transcript failed in the wild (a fused block mis-attributed a
 quote), and the QA pass over it became the night's work order: make the failure
