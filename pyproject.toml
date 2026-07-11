@@ -64,6 +64,10 @@ onnxruntime = ">=1.17"
 # Both deselected by default so the pure-python suite stays CI-portable.
 # Run them with `pytest -m gpu` / `pytest -m embed`.
 addopts = "-m 'not gpu and not embed and not whispercpp' --cov=tuparles --cov-report=term-missing"
+# The two PEP 420 src roots on sys.path, portably: a `PYTHONPATH` env with a `:`
+# separator breaks on Windows (`;`), so let pytest add them from this list instead
+# — same import resolution on Linux, macOS and Windows with no per-OS env.
+pythonpath = ["packages/tuparles-core/src", "packages/tuparles-desktop/src"]
 markers = [
     "gpu: requires a CUDA device and generated fixtures (the code-switch eval)",
     "embed: requires the optional 'embed' group (fastembed / sentence-transformers)",

@@ -7,7 +7,9 @@ from pathlib import Path
 def test_config_core_imports_without_desktop_deps():
     root = Path(__file__).resolve().parents[1]
     env = os.environ.copy()
-    env["PYTHONPATH"] = str(root / "src") + os.pathsep + env.get("PYTHONPATH", "")
+    # Core src root ONLY (not the desktop root): the point is to prove the core
+    # imports in isolation, without the desktop package's Qt/audio deps on the path.
+    env["PYTHONPATH"] = str(root / "packages" / "tuparles-core" / "src")
     code = """
 import sys
 import tuparles.config_core
@@ -21,7 +23,9 @@ assert not blocked, blocked
 def test_pipeline_imports_without_desktop_deps():
     root = Path(__file__).resolve().parents[1]
     env = os.environ.copy()
-    env["PYTHONPATH"] = str(root / "src") + os.pathsep + env.get("PYTHONPATH", "")
+    # Core src root ONLY (not the desktop root): the point is to prove the core
+    # imports in isolation, without the desktop package's Qt/audio deps on the path.
+    env["PYTHONPATH"] = str(root / "packages" / "tuparles-core" / "src")
     code = """
 import sys
 from tuparles.pipeline import postprocess

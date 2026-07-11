@@ -35,6 +35,6 @@ jobs:
       - run: ruff check packages tests scripts
       - run: ruff format --check packages tests scripts
       - run: mypy
+      # PYTHONPATH is set portably via pyproject's [tool.pytest.ini_options]
+      # `pythonpath` (a list, so no `:` vs `;` separator hazard across OSes).
       - run: pytest -q
-        env:
-          PYTHONPATH: packages/tuparles-core/src:packages/tuparles-desktop/src
