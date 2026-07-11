@@ -90,6 +90,29 @@ product's own punctuation and slashes (`#132`).
   learned for data: "record misses harder than successes"). General mechanism,
   not a bespoke backend flag; headless-tested state machine.
 
+### Doctrine
+- **Denoising before Whisper: won't-do, now with evidence** — the two-track
+  research (SOTA survey + pipeline audit,
+  `docs/research/2026-07-11-audio-preprocess-silence-trim.md`) found
+  off-the-shelf enhancement hurt Whisper in 40/40 tested configurations
+  (arXiv:2512.17562), worse on larger models (arXiv:2603.04710). The old
+  `preprocess.py` docstring's instinct is now a cited decision; a reference
+  issue points future requests at it.
+- **Consent review completed** — 62 takes flagged `share_ok`, 7 private, 180
+  unreviewed; the real-voice FR/EN corpus is unlocked for local-assistant-eyes
+  forensics (never git). First consumer: the `--trim` A/B.
+- **Forensics before theory, again** — the reported "GPU freeze after a long
+  take" was the journal's `take:` breakdown showing two days on the qwen rung
+  (CUDA wedged post-suspend): 51.2 s audio → 20.8 s decode. Diagnosis drove
+  both the trim hook placement and the persistent tray signal.
+- **UX review of the preview window**
+  (`docs/research/2026-07-11-preview-window-ux-review.md`) — the impeccable
+  pass that produced le ruban, the preview seam, and the toast re-fire; its
+  remaining findings (toast register, error cue, motion/sizing knobs) are
+  filed as issues.
+
+## Sprint 30 — 2026-07-09 · Les coutures et les voix — la réunion comme banc d'essai
+
 A real meeting transcript failed in the wild (a fused block mis-attributed a
 quote), and the QA pass over it became the night's work order: make the failure
 impossible to miss, measure the cheapest fix, and let the machine say *who*
