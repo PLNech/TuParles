@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "tuparles-core"
-version = "0.3.0"
+version = "0.4.0"
 description = "Portable, stdlib-first core of TuParles: postprocess chain, privacy firewall, voice-command grammar, settings, telemetry. No GUI / mic / GPU deps — importable under Chaquopy on Android and inside the /stt/ server."
 authors = ["PLNech <PLNech@users.noreply.github.com>"]
 readme = "README.md"
