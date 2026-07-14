@@ -7,6 +7,10 @@ from tuparles import takes
 
 def _isolate(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    # Config too: with TUPARLES_DEV unset the gate falls back to the
+    # `dev_recording` SETTING, so a box whose real Réglages legitimately
+    # enabled dev capture must not leak into the "disabled" tests.
+    monkeypatch.setenv("TUPARLES_CONFIG_DIR", str(tmp_path / "config"))
 
 
 def _audio(seconds=0.5, rate=takes.SAMPLE_RATE):
@@ -16,7 +20,8 @@ def _audio(seconds=0.5, rate=takes.SAMPLE_RATE):
 
 
 class TestGate:
-    def test_disabled_by_default(self, monkeypatch):
+    def test_disabled_by_default(self, tmp_path, monkeypatch):
+        _isolate(tmp_path, monkeypatch)  # a real Réglages opt-in must not leak in
         monkeypatch.delenv("TUPARLES_DEV", raising=False)
         assert not takes.dev_recording_enabled()
 
