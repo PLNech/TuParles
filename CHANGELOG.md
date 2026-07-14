@@ -1,5 +1,36 @@
 # Changelog
 
+## Sprint 32 — 2026-07-15 · Ne plus jamais retoucher le clavier (X11)
+
+A gnome-shell wedge got traced back to us: the minute a dictation daemon came
+up, mutter's journal jumped from ~18 to 414 "Overwriting binding of keysym
+31..39" warnings per minute, peaking at 2880 at the freeze. Each burst is
+mutter re-grabbing its ENTIRE keybinding table on the shell's main loop — and
+the trigger was ours. On X11 `xdotool type` binds a scratch keycode per
+off-keymap character via XChangeKeyboardMapping; every remap broadcasts
+MappingNotify, and gnome-shell answers by re-registering all its bindings. The
+accent path already pasted, but short pure-ASCII takes still typed — so a whole
+dictation session dripped keymap churn into the shell.
+
+### Fixed
+- **X11 injection is now paste-only — never `xdotool type`** (freeze forensics,
+  `#10`). Every take goes through the clipboard (xsel) + a single
+  `xdotool key ctrl+v`, which uses existing keycodes and touches the keymap zero
+  times. Measured under Xvfb (before/after on the shipping code): `xdotool type`
+  of a 44-char accented take = **16** MappingNotify, even 32 ASCII chars = **2**
+  (= the "bursts of 18" the journal showed, 2 × mutter's 9 numbered-workspace
+  grabs); the clipboard paste = **0**, for both ASCII and accented text. The
+  terminal window-class special-casing (Ctrl+Shift+V) and progressive chunking
+  are preserved. Typing survives only as a last-ditch fallback when no clipboard
+  tool exists at all — losing a take is worse than a transient churn on such a
+  box; `to_clipboard` now warns-and-degrades instead of raising when xsel is
+  absent, so that fallback is actually reachable.
+
+### Infra
+- **Heartbeat now logs injection rate** (`hb: … inject Nc/s`, `#10`) — a running
+  chars/s gauge diffed each beat, so a future shell stall that lines up with an
+  injection burst is a measurement, not a guess.
+
 ## Sprint 31 — 2026-07-11 · Trancher le silence — et l'unifier
 
 A forgotten mic keyed for seconds after the last word inflates decode time, and
