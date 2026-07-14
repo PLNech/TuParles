@@ -190,6 +190,17 @@ class SettingsDialog(QDialog):
         self._quiet_rescue.setChecked(bool(settings.get("quiet_rescue")))
         layout.addWidget(self._quiet_rescue)
 
+        self._speech_leveler = QCheckBox("Égaliser le niveau de la voix")
+        self._speech_leveler.setToolTip(
+            "Compense une voix basse même quand un bruit fort (clac de clavier, "
+            "souffle) fausserait la normalisation classique : le niveau est "
+            "égalisé image par image avant chaque décodage, aperçus comme "
+            "transcription finale. Vérifié sur les prises réelles : aucun effet "
+            "sur les prises normales, nette amélioration sur les prises faibles."
+        )
+        self._speech_leveler.setChecked(bool(settings.get("speech_leveler")))
+        layout.addWidget(self._speech_leveler)
+
         self._clipboard_restore = QCheckBox("Préserver le presse-papiers")
         self._clipboard_restore.setToolTip(
             "TuParles colle via le presse-papiers, ce qui écrase ce que tu avais "
@@ -417,6 +428,7 @@ class SettingsDialog(QDialog):
         settings.put("backend_toast", self._backend_toast.isChecked())
         settings.put("trim_silence", self._trim_silence.isChecked())
         settings.put("quiet_rescue", self._quiet_rescue.isChecked())
+        settings.put("speech_leveler", self._speech_leveler.isChecked())
         settings.put("clipboard_restore", self._clipboard_restore.isChecked())
         settings.put("bubble_screen", self._screen.currentData())
         settings.put("bubble_max_width", self._ribbon_width.value() / 100)

@@ -179,6 +179,18 @@ _DEFAULTS: dict[str, object] = {
     # richer result. Fires rarely, costs one extra decode only then, and never
     # makes a take worse. It's a setting: smart default on, total override.
     "quiet_rescue": True,
+    # Transient-proof level conditioning at the decode seam (prepare_pcm).
+    # Peak normalization is blind to a loud in-band transient — the
+    # push-to-talk clack pins the gain and quiet speech stays ~40 dB down
+    # (the 2026-07-15 quiet-take collapse). On, the shared seam swaps in the
+    # frame-wise compressor (compress_speech's core) for every decode —
+    # partials and finals alike. Adopted default ON per the 2026-07-15 A/B:
+    # n=61 healthy consented takes non-inferior (keep median 1.000, p10 0.93;
+    # word counts unchanged), 6/6 degraded cases equal-or-better (worst case
+    # 0.16 → 0.96), code-switch eval 22/72 passed on both sides with one case
+    # swapping each way (boundary jitter, no direction). It's a setting:
+    # smart default on, total override.
+    "speech_leveler": True,
     # Preserve and restore the user's clipboard around a take (#28). TuParles
     # pastes via the clipboard, which clobbers whatever you had copied. With this
     # on, we snapshot the clipboard before delivery and put it back after the paste
