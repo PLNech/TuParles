@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from tuparles.config import (
     NORMALIZE_MAX_GAIN,
@@ -98,8 +99,19 @@ class TestPreparePcm:
 
 
 class TestTrimSilence:
-    """Lead/tail silence trim (#131). silero-vad isn't installed in CI, so these
-    exercise the deterministic RMS fallback tier + the safety interlocks."""
+    """Lead/tail silence trim (#131): the deterministic RMS fallback tier + the
+    safety interlocks. The RMS tier is FORCED (fixture below) because these
+    fixtures are synthetic tones, not speech — a real silero (installed on dev
+    boxes via the optional `trim` group) authoritatively finds no speech in a
+    sine and hands the buffer back untrimmed, which is correct live behaviour
+    but used to fail three of these tests on any box with the group installed.
+    CI (no silero) ran the RMS tier all along; now every box does, here."""
+
+    @pytest.fixture(autouse=True)
+    def _force_rms_tier(self, monkeypatch):
+        import tuparles.preprocess as pp
+
+        monkeypatch.setattr(pp, "_silero_unavailable", True)
 
     def test_empty_returns_empty(self):
         assert trim_silence(np.zeros(0, dtype=np.int16)).size == 0
