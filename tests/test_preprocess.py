@@ -256,3 +256,59 @@ class TestCompressSpeech:
         # Contract: any internal failure returns the input unchanged.
         weird = np.zeros(3, dtype=np.int16)
         assert compress_speech(weird, sample_rate=0).size == 3
+
+
+class TestSpeechLeveler:
+    """The `speech_leveler` dispatch at the shared prepare_pcm seam: off = the
+    historical peak normalization (byte-identical), on = the transient-proof
+    compressor. Adopted default-on after the 2026-07-15 A/B (n=61 healthy
+    consented takes non-inferior, 6/6 degraded cases equal-or-better)."""
+
+    def _quiet_with_click(self):
+        speech = _tone(2.0, amp=300)  # ~-40 dBFS
+        click = (np.random.RandomState(1).randn(240) * 28000).astype(np.int16)
+        return np.concatenate([speech[:16000], click, speech[16000:]])
+
+    def test_off_matches_peak_normalization(self, monkeypatch):
+        import tuparles.preprocess as pp
+
+        monkeypatch.setattr(pp, "_speech_leveler_on", lambda: False)
+        buf = self._quiet_with_click()
+        expect = normalize_audio(buf.astype(np.float32) / 32768.0)
+        assert np.array_equal(prepare_pcm(buf), expect)
+
+    def test_on_lifts_speech_despite_transient(self, monkeypatch):
+        import tuparles.preprocess as pp
+
+        monkeypatch.setattr(pp, "_speech_leveler_on", lambda: True)
+        buf = self._quiet_with_click()
+        old = normalize_audio(buf.astype(np.float32) / 32768.0)
+        new = prepare_pcm(buf)
+        rms = lambda a: float(np.sqrt((a[:16000].astype(np.float64) ** 2).mean()))  # noqa: E731
+        gain_db = 20 * np.log10(rms(new) / max(rms(old), 1e-12))
+        assert gain_db > 15  # the click no longer pins the speech level
+        assert new.dtype == np.float32
+        assert float(np.abs(new).max()) <= 1.0  # never clips
+
+    def test_setting_probe_failure_falls_back_to_peak(self, monkeypatch):
+        import tuparles.preprocess as pp
+
+        def boom():
+            raise RuntimeError("settings unreadable")
+
+        # The probe itself never raises (contract) — but if conditioning did,
+        # prepare_pcm must still hand back a peak-normalized buffer.
+        monkeypatch.setattr(pp, "_speech_leveler_on", lambda: True)
+        monkeypatch.setattr(pp, "_compress_f32", lambda *a, **k: boom())
+        buf = _tone(1.0, amp=3000)
+        out = prepare_pcm(buf)
+        assert np.isclose(np.abs(out).max(), NORMALIZE_TARGET_PEAK, atol=1e-2)
+
+    def test_probe_reads_setting(self, monkeypatch):
+        import tuparles.preprocess as pp
+        from tuparles import settings
+
+        monkeypatch.setattr(settings, "get", lambda k: k == "speech_leveler")
+        assert pp._speech_leveler_on() is True
+        monkeypatch.setattr(settings, "get", lambda k: False)
+        assert pp._speech_leveler_on() is False

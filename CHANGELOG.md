@@ -28,6 +28,20 @@ re-decode a compressed copy; condition the level transient-proof.
   release), the numpy equivalent of the ffmpeg chain that won the rescue
   ladder (`acompressor` + limiter). int16 or float32 in → same dtype out;
   never raises (any failure returns the input).
+- **`speech_leveler` — transient-proof level conditioning at the decode
+  seam** (`prepare_pcm`), default ON. Peak normalization is blind to a loud
+  in-band transient: one clack pins the gain, quiet speech stays ~40 dB
+  down. The setting swaps in the frame-wise compressor for every decode —
+  partials, finals and the offline path flip together (one seam, no silent
+  divergence). Adopted after the gating A/B: **healthy** consented takes
+  (n=61) non-inferior — old-words-kept median 100 %, p10 93 %, word counts
+  unchanged, the few dips are symmetric substitution jitter on short takes;
+  **degraded** cases 6/6 equal-or-better, the collapse cases 0.16 → 0.96 and
+  0.66 → 0.96 **in-path, before any rescue** (the rescue then almost never
+  needs to fire); **code-switch eval** 22/72 passed on both sides, one case
+  swapping each way (boundary jitter). Evidence:
+  `/tmp/tuparles_leveler_ab.png`. Réglages toggle *« Égaliser le niveau de
+  la voix »*.
 
 ## Sprint 32 — 2026-07-15 · Ne plus jamais retoucher le clavier (X11)
 

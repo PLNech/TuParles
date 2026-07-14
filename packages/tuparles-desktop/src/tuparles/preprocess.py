@@ -10,10 +10,14 @@ Two things this module does own:
 
 - **level** — `normalize_audio` / `prepare_pcm`: a soft take uses only a
   sliver of the int16 range, so the effective SNR after the /32768 scaling is
-  poor. Peak normalization is the safe win (a no-op on already-loud audio,
-  never clips) and DC-offset removal fixes a biased mic. `prepare_pcm` is the
-  single "prepare PCM for decode" seam every engine + the offline file path
-  share, so normalization can never silently diverge between rungs.
+  poor. Peak normalization is the historical safe win (a no-op on already-loud
+  audio, never clips) — but it is transient-blind: one keyboard clack pins the
+  gain and quiet speech stays quiet (the 2026-07-15 quiet-take collapse). The
+  `speech_leveler` setting (default on) swaps in the frame-wise compressor
+  (`_compress_f32`) at the same seam. DC-offset removal fixes a biased mic
+  either way. `prepare_pcm` is the single "prepare PCM for decode" seam every
+  engine + the offline file path share, so conditioning can never silently
+  diverge between rungs.
 - **dead lead/tail** — `trim_silence`: the *whole-buffer* silence the in-decode
   VAD doesn't help with on the CPU rungs (qwen/whisper.cpp decode every silent
   second). Trimmed once at capture handoff, upstream of the engines.
@@ -61,16 +65,41 @@ def normalize_audio(pcm: np.ndarray) -> np.ndarray:
 def prepare_pcm(audio: np.ndarray) -> np.ndarray:
     """The single "prepare PCM for decode" seam every engine shares (#131).
 
-    int16 mono → float32 [-1, 1], then `normalize_audio`. float32 input (the
+    int16 mono → float32 [-1, 1], then level conditioning. float32 input (the
     offline ffmpeg path already delivers f32le in range) skips the /32768
-    rescale and is normalized directly. So the live daemon, whisper.cpp, qwen
+    rescale and is conditioned directly. So the live daemon, whisper.cpp, qwen
     AND the offline file path condition audio identically — qwen used to bypass
     normalization entirely, the one silent divergence this closes. Trim is a
     SEPARATE upstream step (`trim_silence`, at capture handoff); this is
     decode-time only.
+
+    Conditioning is `normalize_audio` (peak-driven) by default; the
+    `speech_leveler` setting swaps in the transient-proof compressor
+    (`_compress_f32`) — peak normalization is blind to a loud in-band transient
+    (the push-to-talk clack pins the gain, quiet speech stays quiet; the
+    2026-07-15 quiet-take lab), the compressor is not. One seam, so partials,
+    finals and every engine flip together and can never silently diverge.
     """
     pcm = audio if audio.dtype == np.float32 else audio.astype(np.float32) / 32768.0
+    if _speech_leveler_on():
+        f = (pcm - np.float32(pcm.mean())).astype(np.float32)  # DC offset
+        try:
+            return _compress_f32(f, SAMPLE_RATE)
+        except Exception:
+            pass  # conditioning must never cost a decode — fall back to peak
     return normalize_audio(pcm)
+
+
+def _speech_leveler_on() -> bool:
+    """Hot-read the `speech_leveler` setting (like the trim toggle: applies to
+    the next decode, no restart). Import inline + failure-safe so preprocess
+    keeps zero hard deps beyond numpy/config for the engines that embed it."""
+    try:
+        from tuparles import settings
+
+        return bool(settings.get("speech_leveler"))
+    except Exception:
+        return False
 
 
 def to_int16(pcm: np.ndarray) -> np.ndarray:
