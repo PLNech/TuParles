@@ -778,12 +778,22 @@ def run() -> None:
     hb_stop = threading.Event()
 
     def _heartbeat() -> None:
+        from tuparles import delivery
+
         boot = time.monotonic()
+        last_chars = delivery.injected_chars_total()
+        last_t = boot
         while not hb_stop.wait(15.0):
-            gui_lag = time.monotonic() - stall_last[0]
+            now = time.monotonic()
+            gui_lag = now - stall_last[0]
+            # chars/s injected since the last beat — an injection burst that
+            # lines up with a stall is the freeze signature we chased tonight.
+            chars = delivery.injected_chars_total()
+            cps = (chars - last_chars) / max(now - last_t, 1e-3)
+            last_chars, last_t = chars, now
             print(
-                f"hb: up {time.monotonic() - boot:.0f}s "
-                f"rss {_rss_mb():.0f}MB gui_lag {gui_lag:.1f}s"
+                f"hb: up {now - boot:.0f}s "
+                f"rss {_rss_mb():.0f}MB gui_lag {gui_lag:.1f}s inject {cps:.0f}c/s"
             )
 
     threading.Thread(target=_heartbeat, daemon=True).start()

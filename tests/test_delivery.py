@@ -163,16 +163,24 @@ class TestChunkForPaste:
 
 
 class TestNoTypeFallback:
-    """A paste-destined text must never be typed — not even if the paste
-    keystroke errors. Typing it would corrupt + freeze (the 3-min bug)."""
+    """On X11 nothing is ever typed while a clipboard tool exists — not even
+    short ASCII, not even if the paste keystroke errors. `xdotool type` remaps
+    the keymap (MappingNotify storm → gnome-shell re-grab → desktop freeze), so
+    the clipboard + Ctrl+V is the only injection path (the 3-min bug)."""
 
-    def _record_calls(self, monkeypatch, paste_raises=False):
+    def _record_calls(self, monkeypatch, paste_raises=False, has_xsel=True):
         calls = []
 
         # These assert the X11 xdotool path; pin it so the suite is valid on
         # a Wayland dev machine too (where _type_into_focus would otherwise
-        # take the ydotool branch).
+        # take the ydotool branch). Pin xsel presence too so the paste-vs-type
+        # branch is deterministic regardless of what's installed on the runner.
         monkeypatch.setattr(delivery, "_WAYLAND", False)
+        monkeypatch.setattr(
+            delivery.shutil,
+            "which",
+            lambda name: f"/usr/bin/{name}" if has_xsel else None,
+        )
 
         def fake_run(argv, *a, **kw):
             calls.append(argv)
@@ -196,8 +204,19 @@ class TestNoTypeFallback:
         _type_into_focus("été " * 100)
         assert not any(c[:2] == ["xdotool", "type"] for c in calls)
 
-    def test_short_ascii_still_types(self, monkeypatch):
+    def test_short_ascii_now_pastes_not_types(self, monkeypatch):
+        # The fix: even a short pure-ASCII take pastes rather than types, so a
+        # dictation session never drips MappingNotify into gnome-shell.
         calls = self._record_calls(monkeypatch)
+        _type_into_focus("just type this")
+        assert not any(c[:2] == ["xdotool", "type"] for c in calls)
+        assert ["xdotool", "key", "ctrl+v"] in calls
+
+    def test_types_only_when_no_clipboard_tool(self, monkeypatch):
+        # Graceful degrade: with no xsel at all there's nothing to paste
+        # through, so we type rather than drop the take (the churn is accepted
+        # on such a box; a lost take is worse).
+        calls = self._record_calls(monkeypatch, has_xsel=False)
         _type_into_focus("just type this")
         assert any(c[:2] == ["xdotool", "type"] for c in calls)
 
@@ -473,6 +492,7 @@ class TestChunkedDelivery:
     def test_x11_long_text_pastes_in_pieces_never_types(self, monkeypatch):
         self._no_sleep(monkeypatch)
         monkeypatch.setattr(delivery, "_WAYLAND", False)
+        monkeypatch.setattr(delivery.shutil, "which", lambda name: f"/usr/bin/{name}")
         clips, keys, typed = [], [], []
 
         def fake_run(argv, *a, **kw):

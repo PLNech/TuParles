@@ -9,7 +9,7 @@ KPIs, la contingence) to survive transcription.
 
 Tap **Right Ctrl+Alt** → a small floating bubble appears with a live waveform
 and the transcript streaming in as you speak → release (or tap again) → the
-text is typed into whatever window has focus. Everything runs on-device.
+text lands in whatever window has focus. Everything runs on-device.
 
 <p align="center">
   <img src=".github/bubble-recording.png" alt="Recording: live waveform, transcript streaming in, freshest words kept visible"/>
@@ -74,10 +74,13 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
   mid-sentence switch from français to English survives intact ("can I
   switch to English" stays English, instead of becoming "peux-je changer en
   anglais"). No more random Cyrillic cameos when you mumble, either.
-- **Fast delivery, X11 and Wayland** — short takes are typed into the focused
-  window (X11 xdotool, modifier-safe); long ones are pasted (Ctrl+V, or
-  Ctrl+Shift+V in terminals). On Wayland (GNOME) everything is pasted via
-  ydotool (never typed — ydotool assumes a US keymap). The clipboard is
+- **Fast delivery, X11 and Wayland** — takes are pasted into the focused window
+  (Ctrl+V, or Ctrl+Shift+V in terminals): on X11 via xsel + xdotool, on Wayland
+  (GNOME) via wl-copy + ydotool. Never typed — `xdotool type` remaps the keymap
+  per off-layout character and storms gnome-shell into re-grabbing all its
+  bindings (a desktop freeze), and ydotool assumes a US keymap; paste sidesteps
+  both. Long/multi-line takes paste progressively so an editor keeps them
+  rereadable. The clipboard is
   always set as backup — and *Réglages* can **preserve and restore** it around
   a take (off by default), so a dictation doesn't clobber what you'd copied. It
   only ever restores genuine text: an image or file list on the clipboard is
@@ -139,7 +142,7 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
     ▼              └─────────────┘   partials: ~1 Hz greedy │ (GPU, persistent)   │
  waveform              │      │                            └─────────────────────┘
   bubble UI ◄──────────┘      ├─► punctuation → lexicon → repeat-collapse
-  (live transcript)           ├─► type/paste into focus (X11 xdotool · Wayland ydotool) + clipboard
+  (live transcript)           ├─► paste into focus (X11 xsel+xdotool · Wayland wl-copy+ydotool) + clipboard
                               └─► history + telemetry + usage events (SQLite)
 ```
 

@@ -1,9 +1,22 @@
-"""Deliver final text: type into the focused window, mirror to clipboard.
+"""Deliver final text: paste into the focused window, via the clipboard.
 
-On X11, xdotool types short ASCII and pastes the rest. On Wayland there is
-no xdotool: everything goes through the clipboard (wl-copy) and a Ctrl+V
-sent by ydotool's uinput keyboard. Typing is never attempted there —
-ydotool assumes a US keymap, so on an azerty layout `a` lands as `q`.
+On X11 EVERYTHING is pasted through the clipboard (xsel) + a single Ctrl+V
+(`xdotool key ctrl+v`) — never typed. `xdotool type` binds a scratch keycode
+per off-keymap character (é/à/ç/«»/— on a US or azerty layout) via
+XChangeKeyboardMapping, and each remap broadcasts MappingNotify to every
+client; gnome-shell answers by re-grabbing its ENTIRE keybinding table
+(the "Overwriting binding of keysym 31..39" workspace-grab storm), on its
+main loop — enough churn to jank or freeze the whole desktop. Measured under
+Xvfb: `xdotool type` of a 44-char accented take = 16 MappingNotify, even 32
+ASCII chars = 2; a clipboard paste = 0. So paste is the only injection path;
+it uses existing keycodes and is layout-blind. Typing survives only as a
+last-ditch fallback when no clipboard tool exists at all (lose-the-take is
+worse than a transient churn on such a box).
+
+On Wayland there is no xdotool: everything goes through the clipboard
+(wl-copy) and a Ctrl+V sent by ydotool's uinput keyboard. Typing is never
+attempted there — ydotool assumes a US keymap, so on an azerty layout `a`
+lands as `q`.
 
 Long or multi-line text is pasted PROGRESSIVELY — several small single-line
 pastes instead of one big one. Editors like Claude Code collapse a single
@@ -143,11 +156,24 @@ def activate_window(window_id: str) -> bool:
         return False
 
 
+# Running total of characters handed to injection, for the daemon heartbeat's
+# chars/s gauge (#10): correlating an injection burst with a gnome-shell stall
+# is exactly how tonight's freeze was pinned on us. Cheap monotonic counter; the
+# heartbeat diffs it against its own last read to get a rate.
+_injected_chars = 0
+
+
+def injected_chars_total() -> int:
+    return _injected_chars
+
+
 def deliver(
     text: str, target: "DeliveryTarget | str | None" = None, before_paste=None
 ) -> None:
     if not text:
         return
+    global _injected_chars
+    _injected_chars += len(text)
     # Back-compat: a bare wm_class string still works (older callers, tests).
     if isinstance(target, str):
         target = DeliveryTarget(wm_class=target)
@@ -571,10 +597,14 @@ def _type_into_focus(text: str, focus_class: str = "", before_paste=None) -> Non
             _wayland_paste(focus_class, before_paste)
         return
     subprocess.run(["xdotool", "keyup", *_MODIFIERS], check=False, timeout=5)
-    if _should_paste(text):
-        # Paste UNCONDITIONALLY — the clipboard holds the exact text, paste is
-        # the guarantee, never re-type (see _paste_into_focus). Long/multi-line
-        # text pastes progressively so it stays rereadable before you send.
+    # Paste, don't type. `xdotool type` remaps the keymap per off-keymap char and
+    # storms gnome-shell into re-grabbing all its bindings (see module docstring);
+    # even short ASCII fires a couple of MappingNotify. The clipboard already
+    # holds the exact text (deliver() set it first), and `xdotool key ctrl+v` uses
+    # only existing keycodes → zero keymap churn. So paste UNCONDITIONALLY —
+    # never re-type (see _paste_into_focus). Long/multi-line text pastes
+    # progressively so it stays rereadable before you send.
+    if shutil.which("xsel") is not None:
         if _should_chunk(text):
             wm_class, combo = _x11_focus_combo(focus_class)
             _paste_chunks(
@@ -587,6 +617,15 @@ def _type_into_focus(text: str, focus_class: str = "", before_paste=None) -> Non
         else:
             _paste_into_focus(focus_class)
         return
+    # No clipboard tool at all: degrade to typing rather than DROP the take (the
+    # "still works on my laptop" bar). Warn when the text would remap the keymap
+    # — a transient churn is the price of having no xsel to paste through; a lost
+    # take is worse. Install xsel to get the (churn-free) paste path back.
+    if _should_paste(text):
+        print(
+            "xsel absent — typing off-keymap/long text directly (may briefly "
+            "churn the keymap and jank the desktop). Install xsel to paste instead."
+        )
     # delay 10: at 2 ms, ibus/app input queues drop and reorder chars under
     # load ("l'application et" landed as "l'applicat ionet" while the history
     # DB held the correct text). The old "frozen keyboard" complaint that
@@ -722,6 +761,13 @@ def to_clipboard(text: str) -> None:
             print("wl-copy absent — installe wl-clipboard, sinon le collage échoue")
             return
         subprocess.run(["wl-copy"], input=text.encode(), check=True, timeout=10)
+        return
+    # X11: xsel owns the clipboard. Absent → don't raise (deliver() would abort a
+    # correctly-decoded take); warn and let _type_into_focus fall back to typing.
+    if shutil.which("xsel") is None:
+        print(
+            "xsel absent — installe xsel, sinon le presse-papiers et le collage échouent"
+        )
         return
     subprocess.run(
         ["xsel", "--clipboard", "--input"],

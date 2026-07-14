@@ -80,11 +80,15 @@ Your `xdotool` likely lacks `getwindowclassname` *and* `xprop` is missing, so th
 terminal isn't detected and gets a plain Ctrl+V (a no-op in a tty). Install
 `xprop` (`x11-utils`). Check `tuparles diag` shows `class=xprop`.
 
-**"The whole desktop freezes for ~30s on an accented take."**
-Non-ASCII typed on a US layout makes `xdotool` remap keycodes, storming every X
-client. TuParles routes such text through the clipboard to avoid this — if you
-still see it, make sure you're on a current build and that `xsel`/`wl-copy` is
-present (so paste, not typing, is used).
+**"The whole desktop freezes / janks on a take."**
+`xdotool type` remaps a keycode per off-layout character (é/à/ç/«»/— on a US or
+azerty layout) via XChangeKeyboardMapping; each remap broadcasts MappingNotify
+and gnome-shell re-grabs its ENTIRE keybinding table in response — enough churn
+to freeze the desktop. TuParles never types on X11: ALL text is pasted through
+the clipboard (`xsel` + a single `xdotool key ctrl+v`, which touches the keymap
+zero times). If you still see churn, make sure `xsel` (X11) / `wl-copy` (Wayland)
+is installed — without a clipboard tool the last-ditch fallback is to type, the
+only path that can still remap the keymap.
 
 **"A queued take pasted into the wrong window."**
 Origin-window refocus is X11-only (`xdotool windowactivate`). On Wayland it's not
