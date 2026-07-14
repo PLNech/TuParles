@@ -22,6 +22,11 @@ Two things this module does own:
 import numpy as np
 
 from tuparles.config import (
+    COMPRESS_FRAME_MS,
+    COMPRESS_MAX_MAKEUP,
+    COMPRESS_RATIO,
+    COMPRESS_RELEASE_FRAMES,
+    COMPRESS_THRESHOLD_DB,
     NORMALIZE_MAX_GAIN,
     NORMALIZE_SILENCE_FLOOR,
     NORMALIZE_TARGET_PEAK,
@@ -72,6 +77,70 @@ def to_int16(pcm: np.ndarray) -> np.ndarray:
     """Normalized float32 [-1, 1] → int16 PCM (the WAV the qwen C binary reads).
     Clipped so a stray out-of-range sample can't wrap around into loud garbage."""
     return (np.clip(pcm, -1.0, 1.0) * 32767.0).astype(np.int16)
+
+
+# --- speech compressor (the quiet-take rescue chain) -------------------------
+
+
+def _compress_f32(f: np.ndarray, sample_rate: int) -> np.ndarray:
+    """Frame-wise downward compressor + peak makeup on float32 [-1, 1].
+
+    Why: peak normalization is transient-blind — one keyboard clack (the
+    push-to-talk tap is in-band in every take) pins the peak-driven gain and
+    quiet speech stays ~40 dB down, which collapses the batched final decode
+    (2026-07-15 quiet-take lab: recall 0.16 on the worst consented take).
+    Squashing everything above COMPRESS_THRESHOLD_DB by COMPRESS_RATIO first
+    means the single peak makeup that follows reaches the *speech*, not the
+    click. Dependency-free equivalent of the ffmpeg chain that won the lab A/B
+    (acompressor threshold=-35dB:ratio=6:release=120ms + limiter → recall 0.98
+    vs 0.58 unrescued, n=3 consented takes).
+    """
+    frame = max(1, int(sample_rate * COMPRESS_FRAME_MS / 1000))
+    n_frames = -(-f.size // frame)  # ceil: the ragged tail is its own frame
+    padded = np.zeros(n_frames * frame, dtype=np.float32)
+    padded[: f.size] = f
+    rms = np.sqrt((padded.reshape(n_frames, frame) ** 2).mean(axis=1))
+    # Peak-hold envelope with a one-pole release (~120 ms): attack is instant at
+    # frame granularity, decay is gradual so gain doesn't pump between syllables.
+    release = float(np.exp(-1.0 / COMPRESS_RELEASE_FRAMES))
+    env = np.empty(n_frames, dtype=np.float32)
+    e = 0.0
+    for i in range(n_frames):
+        e = max(float(rms[i]), e * release)
+        env[i] = e
+    env_db = 20.0 * np.log10(np.maximum(env, 1e-9))
+    # Above the threshold, keep 1/ratio of the overshoot (classic downward knee).
+    over = np.maximum(env_db - COMPRESS_THRESHOLD_DB, 0.0)
+    gain_db = -over * (1.0 - 1.0 / COMPRESS_RATIO)
+    gain = np.repeat((10.0 ** (gain_db / 20.0)).astype(np.float32), frame)[: f.size]
+    out = f * gain
+    # Single peak makeup to target, capped so a near-silent take can't be blown
+    # up into pure hiss; NORMALIZE_SILENCE_FLOOR leaves true silence untouched.
+    peak = float(np.abs(out).max())
+    if peak < NORMALIZE_SILENCE_FLOOR:
+        return out
+    makeup = min(NORMALIZE_TARGET_PEAK / peak, 10.0 ** (COMPRESS_MAX_MAKEUP / 20.0))
+    return (out * np.float32(makeup)).astype(np.float32)
+
+
+def compress_speech(pcm: np.ndarray, sample_rate: int = SAMPLE_RATE) -> np.ndarray:
+    """Transient-proof level conditioning for a whole take (see _compress_f32).
+
+    int16 in → int16 out (float32 passes straight through as float32), so the
+    daemon can hand the result to any engine exactly like the original buffer.
+    Never raises — any failure returns the input unchanged (a failed rescue
+    must not cost the take that triggered it)."""
+    try:
+        if pcm.size == 0:
+            return pcm
+        f = _to_float32(pcm)
+        f = (f - np.float32(f.mean())).astype(np.float32)  # DC offset
+        out = _compress_f32(f, sample_rate)
+        if pcm.dtype == np.float32:
+            return out
+        return to_int16(out)
+    except Exception:
+        return pcm
 
 
 # --- silence trim ----------------------------------------------------------

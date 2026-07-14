@@ -31,6 +31,20 @@ TRIM_RMS_TOP_DB = 30.0  # RMS-fallback silence gate: a frame quieter than the pe
 # studio floor); 30 is tighter, tuned for a live mic's ambient noise floor.
 TRIM_RMS_FRAME_MS = 30  # RMS-fallback analysis frame (~silero's 32 ms grain)
 
+# Speech compressor (preprocess.compress_speech): the quiet-take rescue chain.
+# A loud transient (keyboard clack — the push-to-talk tap is in-band in every
+# take) pins the peak-driven normalization gain, leaving quiet speech ~40 dB
+# down, and the batched final decode collapses on it (2026-07-15 lab: recall
+# 0.16 on the worst consented take). Downward compression squashes the
+# transient toward the speech level so the makeup gain that follows actually
+# reaches the speech. Values = the ffmpeg chain that won the lab A/B
+# (acompressor threshold=-35dB:ratio=6:release=120ms + limiter, recall 0.98).
+COMPRESS_THRESHOLD_DB = -35.0  # envelope above this gets compressed
+COMPRESS_RATIO = 6.0  # dB above threshold are divided by this
+COMPRESS_FRAME_MS = 10  # gain granularity (≈ acompressor's 5 ms attack)
+COMPRESS_RELEASE_FRAMES = 12  # one-pole envelope release ≈ 120 ms
+COMPRESS_MAX_MAKEUP = 60.0  # dB cap on the final peak makeup (hiss guard)
+
 # Waveform amplitude mapping (audio.py): mic RMS (int16, ±32768) → the bubble's
 # 0..1 bar height. We subtract a light noise gate, scale to a speech-typical
 # peak, then apply a perceptual gamma (<1) so even soft speech lifts into a

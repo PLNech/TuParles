@@ -1,5 +1,34 @@
 # Changelog
 
+## Sprint 33 — 2026-07-15 · Rattraper les prises parlées trop bas
+
+A quiet, muffled take lost large chunks in the FINAL transcript that the live
+partials had visibly caught (take #287, 11.7s → 13 words at 66 wpm, half the
+usual rate). Offline lab on 3 consented takes reproduced it: plain quiet is
+fine (recall ≥0.88 at −24 dB — `prepare_pcm` + Whisper absorb it), but quiet
+speech PLUS one loud in-band transient (the push-to-talk clack) pins the
+peak-driven normalization gain, and the batched final decode collapses
+(recall 0.16 worst-case) while the partials' window-local normalization
+sails through (0.92). The fix pair: detect the collapse on the spot and
+re-decode a compressed copy; condition the level transient-proof.
+
+### Added
+- **Quiet-take rescue second pass** (`daemon._rescue_quiet`) — the last
+  painted partial already rides in the take; when the final lands under 60%
+  of its words (`RESCUE_PARTIAL_RATIO`, min 5 partial words), re-decode a
+  speech-compressed copy and keep the richer result. Lab A/B (n=3 consented
+  takes, synthetic degradation): recall 0.58 → 0.98. Fires rarely by
+  construction, costs one extra decode only then, never makes a take worse
+  (richer text wins; any failure keeps the original; telemetry
+  `rescue.fired`). Réglages toggle *« Rattraper les prises parlées trop
+  bas »*, default on. Journal line: `rescue: final 5w < partial 18w,
+  re-decoded → 17w (adopted, 0.62s)`.
+- **`preprocess.compress_speech`** — dependency-free frame-wise downward
+  compressor + capped peak makeup (10 ms frames, −35 dB knee, 6:1, ~120 ms
+  release), the numpy equivalent of the ffmpeg chain that won the rescue
+  ladder (`acompressor` + limiter). int16 or float32 in → same dtype out;
+  never raises (any failure returns the input).
+
 ## Sprint 32 — 2026-07-15 · Ne plus jamais retoucher le clavier (X11)
 
 A gnome-shell wedge got traced back to us: the minute a dictation daemon came
