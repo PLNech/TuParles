@@ -51,7 +51,14 @@ from tuparles.delivery import (
 )
 from tuparles.engine import carryover_context, load_engine
 from tuparles.pipeline import postprocess, preview
-from tuparles.preprocess import trim_silence
+from tuparles.preprocess import compress_speech, trim_silence
+
+# Quiet-take rescue (see Controller._rescue_quiet): a final decode carrying
+# fewer than RESCUE_PARTIAL_RATIO of the last partial's words is suspect —
+# the partials saw content the final lost. Below RESCUE_MIN_PARTIAL_WORDS the
+# ratio is noise (a 3-word take), so the rescue never arms.
+RESCUE_PARTIAL_RATIO = 0.6
+RESCUE_MIN_PARTIAL_WORDS = 5
 
 
 @dataclass
@@ -397,6 +404,62 @@ class Controller(QObject):
                 return
         deliver(text, target)
 
+    def _rescue_quiet(self, take: _QueuedTake, text: str, result, context):
+        """Rescue second pass for quiet takes (2026-07-15 forensics).
+
+        The failure signature: the user spoke quietly, the live partials caught
+        the content (window-local normalization + sequential decode are
+        resilient), but the FINAL decode lost large chunks — a loud transient
+        (the push-to-talk clack) pinned the peak-driven normalization gain and
+        the batched pipeline collapsed on the still-quiet speech. The last
+        painted partial rides in the take (`take.partial`, recovery forensics),
+        so a final that lands far below it is detectable on the spot: re-decode
+        a speech-compressed copy (the lab's winning chain: recall 0.58 → 0.98,
+        n=3 consented takes) and keep whichever result carries more words.
+
+        Fires rarely by construction (partial ≥ RESCUE_MIN_PARTIAL_WORDS words
+        AND final < RESCUE_PARTIAL_RATIO of it), costs one extra decode only
+        then, and never makes a take worse: the richer text wins, and any
+        failure keeps the original. It's a setting (`quiet_rescue`, default on).
+        """
+        if not settings.get("quiet_rescue"):
+            return text, result
+        final_words = len(text.split())
+        partial_words = len(take.partial.split())
+        if (
+            partial_words < RESCUE_MIN_PARTIAL_WORDS
+            or final_words >= partial_words * RESCUE_PARTIAL_RATIO
+        ):
+            return text, result
+        try:
+            conditioned = compress_speech(take.audio)
+            with self._engine_lock:
+                t0 = time.monotonic()
+                result2 = self._engine.transcribe(conditioned, context)
+                redecode_s = time.monotonic() - t0
+            # on_syntax_fire stays None: the first pass already counted this
+            # take's syntax telemetry; a rescue must not double-count it.
+            text2 = postprocess(result2.text)
+            rescued_words = len(text2.split())
+            verdict = "adopted" if rescued_words > final_words else "kept original"
+            print(
+                f"rescue: final {final_words}w < partial {partial_words}w, "
+                f"re-decoded → {rescued_words}w ({verdict}, {redecode_s:.2f}s)"
+            )
+            telemetry.event(
+                "rescue.fired",
+                seq=take.seq,
+                adopted=rescued_words > final_words,
+                final_words=final_words,
+                partial_words=partial_words,
+                rescued_words=rescued_words,
+            )
+            if rescued_words > final_words:
+                return text2, result2
+        except Exception as exc:  # a failed rescue must never cost the take
+            print(f"rescue failed ({str(exc)[:80]}); keeping original")
+        return text, result
+
     def _finish(self, take: _QueuedTake) -> None:
         audio, stop_s = take.audio, take.stop_s
         try:
@@ -425,6 +488,10 @@ class Controller(QObject):
                 on_syntax_fire=lambda name: telemetry.event("syntax.used", name=name),
             )
             post_s = time.monotonic() - t_post
+            # Quiet-take rescue: when the final lands far below what the live
+            # partials already showed, re-decode a speech-compressed copy and
+            # keep the richer result (see _rescue_quiet).
+            text, result = self._rescue_quiet(take, text, result, context)
             # Command layer: a take is EITHER an edit command or text, never
             # both. A literal-escape ('dis "efface"') unwraps back to text.
             cmd = parse_command(text)

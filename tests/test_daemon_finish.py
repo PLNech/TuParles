@@ -350,3 +350,132 @@ def test_deliver_wayland_uses_bubble_hide_not_refocus(monkeypatch):
     c._deliver("salut", DeliveryTarget(wm_class="code", window_id="orig-1"))
     assert calls["activated"] == []
     assert calls["delivered"] == [("salut", DeliveryTarget("code", "orig-1"))]
+
+
+# ── quiet-take rescue second pass (2026-07-15) ───────────────────────────────
+
+
+class _RescueEngine:
+    """First transcribe = the collapsed final; second = the conditioned rescue."""
+
+    def __init__(
+        self,
+        first="deux mots",
+        second="une phrase bien plus riche que la toute première passe",
+    ):
+        self.first, self.second = first, second
+        self.calls = []
+
+    def transcribe(self, audio, context=None):
+        self.calls.append(audio)
+        text = self.first if len(self.calls) == 1 else self.second
+        return Transcription(text, language="fr", language_prob=1.0)
+
+
+def _rescue_controller(monkeypatch, engine, *, enabled=True, compressed=None):
+    settings_map = {"quiet_rescue": enabled}
+    monkeypatch.setattr(daemon_mod.settings, "get", lambda k: settings_map.get(k))
+    monkeypatch.setattr(daemon_mod, "postprocess", lambda text, **k: text)
+    monkeypatch.setattr(
+        daemon_mod,
+        "compress_speech",
+        lambda a: (compressed if compressed is not None else a),
+    )
+    return _controller(engine, _Recorder(recording=False), _Bridge())
+
+
+PARTIAL_8W = "un aperçu qui avait bien huit mots entiers"
+
+
+def test_rescue_fires_and_adopts_richer_redecode(monkeypatch):
+    """Final ≪ partial → re-decode the compressed copy, keep the richer text."""
+    eng = _RescueEngine()
+    marker = np.full(16, 7, dtype=np.int16)  # proves the CONDITIONED copy decoded
+    c = _rescue_controller(monkeypatch, eng, compressed=marker)
+    take = _take(partial=PARTIAL_8W)
+    r1 = eng.transcribe(take.audio)  # the "final" pass
+    text, result = c._rescue_quiet(take, r1.text, r1, None)
+    assert text == eng.second  # adopted
+    assert result.text == eng.second
+    assert len(eng.calls) == 2 and eng.calls[1] is marker
+
+
+def test_rescue_keeps_original_when_redecode_not_richer(monkeypatch):
+    eng = _RescueEngine(second="toujours pauvre")
+    c = _rescue_controller(monkeypatch, eng)
+    take = _take(partial=PARTIAL_8W)
+    r1 = eng.transcribe(take.audio)
+    text, result = c._rescue_quiet(take, r1.text, r1, None)
+    assert text == eng.first and result is r1  # never made worse
+    assert len(eng.calls) == 2
+
+
+def test_rescue_silent_when_final_healthy(monkeypatch):
+    """A final carrying ≥ the ratio of the partial's words must not re-decode."""
+    eng = _RescueEngine(first="cinq mots sur huit déjà là")
+    c = _rescue_controller(monkeypatch, eng)
+    take = _take(partial=PARTIAL_8W)
+    r1 = eng.transcribe(take.audio)
+    text, _ = c._rescue_quiet(take, r1.text, r1, None)
+    assert text == eng.first
+    assert len(eng.calls) == 1  # no second decode
+
+
+def test_rescue_silent_below_min_partial_words(monkeypatch):
+    """A 3-word partial is noise for the ratio — the rescue never arms."""
+    eng = _RescueEngine()
+    c = _rescue_controller(monkeypatch, eng)
+    take = _take(partial="trois petits mots")
+    r1 = eng.transcribe(take.audio)
+    text, _ = c._rescue_quiet(take, r1.text, r1, None)
+    assert text == eng.first and len(eng.calls) == 1
+
+
+def test_rescue_respects_setting_off(monkeypatch):
+    eng = _RescueEngine()
+    c = _rescue_controller(monkeypatch, eng, enabled=False)
+    take = _take(partial=PARTIAL_8W)
+    r1 = eng.transcribe(take.audio)
+    text, _ = c._rescue_quiet(take, r1.text, r1, None)
+    assert text == eng.first and len(eng.calls) == 1
+
+
+def test_rescue_failure_keeps_original(monkeypatch):
+    """A crash inside the rescue must never cost the take (contract)."""
+
+    class _Boom(_RescueEngine):
+        def transcribe(self, audio, context=None):
+            self.calls.append(audio)
+            if len(self.calls) > 1:
+                raise RuntimeError("CUDA sneezed")
+            return Transcription(self.first, language="fr", language_prob=1.0)
+
+    eng = _Boom()
+    c = _rescue_controller(monkeypatch, eng)
+    take = _take(partial=PARTIAL_8W)
+    r1 = eng.transcribe(take.audio)
+    text, result = c._rescue_quiet(take, r1.text, r1, None)
+    assert text == eng.first and result is r1
+
+
+def test_finish_delivers_rescued_text(monkeypatch):
+    """End-to-end through _finish: the rescued text is what gets delivered."""
+    eng = _RescueEngine()
+    delivered = []
+    real_get = daemon_mod.settings.get  # keep real defaults for the other knobs
+    monkeypatch.setattr(
+        daemon_mod.settings,
+        "get",
+        lambda k: True if k == "quiet_rescue" else real_get(k),
+    )
+    monkeypatch.setattr(daemon_mod, "postprocess", lambda text, **k: text)
+    monkeypatch.setattr(daemon_mod, "compress_speech", lambda a: a)
+    monkeypatch.setattr(daemon_mod.history, "record", lambda *a, **k: None)
+    monkeypatch.setattr(daemon_mod.takes, "save_take", lambda *a, **k: None)
+    bridge = _Bridge()
+    c = _controller(eng, _Recorder(recording=False), bridge)
+    monkeypatch.setattr(c, "_deliver", lambda text, target: delivered.append(text))
+    c._pending = 1
+    c._finish(_take(partial=PARTIAL_8W, seq=3))
+    assert delivered == [eng.second]  # the rescue's text landed
+    assert bridge.final.emits == [(eng.second,)]

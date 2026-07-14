@@ -6,7 +6,13 @@ from tuparles.config import (
     NORMALIZE_TARGET_PEAK,
     SAMPLE_RATE,
 )
-from tuparles.preprocess import normalize_audio, prepare_pcm, to_int16, trim_silence
+from tuparles.preprocess import (
+    compress_speech,
+    normalize_audio,
+    prepare_pcm,
+    to_int16,
+    trim_silence,
+)
 
 
 def _tone(seconds: float, amp: int = 8000, freq: float = 440.0) -> np.ndarray:
@@ -182,3 +188,59 @@ class TestTrimSilence:
         out = pp.trim_silence(buf)
         assert out.size < buf.size  # RMS fallback still trimmed the tail
         assert pp._silero_unavailable is True  # switched to RMS permanently
+
+
+class TestCompressSpeech:
+    """Transient-proof conditioning (the quiet-take rescue chain, 2026-07-15).
+    The scenario it exists for: quiet speech + one loud transient (the
+    push-to-talk clack) — peak normalization is pinned by the click, the
+    compressor squashes it so the makeup gain reaches the speech."""
+
+    def _quiet_take_with_click(self):
+        # Speech-stand-in tone at ~-40 dBFS + one near-full-scale 15 ms click.
+        speech = _tone(2.0, amp=300)
+        click = (np.random.RandomState(1).randn(240) * 28000).astype(np.int16)
+        return np.concatenate([speech[:16000], click, speech[16000:]])
+
+    def test_empty_in_empty_out(self):
+        assert compress_speech(np.zeros(0, dtype=np.int16)).size == 0
+
+    def test_dtype_preserved(self):
+        assert compress_speech(_tone(1.0)).dtype == np.int16
+        f = (np.sin(np.linspace(0, 50, 16000)) * 0.1).astype(np.float32)
+        assert compress_speech(f).dtype == np.float32
+
+    def test_never_clips(self):
+        out = compress_speech(self._quiet_take_with_click())
+        assert int(np.abs(out.astype(np.int32)).max()) <= 32767
+
+    def test_speech_lifted_despite_transient(self):
+        # The whole point: with the click in-band, plain peak normalization
+        # leaves the speech untouched (the click IS the peak); the compressor
+        # must still lift the speech by a real margin.
+        buf = self._quiet_take_with_click()
+        out = compress_speech(buf)
+        speech_in = np.sqrt((buf[:16000].astype(np.float64) ** 2).mean())
+        speech_out = np.sqrt((out[:16000].astype(np.float64) ** 2).mean())
+        gain_db = 20 * np.log10(speech_out / speech_in)
+        assert gain_db > 15  # peak-norm would have given ~0 dB here
+
+    def test_transient_to_speech_ratio_shrinks(self):
+        buf = self._quiet_take_with_click()
+        out = compress_speech(buf)
+
+        def ratio(a):
+            speech = np.sqrt((a[:16000].astype(np.float64) ** 2).mean())
+            click = np.abs(a[16000:16240].astype(np.float64)).max()
+            return click / max(speech, 1e-9)
+
+        assert ratio(out) < ratio(buf) / 3  # click squashed toward the speech
+
+    def test_silence_not_blown_into_hiss(self):
+        out = compress_speech(_silence(2.0))
+        assert int(np.abs(out.astype(np.int32)).max()) == 0
+
+    def test_never_raises_returns_input_on_garbage(self):
+        # Contract: any internal failure returns the input unchanged.
+        weird = np.zeros(3, dtype=np.int16)
+        assert compress_speech(weird, sample_rate=0).size == 3

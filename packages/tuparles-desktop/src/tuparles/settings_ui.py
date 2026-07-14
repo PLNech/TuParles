@@ -179,6 +179,17 @@ class SettingsDialog(QDialog):
         self._trim_silence.setChecked(bool(settings.get("trim_silence")))
         layout.addWidget(self._trim_silence)
 
+        self._quiet_rescue = QCheckBox("Rattraper les prises parlées trop bas")
+        self._quiet_rescue.setToolTip(
+            "Quand la transcription finale perd des morceaux que l'aperçu en "
+            "direct avait pourtant captés (voix basse + un clac de clavier qui "
+            "fausse la normalisation), redécode automatiquement une copie au "
+            "niveau corrigé et garde le résultat le plus complet. Se déclenche "
+            "rarement, ne rend jamais une prise pire."
+        )
+        self._quiet_rescue.setChecked(bool(settings.get("quiet_rescue")))
+        layout.addWidget(self._quiet_rescue)
+
         self._clipboard_restore = QCheckBox("Préserver le presse-papiers")
         self._clipboard_restore.setToolTip(
             "TuParles colle via le presse-papiers, ce qui écrase ce que tu avais "
@@ -405,6 +416,7 @@ class SettingsDialog(QDialog):
         settings.put("cpu_partials_enabled", self._cpu_partials.isChecked())
         settings.put("backend_toast", self._backend_toast.isChecked())
         settings.put("trim_silence", self._trim_silence.isChecked())
+        settings.put("quiet_rescue", self._quiet_rescue.isChecked())
         settings.put("clipboard_restore", self._clipboard_restore.isChecked())
         settings.put("bubble_screen", self._screen.currentData())
         settings.put("bubble_max_width", self._ribbon_width.value() / 100)

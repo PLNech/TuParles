@@ -170,6 +170,15 @@ _DEFAULTS: dict[str, object] = {
     # the untrimmed buffer at the first doubt (result <0.5 s, or >95% removed).
     # It's a setting: smart default on, total override.
     "trim_silence": True,
+    # Quiet-take rescue second pass (2026-07-15 forensics). Failure signature:
+    # spoken quietly + a loud in-band transient (the push-to-talk clack) pins
+    # the peak-driven normalization gain, and the batched FINAL decode loses
+    # chunks the live partials had already shown. When the final lands far
+    # below the last partial (<60% of its words), re-decode a speech-compressed
+    # copy (lab A/B on 3 consented takes: recall 0.58 → 0.98) and keep the
+    # richer result. Fires rarely, costs one extra decode only then, and never
+    # makes a take worse. It's a setting: smart default on, total override.
+    "quiet_rescue": True,
     # Preserve and restore the user's clipboard around a take (#28). TuParles
     # pastes via the clipboard, which clobbers whatever you had copied. With this
     # on, we snapshot the clipboard before delivery and put it back after the paste
