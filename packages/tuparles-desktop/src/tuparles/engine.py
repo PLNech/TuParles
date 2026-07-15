@@ -32,7 +32,7 @@ from tuparles.config import (
     WHISPERCPP_MODEL,
     WHISPERCPP_THREADS,
 )
-from tuparles.partials import sanitize_partial
+from tuparles.partials import StickyLanguage, pick_language, sanitize_partial
 from tuparles.preprocess import prepare_pcm, to_int16
 from tuparles.transcription import (  # result types + Protocol now live in core
     Transcription,
@@ -52,6 +52,28 @@ TUNED_VAD_PARAMETERS = {
     "speech_pad_ms": 200,
     "max_speech_duration_s": 30,
 }
+
+
+def _sticky_window_language(model, tracker, pcm):
+    """One window's language for the PARTIAL path: detect once (restricted to
+    the user's selected languages via `pick_language`), feed the hysteresis
+    tracker, return (language_to_condition_on, detection_prob).
+
+    Why not per-segment detection (`multilingual=True`) like the final: on a
+    short/noisy partial window the detector mis-picks, and Whisper conditioned
+    on the wrong language token TRANSLATES — same meaning, different words
+    (translated-subtitles training data). One flaky window turned the preview
+    into a translator (live report 2026-07-15). Cost: one extra encoder pass
+    per partial (detect + decode) — small next to the decode itself. A failed
+    detection keeps whatever the tracker already holds (never crashes a
+    partial). The FINAL decode is untouched: per-segment code-switch there is
+    the app's raison d'être."""
+    try:
+        _, _, all_probs = model.detect_language(pcm)
+    except Exception:
+        return tracker.language, None
+    lang, prob = pick_language(all_probs, settings.get("languages") or [])
+    return tracker.update(lang, prob), prob
 
 
 def decode_language_opts(selected: list[str]) -> tuple[str | None, bool]:
@@ -143,6 +165,12 @@ class GpuEngine:
         # the difference between ~linear-in-length and ~seconds (the "1 min
         # frozen after a long dictation" bug); on short takes it's a no-op.
         self._batched = BatchedInferencePipeline(model=self._model)
+        # Sticky per-take language for the partial path (translation-flip guard).
+        self._partial_lang = StickyLanguage()
+
+    def reset_partial_language(self) -> None:
+        """Called by the daemon at take start: each take detects fresh."""
+        self._partial_lang.reset()
 
     def transcribe(
         self, audio: np.ndarray, context: str | None = None
@@ -196,7 +224,13 @@ class GpuEngine:
         if audio.size == 0:
             return ""
         pcm = prepare_pcm(audio)
-        language, multilingual = self._decode_language_opts()
+        language, _multilingual = self._decode_language_opts()
+        if language is None:
+            # 0 or 2+ selected languages: NEVER per-segment detection here —
+            # one mis-picked window flips the preview into translator mode.
+            # Sticky + hysteresis instead; None until a confident detection
+            # (in-decode detection then, no wrong-token bias).
+            language, _ = _sticky_window_language(self._model, self._partial_lang, pcm)
         segments, _ = self._model.transcribe(
             pcm,
             beam_size=1,
@@ -205,7 +239,7 @@ class GpuEngine:
             condition_on_previous_text=False,
             without_timestamps=True,
             language=language,
-            multilingual=multilingual,
+            multilingual=False,
         )
         return sanitize_partial(segments)
 
@@ -240,12 +274,24 @@ class CpuPartialsEngine:
         # qwen's, so a signal not ground truth; the final engine reads it (#10).
         self.last_language: str | None = None
         self.last_language_prob: float | None = None
+        # Sticky per-take language for the partial path (translation-flip guard).
+        self._partial_lang = StickyLanguage()
+
+    def reset_partial_language(self) -> None:
+        self._partial_lang.reset()
 
     def transcribe_partial(self, audio: np.ndarray) -> str:
         if audio.size == 0:
             return ""
         pcm = prepare_pcm(audio)
-        language, multilingual = decode_language_opts(settings.get("languages") or [])
+        language, _multilingual = decode_language_opts(settings.get("languages") or [])
+        prob: float | None = None
+        if language is None:
+            # Same translation-flip guard as the GPU partial path (see
+            # _sticky_window_language) — the small model mis-picks even more.
+            language, prob = _sticky_window_language(
+                self._model, self._partial_lang, pcm
+            )
         segments, info = self._model.transcribe(
             pcm,
             beam_size=1,
@@ -254,10 +300,15 @@ class CpuPartialsEngine:
             condition_on_previous_text=False,
             without_timestamps=True,
             language=language,
-            multilingual=multilingual,
+            multilingual=False,
         )
-        self.last_language = getattr(info, "language", None)
-        self.last_language_prob = getattr(info, "language_probability", None)
+        if language is not None:
+            # Conditioned decode: info.language just echoes the token — keep
+            # the sticky language + the DETECTION's own confidence instead.
+            self.last_language, self.last_language_prob = language, prob
+        else:
+            self.last_language = getattr(info, "language", None)
+            self.last_language_prob = getattr(info, "language_probability", None)
         return sanitize_partial(segments)
 
 
@@ -295,6 +346,12 @@ class _CpuPartialsMixin:
         detection tracks the *current* language instead of a French-dominant past
         (#3 follow-up). Hot-reloaded — retune without a restart."""
         return int(settings.get("cpu_partials_window_s") or PARTIAL_WINDOW_S)
+
+    def reset_partial_language(self) -> None:
+        # Best-effort: the small model builds lazily; before it exists there
+        # is no sticky state to clear.
+        if self._partials is not None:
+            self._partials.reset_partial_language()
 
     def transcribe_partial(self, audio: np.ndarray) -> str:
         if self._partials_failed or not settings.get("cpu_partials_enabled"):
@@ -543,6 +600,17 @@ class ResilientEngine:
                     print(f"GPU still failing ({str(exc2)[:120]}); CPU fallback")
             self._on_cpu = True
             return self._cpu_engine().transcribe(audio, context)
+
+    def reset_partial_language(self) -> None:
+        # Follow the live backend, like transcribe_partial. Best-effort: a
+        # missing hook (or a dead GPU) just means no sticky state to clear.
+        try:
+            target = self._cpu_engine() if self._on_cpu else self._gpu
+            reset = getattr(target, "reset_partial_language", None)
+            if callable(reset):
+                reset()
+        except Exception:
+            pass
 
     def transcribe_partial(self, audio: np.ndarray) -> str:
         # Partials are frequent and best-effort: never rebuild on one (it would

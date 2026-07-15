@@ -13,6 +13,30 @@ sails through (0.92). The fix pair: detect the collapse on the spot and
 re-decode a compressed copy; condition the level transient-proof.
 
 ### Added
+- **Sticky partial language — the translation-flip guard** (live report
+  2026-07-15). With 2+ selected languages the partial path let faster-whisper
+  re-detect the language per segment, and ONE short/noisy window mis-picking
+  flips Whisper into genuine TRANSLATION — same meaning, different words
+  (translated-subtitles training data). Partials now detect once per window,
+  **restricted to the user's selected languages** (`pick_language` over
+  `detect_language`'s full probability list, raw probabilities — ambiguity is
+  never renormalized into fake certainty), and condition the decode on a
+  **sticky language with hysteresis** (`partials.StickyLanguage`): switching
+  needs `PARTIAL_LANG_STABLE_WINDOWS` (2) consecutive detections above
+  `PARTIAL_LANG_CONFIDENCE` (0.6) — a deliberate mid-take switch still lands
+  in ~a sentence, a single flaky window no longer turns translator. First
+  window of a take: a confident detection locks immediately; below the floor
+  the decode runs unconditioned (`language=None`) rather than biased by a
+  low-confidence token. State resets per take (daemon calls
+  `reset_partial_language` at take start; forwarded through ResilientEngine
+  and the CPU-partials mixin). **The FINAL decode is untouched** — per-segment
+  code-switching there is the app's raison d'être. Gate: the 72-case
+  code-switch eval old-vs-new = identical failing-case sets (22/72 passed both
+  sides); partials sanity on 3 consented takes through the real GPU partial
+  path (see the build note). Named constants, no toggle: partials are a
+  provisional preview, the final is unaffected, and language selection already
+  provides the total override (forcing one language bypasses detection
+  entirely). Cost: one extra encoder pass per partial (detect + decode).
 - **Partials persist in the history DB** — the live preview proved to be the
   best witness of what was actually said (the whole quiet-take diagnosis
   hinged on final-vs-partial), yet it evaporated with the take. Two additive

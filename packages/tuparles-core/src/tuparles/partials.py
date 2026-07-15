@@ -23,6 +23,8 @@ defensively so a plain test namedtuple works too.
 from tuparles.config_core import (
     PARTIAL_AVG_LOGPROB_MIN,
     PARTIAL_COMPRESSION_MAX,
+    PARTIAL_LANG_CONFIDENCE,
+    PARTIAL_LANG_STABLE_WINDOWS,
     PARTIAL_NO_SPEECH_MAX,
 )
 
@@ -98,3 +100,88 @@ def sanitize_partial(segments) -> str:
     Survivors are joined as-is: we suppress whole segments, never edit words.
     """
     return " ".join(seg.text.strip() for seg in segments if _keep(seg)).strip()
+
+
+# --- sticky partial language (2026-07-15) ------------------------------------
+# With 2+ selected languages the partial path let faster-whisper re-detect the
+# language per segment, and ONE short/noisy window mis-picking flips Whisper
+# into genuine TRANSLATION — same meaning, different words (the model saw a lot
+# of translated subtitles). The tracker below makes the per-window language
+# sticky with hysteresis: switch only on PARTIAL_LANG_STABLE_WINDOWS
+# consecutive confident (≥ PARTIAL_LANG_CONFIDENCE) detections of the same
+# other language. Deliberate mid-take switches still land (two windows ≈ one
+# spoken sentence); a single flaky window no longer turns translator. Pure and
+# engine-agnostic, like sanitize_partial: the GPU and CPU partial paths share
+# one contract, and the logic is testable with no model. The FINAL decode is
+# untouched — per-segment code-switching there is the app's raison d'être.
+
+
+def pick_language(
+    all_probs: "list[tuple[str, float]] | None", allowed: "list[str]"
+) -> "tuple[str | None, float]":
+    """The most probable language RESTRICTED to the user's selection.
+
+    `all_probs` is faster-whisper's `detect_language` third return (every
+    language with its probability). With a non-empty `allowed`, only those
+    candidates compete — the user said "I speak en+fr", so a spurious 0.4 "nl"
+    can never win. Probabilities are NOT renormalized: the confidence gate
+    reads the raw mass so a window that is genuinely ambiguous (0.3 en / 0.3
+    fr) stays below the floor instead of being inflated to a fake certainty.
+    Empty/None input → (None, 0.0)."""
+    if not all_probs:
+        return None, 0.0
+    pool = [(lang, p) for lang, p in all_probs if lang in allowed] if allowed else None
+    if not pool:  # no restriction, or nothing of the selection detected at all
+        pool = list(all_probs)
+    lang, prob = max(pool, key=lambda lp: lp[1])
+    return lang, float(prob)
+
+
+class StickyLanguage:
+    """Per-take language tracker with hysteresis for the partial path.
+
+    update() feeds one window's (detected, prob) and returns the language to
+    CONDITION the window's decode on — or None while nothing confident has
+    been seen yet (the caller then passes language=None: in-decode detection,
+    no wrong-token bias). First confident window locks immediately (nothing to
+    be sticky from); after that a switch needs `stable` CONSECUTIVE confident
+    windows of the same other language — an unconfident window breaks the
+    streak. reset() at take start: each take detects fresh."""
+
+    def __init__(
+        self,
+        confidence: float = PARTIAL_LANG_CONFIDENCE,
+        stable: int = PARTIAL_LANG_STABLE_WINDOWS,
+    ) -> None:
+        self._confidence = confidence
+        self._stable = stable
+        self.reset()
+
+    def reset(self) -> None:
+        self._lang: str | None = None
+        self._candidate: str | None = None
+        self._streak = 0
+
+    @property
+    def language(self) -> "str | None":
+        return self._lang
+
+    def update(self, detected: "str | None", prob: "float | None") -> "str | None":
+        if detected is None or prob is None or prob < self._confidence:
+            # Unconfident window: no switch progress (consecutive means
+            # consecutive), and never lock onto a low-confidence token.
+            self._candidate, self._streak = None, 0
+            return self._lang
+        if self._lang is None:  # first confident window of the take
+            self._lang = detected
+            return self._lang
+        if detected == self._lang:
+            self._candidate, self._streak = None, 0
+            return self._lang
+        if detected == self._candidate:
+            self._streak += 1
+        else:
+            self._candidate, self._streak = detected, 1
+        if self._streak >= self._stable:
+            self._lang, self._candidate, self._streak = detected, None, 0
+        return self._lang

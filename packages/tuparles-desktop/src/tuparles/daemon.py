@@ -213,6 +213,11 @@ class Controller(QObject):
             self._bubble.start_recording()
             self._bridge.state.emit("recording")
             if getattr(self._engine, "supports_partials", False):
+                # Fresh sticky-language state per take (translation-flip guard):
+                # the previous take's language must not pre-condition this one.
+                reset_lang = getattr(self._engine, "reset_partial_language", None)
+                if callable(reset_lang):
+                    reset_lang()
                 self._stop_partials.clear()
                 threading.Thread(target=self._partials_loop, daemon=True).start()
 
