@@ -394,9 +394,10 @@ def test_rescue_fires_and_adopts_richer_redecode(monkeypatch):
     c = _rescue_controller(monkeypatch, eng, compressed=marker)
     take = _take(partial=PARTIAL_8W)
     r1 = eng.transcribe(take.audio)  # the "final" pass
-    text, result = c._rescue_quiet(take, r1.text, r1, None)
+    text, result, adopted = c._rescue_quiet(take, r1.text, r1, None)
     assert text == eng.second  # adopted
     assert result.text == eng.second
+    assert adopted is True  # persisted per-row as rescued=1
     assert len(eng.calls) == 2 and eng.calls[1] is marker
 
 
@@ -405,8 +406,9 @@ def test_rescue_keeps_original_when_redecode_not_richer(monkeypatch):
     c = _rescue_controller(monkeypatch, eng)
     take = _take(partial=PARTIAL_8W)
     r1 = eng.transcribe(take.audio)
-    text, result = c._rescue_quiet(take, r1.text, r1, None)
+    text, result, adopted = c._rescue_quiet(take, r1.text, r1, None)
     assert text == eng.first and result is r1  # never made worse
+    assert adopted is False  # fired, arbitrated, original won → rescued=0
     assert len(eng.calls) == 2
 
 
@@ -416,8 +418,9 @@ def test_rescue_silent_when_final_healthy(monkeypatch):
     c = _rescue_controller(monkeypatch, eng)
     take = _take(partial=PARTIAL_8W)
     r1 = eng.transcribe(take.audio)
-    text, _ = c._rescue_quiet(take, r1.text, r1, None)
+    text, _, adopted = c._rescue_quiet(take, r1.text, r1, None)
     assert text == eng.first
+    assert adopted is None  # never armed → rescued stays NULL
     assert len(eng.calls) == 1  # no second decode
 
 
@@ -427,8 +430,8 @@ def test_rescue_silent_below_min_partial_words(monkeypatch):
     c = _rescue_controller(monkeypatch, eng)
     take = _take(partial="trois petits mots")
     r1 = eng.transcribe(take.audio)
-    text, _ = c._rescue_quiet(take, r1.text, r1, None)
-    assert text == eng.first and len(eng.calls) == 1
+    text, _, adopted = c._rescue_quiet(take, r1.text, r1, None)
+    assert text == eng.first and adopted is None and len(eng.calls) == 1
 
 
 def test_rescue_respects_setting_off(monkeypatch):
@@ -436,8 +439,8 @@ def test_rescue_respects_setting_off(monkeypatch):
     c = _rescue_controller(monkeypatch, eng, enabled=False)
     take = _take(partial=PARTIAL_8W)
     r1 = eng.transcribe(take.audio)
-    text, _ = c._rescue_quiet(take, r1.text, r1, None)
-    assert text == eng.first and len(eng.calls) == 1
+    text, _, adopted = c._rescue_quiet(take, r1.text, r1, None)
+    assert text == eng.first and adopted is None and len(eng.calls) == 1
 
 
 def test_rescue_failure_keeps_original(monkeypatch):
@@ -454,8 +457,9 @@ def test_rescue_failure_keeps_original(monkeypatch):
     c = _rescue_controller(monkeypatch, eng)
     take = _take(partial=PARTIAL_8W)
     r1 = eng.transcribe(take.audio)
-    text, result = c._rescue_quiet(take, r1.text, r1, None)
+    text, result, adopted = c._rescue_quiet(take, r1.text, r1, None)
     assert text == eng.first and result is r1
+    assert adopted is None  # an errored rescue claims no arbitration
 
 
 def test_finish_delivers_rescued_text(monkeypatch):
