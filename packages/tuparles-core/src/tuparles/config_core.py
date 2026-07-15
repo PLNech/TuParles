@@ -67,6 +67,19 @@ PARTIAL_NO_SPEECH_MAX = 0.6  # no_speech_prob above this AND logprob below…
 PARTIAL_AVG_LOGPROB_MIN = -1.0  # …this together = silence hallucination → drop
 PARTIAL_COMPRESSION_MAX = 2.4  # gzip ratio above this = repetition loop → drop
 
+# Sticky partial language (partials.StickyLanguage, 2026-07-15): with 2+
+# selected languages the partial path used per-segment detection, and ONE
+# short/noisy window mis-picking the language flips Whisper into genuine
+# TRANSLATION (same meaning, different words — translated-subtitles training
+# data). Partials now detect once per window (restricted to the user's
+# selected languages) and condition on a sticky language that only switches
+# after STABLE_WINDOWS consecutive confident detections of the same other
+# language. Two windows ≈ a spoken sentence, so a deliberate mid-take switch
+# still lands; a single flaky window no longer turns translator. The FINAL
+# decode keeps per-segment detection untouched — code-switching is the app.
+PARTIAL_LANG_CONFIDENCE = 0.6  # detection prob below this never conditions/switches
+PARTIAL_LANG_STABLE_WINDOWS = 2  # consecutive confident windows to adopt a switch
+
 # Live partials: decode only the last N seconds (the bubble elides left,
 # only the tail is visible — bounding the window bounds the latency).
 PARTIAL_WINDOW_S = 20
