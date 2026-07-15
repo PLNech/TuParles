@@ -13,6 +13,18 @@ sails through (0.92). The fix pair: detect the collapse on the spot and
 re-decode a compressed copy; condition the level transient-proof.
 
 ### Added
+- **Partials persist in the history DB** — the live preview proved to be the
+  best witness of what was actually said (the whole quiet-take diagnosis
+  hinged on final-vs-partial), yet it evaporated with the take. Two additive
+  columns on `dictations` (never-destructive ALTER migration; verified on
+  the live DB: 296 rows before and after, pre-migration content
+  checksum-identical, old rows NULL): `partial` = the last painted preview,
+  stored REDACTED exactly like `text` (same block-tier PII strip, same
+  per-row `share_ok` consent), and `rescued` = the rescue verdict per take
+  (NULL didn't fire / 0 kept original / 1 adopted — makes the rescue
+  queryable, not just a telemetry aggregate). `review_takes.py` shows the
+  stored partial and the rescue tag during consent review — you can't
+  consent to sharing what you can't read.
 - **Quiet-take rescue second pass** (`daemon._rescue_quiet`) — the last
   painted partial already rides in the take; when the final lands under 60%
   of its words (`RESCUE_PARTIAL_RATIO`, min 5 partial words), re-decode a

@@ -53,6 +53,11 @@ class Take:
     audio_s: float | None
     text: str
     wav: Path | None
+    # The last painted partial + the quiet-take-rescue verdict (2026-07-15).
+    # Same speech as `text`, so reviewing/consenting covers both — you can't
+    # consent to sharing what you can't read, hence it's displayed too.
+    partial: str | None = None
+    rescued: int | None = None  # NULL didn't fire / 0 kept original / 1 adopted
 
 
 AskFn = Callable[[str], str]
@@ -80,13 +85,12 @@ def _rows_to_review(redo: bool, wav_only: bool, limit: int | None) -> list[Take]
 
     with closing(_connect()) as conn:
         rows = conn.execute(
-            "SELECT id, ts, lang, engine, audio_s, text FROM dictations"
-            + where
-            + " ORDER BY id ASC"
+            "SELECT id, ts, lang, engine, audio_s, text, partial, rescued"
+            " FROM dictations" + where + " ORDER BY id ASC"
         ).fetchall()
     takes_dir = takes.takes_dir()
     out: list[Take] = []
-    for row_id, ts, lang, engine, audio_s, text in rows:
+    for row_id, ts, lang, engine, audio_s, text, partial, rescued in rows:
         wav = takes_dir / f"{row_id}.wav"
         wav = wav if wav.exists() else None
         if wav_only and wav is None:
@@ -100,6 +104,8 @@ def _rows_to_review(redo: bool, wav_only: bool, limit: int | None) -> list[Take]
                 audio_s=audio_s,
                 text=text,
                 wav=wav,
+                partial=partial,
+                rescued=rescued,
             )
         )
     if limit is not None:
@@ -192,9 +198,16 @@ _MENU = "  [o]k  [x] private  ⏎ skip  [r]eplay  [a]ll-remaining-ok  [q]uit > "
 def _describe(take: Take) -> None:
     who = f"#{take.id}" if take.id is not None else take.ts
     dur = f"{take.audio_s:.1f}s" if take.audio_s is not None else "?s"
-    head = f"\n─── {who}  {take.ts}  [{take.lang}]  {take.engine}  {dur}"
+    rescue = {0: "  [rescue: kept original]", 1: "  [rescue: adopted]"}.get(
+        take.rescued, ""
+    )
+    head = f"\n─── {who}  {take.ts}  [{take.lang}]  {take.engine}  {dur}{rescue}"
     print(head)
     print(f"    {take.text}")
+    # The stored partial is the same speech under the same consent — show it so
+    # the grant covers everything the row actually holds.
+    if take.partial and take.partial != take.text:
+        print(f"    (aperçu) {take.partial}")
     if take.wav is not None:
         print(f"    ♪ {take.wav.name} present — 'r' to play")
 

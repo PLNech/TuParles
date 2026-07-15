@@ -406,6 +406,9 @@ class Controller(QObject):
 
     def _rescue_quiet(self, take: _QueuedTake, text: str, result, context):
         """Rescue second pass for quiet takes (2026-07-15 forensics).
+        Returns (text, result, adopted) — adopted is None when the rescue
+        didn't arm, False when it fired but the original stayed richer, True
+        when the re-decode won (persisted per-row as `rescued`).
 
         The failure signature: the user spoke quietly, the live partials caught
         the content (window-local normalization + sequential decode are
@@ -423,14 +426,14 @@ class Controller(QObject):
         failure keeps the original. It's a setting (`quiet_rescue`, default on).
         """
         if not settings.get("quiet_rescue"):
-            return text, result
+            return text, result, None
         final_words = len(text.split())
         partial_words = len(take.partial.split())
         if (
             partial_words < RESCUE_MIN_PARTIAL_WORDS
             or final_words >= partial_words * RESCUE_PARTIAL_RATIO
         ):
-            return text, result
+            return text, result, None
         try:
             conditioned = compress_speech(take.audio)
             with self._engine_lock:
@@ -455,10 +458,11 @@ class Controller(QObject):
                 rescued_words=rescued_words,
             )
             if rescued_words > final_words:
-                return text2, result2
+                return text2, result2, True
+            return text, result, False
         except Exception as exc:  # a failed rescue must never cost the take
             print(f"rescue failed ({str(exc)[:80]}); keeping original")
-        return text, result
+        return text, result, None
 
     def _finish(self, take: _QueuedTake) -> None:
         audio, stop_s = take.audio, take.stop_s
@@ -491,7 +495,7 @@ class Controller(QObject):
             # Quiet-take rescue: when the final lands far below what the live
             # partials already showed, re-decode a speech-compressed copy and
             # keep the richer result (see _rescue_quiet).
-            text, result = self._rescue_quiet(take, text, result, context)
+            text, result, rescued = self._rescue_quiet(take, text, result, context)
             # Command layer: a take is EITHER an edit command or text, never
             # both. A literal-escape ('dis "efface"') unwraps back to text.
             cmd = parse_command(text)
@@ -555,6 +559,16 @@ class Controller(QObject):
                         deliver_s=deliver_s,
                         lang=result.language,
                         lang_prob=result.language_prob,
+                        # The last painted partial, redacted exactly like the
+                        # text (same speech, same PII strip, same per-row
+                        # share_ok consent) — the durable witness the rescue
+                        # arbitrates against (2026-07-15).
+                        partial=(
+                            privacy_policy.redact_for_storage(take.partial)
+                            if take.partial
+                            else None
+                        ),
+                        rescued=rescued,
                     )
                     # Dev-only (TUPARLES_DEV): stash the raw audio keyed to this
                     # row so it can be replayed across engines/seeds. No-op for

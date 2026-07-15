@@ -95,3 +95,70 @@ class TestTelemetry:
         history.record("nouveau", audio_s=6.0, lang="en")  # triggers migration
         assert [t for _, t in history.recent(5)] == ["nouveau", "vieux"]
         assert history.summarize()["langs"] == [("en", 1)]
+
+
+class TestPartialColumn:
+    """Durable partial + rescue verdict (2026-07-15): the live preview is the
+    best witness of what was said when the final loses content, so it persists
+    on the row — additive migration, NULL on old rows, same consent as text."""
+
+    def test_partial_and_rescued_stored(self, tmp_path, monkeypatch):
+        _isolate(tmp_path, monkeypatch)
+        rid = history.record("le texte final", partial="l'aperçu peint", rescued=True)
+        import sqlite3
+
+        with sqlite3.connect(history.db_path()) as conn:
+            partial, rescued = conn.execute(
+                "SELECT partial, rescued FROM dictations WHERE id=?", (rid,)
+            ).fetchone()
+        assert partial == "l'aperçu peint"
+        assert rescued == 1
+
+    def test_defaults_are_null(self, tmp_path, monkeypatch):
+        _isolate(tmp_path, monkeypatch)
+        rid = history.record("sans aperçu")
+        import sqlite3
+
+        with sqlite3.connect(history.db_path()) as conn:
+            partial, rescued = conn.execute(
+                "SELECT partial, rescued FROM dictations WHERE id=?", (rid,)
+            ).fetchone()
+        assert partial is None and rescued is None
+
+    def test_empty_partial_stored_as_null(self, tmp_path, monkeypatch):
+        # '' means "no preview was painted" — absence, not an empty utterance.
+        _isolate(tmp_path, monkeypatch)
+        rid = history.record("texte", partial="", rescued=False)
+        import sqlite3
+
+        with sqlite3.connect(history.db_path()) as conn:
+            partial, rescued = conn.execute(
+                "SELECT partial, rescued FROM dictations WHERE id=?", (rid,)
+            ).fetchone()
+        assert partial is None and rescued == 0
+
+    def test_migration_is_additive_on_old_db(self, tmp_path, monkeypatch):
+        """A DB created BEFORE the columns existed gains them on next open,
+        with every pre-existing row intact (the live DB has ~290 rows)."""
+        _isolate(tmp_path, monkeypatch)
+        import sqlite3
+
+        path = history.db_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with sqlite3.connect(path) as conn:  # the pre-migration shape
+            conn.execute(
+                "CREATE TABLE dictations ("
+                " id INTEGER PRIMARY KEY, ts TEXT NOT NULL,"
+                " text TEXT NOT NULL, engine TEXT NOT NULL DEFAULT '')"
+            )
+            conn.execute(
+                "INSERT INTO dictations (ts, text, engine) VALUES (?, ?, ?)",
+                ("2026-01-01T00:00:00", "ancienne prise", "GpuEngine"),
+            )
+        history.record("nouvelle prise", partial="aperçu")  # triggers migration
+        with sqlite3.connect(path) as conn:
+            rows = conn.execute(
+                "SELECT text, partial FROM dictations ORDER BY id"
+            ).fetchall()
+        assert rows[0] == ("ancienne prise", None)  # old row intact, NULL partial
+        assert rows[1] == ("nouvelle prise", "aperçu")

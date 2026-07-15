@@ -35,6 +35,18 @@ _META_COLUMNS = [
     # 1 = shareable with the local assistant, 0 = private. Added by migration so
     # pre-existing DBs pick it up as NULL on next open, reviewable at any time.
     ("share_ok", "INTEGER"),
+    # The last painted partial (2026-07-15 forensics): the live preview is the
+    # best witness of what was actually said when the final loses content — the
+    # quiet-take collapse was diagnosed from exactly this comparison, and the
+    # rescue pass arbitrates final-vs-partial with it. Stored REDACTED like
+    # `text` (same block-tier PII strip; the row-level share_ok consent covers
+    # it identically). NULL on pre-migration rows and takes without a preview.
+    ("partial", "TEXT"),
+    # Whether the quiet-take rescue fired on this take: NULL = didn't fire,
+    # 0 = fired but the original final stayed richer, 1 = fired and the
+    # re-decode was adopted. Makes the rescue queryable per-take (the
+    # `rescue.fired` telemetry event is aggregate-only).
+    ("rescued", "INTEGER"),
 ]
 
 
@@ -65,9 +77,15 @@ def record(
     deliver_s: float | None = None,
     lang: str | None = None,
     lang_prob: float | None = None,
+    partial: str | None = None,
+    rescued: bool | None = None,
 ) -> int | None:
     """Insert one take; return its row id (so the dev audio-capture can key the
-    WAV to the transcript), or None when there's nothing to record."""
+    WAV to the transcript), or None when there's nothing to record.
+
+    `partial` is the last painted preview (caller redacts it exactly like
+    `text` — it's the same speech); `rescued` is the quiet-take-rescue verdict
+    (None = didn't fire, False = kept original, True = re-decode adopted)."""
     if not text:
         return None
     ts = datetime.now().astimezone().isoformat(timespec="seconds")
@@ -76,8 +94,8 @@ def record(
     with closing(_conn()) as conn, conn:
         cur = conn.execute(
             "INSERT INTO dictations (ts, text, engine, audio_s, decode_s,"
-            " deliver_s, chars, words, wpm, lang, lang_prob)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " deliver_s, chars, words, wpm, lang, lang_prob, partial, rescued)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 ts,
                 text,
@@ -90,6 +108,8 @@ def record(
                 wpm,
                 lang,
                 lang_prob,
+                partial or None,  # '' → NULL: no preview is absence, not text
+                None if rescued is None else int(rescued),
             ),
         )
         return cur.lastrowid
