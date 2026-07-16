@@ -602,15 +602,23 @@ class ResilientEngine:
             return self._cpu_engine().transcribe(audio, context)
 
     def reset_partial_language(self) -> None:
-        # Follow the live backend, like transcribe_partial. Best-effort: a
-        # missing hook (or a dead GPU) just means no sticky state to clear.
-        try:
-            target = self._cpu_engine() if self._on_cpu else self._gpu
-            reset = getattr(target, "reset_partial_language", None)
-            if callable(reset):
-                reset()
-        except Exception:
-            pass
+        # Reset BOTH backends, not just the live one (2026-07-16). A take that
+        # STARTS on GPU but falls back to CPU mid-take would otherwise carry the
+        # PREVIOUS take's sticky language on the already-built CPU engine — the
+        # translation-flip guard leaking across the fallback boundary. So clear
+        # the GPU (when a context exists) AND the CPU — but only if the CPU
+        # engine is ALREADY built: never force-load the heavy fallback just to
+        # reset it (an unbuilt CPU engine has no stale state, and a fresh one
+        # built by a later fallback starts clean anyway). Best-effort per backend.
+        for target in (self._gpu, self._cpu):
+            if target is None:
+                continue
+            try:
+                reset = getattr(target, "reset_partial_language", None)
+                if callable(reset):
+                    reset()
+            except Exception:
+                pass
 
     def transcribe_partial(self, audio: np.ndarray) -> str:
         # Partials are frequent and best-effort: never rebuild on one (it would
