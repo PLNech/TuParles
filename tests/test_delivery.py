@@ -829,3 +829,38 @@ class TestClipboardRestore:
         monkeypatch.setattr(delivery, "_type_into_focus", lambda *a, **k: None)
         delivery.deliver("dictée", "code")
         assert called == []  # setting off → the clipboard is never even read
+
+    def test_restore_failure_never_fails_the_take(self, monkeypatch):
+        # The take is already delivered; a xsel hiccup on the restore write must
+        # be swallowed (logged), NOT propagate out of deliver() as a take error.
+        settings_map = {"newline_mode": "auto", "clipboard_restore": True}
+        monkeypatch.setattr(delivery.settings, "get", lambda k: settings_map.get(k))
+        monkeypatch.setattr(delivery, "from_clipboard", lambda: "OLD")
+        monkeypatch.setattr(delivery, "_type_into_focus", lambda *a, **k: None)
+        monkeypatch.setattr(delivery.time, "sleep", lambda *_: None)
+        calls: list[str] = []
+
+        def flaky(text):
+            calls.append(text)
+            if text == "OLD":  # the restore write is the one that fails
+                raise subprocess.TimeoutExpired(["xsel"], 10)
+
+        monkeypatch.setattr(delivery, "to_clipboard", flaky)
+        delivery.deliver("dictée", "code")  # must not raise
+        assert calls == ["dictée", "OLD"]  # paste set, restore attempted + swallowed
+
+    def test_initial_set_failure_aborts_loudly(self, monkeypatch):
+        # The paste depends on the initial clipboard set; if THAT raises, the
+        # take must fail loudly (propagate) so the daemon's recovery belt fires.
+        settings_map = {"newline_mode": "auto", "clipboard_restore": False}
+        monkeypatch.setattr(delivery.settings, "get", lambda k: settings_map.get(k))
+
+        def boom(_text):
+            raise subprocess.CalledProcessError(1, ["xsel"])
+
+        monkeypatch.setattr(delivery, "to_clipboard", boom)
+        monkeypatch.setattr(delivery, "_type_into_focus", lambda *a, **k: None)
+        import pytest
+
+        with pytest.raises(subprocess.CalledProcessError):
+            delivery.deliver("dictée", "code")
