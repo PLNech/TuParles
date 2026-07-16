@@ -755,6 +755,43 @@ def _execute_delete(cmd) -> str:
     return f"{cmd.count} {noun}{s} effacé{s}"
 
 
+# Fire-and-forget children (a launched terminal, a notify-send) are spawned
+# detached — we never wait on them. But an un-waited child lingers as a
+# <defunct> zombie until its parent reaps it, and this daemon runs for hours, so
+# they would slowly accumulate. Keep a small bag of handles and poll() them on
+# each new spawn: a finished child is harvested on the next launch, bounding the
+# count without ever blocking on a still-open terminal.
+_detached: "list[subprocess.Popen]" = []
+
+
+def _spawn_detached(argv: list[str]) -> bool:
+    """Launch `argv` detached, best-effort, reaping any finished prior children
+    first. Returns True if the spawn was issued. Tolerant of a test double whose
+    Popen returns a non-process (only real handles are tracked/polled)."""
+    survivors = []
+    for p in _detached:
+        try:
+            if p.poll() is None:  # still running → keep; finished → reaped by poll
+                survivors.append(p)
+        except Exception:
+            pass  # not a real Popen (test) or already gone — drop it
+    _detached[:] = survivors
+    try:
+        proc = subprocess.Popen(
+            argv,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except OSError:
+        return False
+    # Track only a real handle (a test double may return None); the poll loop
+    # above tolerates anything, so this just avoids churn.
+    if proc is not None and hasattr(proc, "poll"):
+        _detached.append(proc)
+    return True
+
+
 def _open_terminal() -> str:
     for term in (
         "gnome-terminal",
@@ -765,17 +802,8 @@ def _open_terminal() -> str:
         "kitty",
         "xterm",
     ):
-        if shutil.which(term):
-            try:
-                subprocess.Popen(
-                    [term],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    start_new_session=True,
-                )
-                return "terminal ouvert"
-            except OSError:
-                continue
+        if shutil.which(term) and _spawn_detached([term]):
+            return "terminal ouvert"
     return "terminal indisponible"
 
 
@@ -809,15 +837,9 @@ def _show_help() -> str:
     if not shutil.which("notify-send"):
         return "aide : tuparles cheatsheet"
     body = cheatsheet.as_text(brief=True)
-    try:
-        subprocess.Popen(
-            ["notify-send", "-a", "TuParles", "TuParles — que puis-je faire ?", body],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-        )
-    except OSError:
-        pass
+    _spawn_detached(
+        ["notify-send", "-a", "TuParles", "TuParles — que puis-je faire ?", body]
+    )
     return "aide affichée"
 
 
