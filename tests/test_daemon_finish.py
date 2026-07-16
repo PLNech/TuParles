@@ -478,7 +478,9 @@ def test_finish_delivers_rescued_text(monkeypatch):
     monkeypatch.setattr(daemon_mod.takes, "save_take", lambda *a, **k: None)
     bridge = _Bridge()
     c = _controller(eng, _Recorder(recording=False), bridge)
-    monkeypatch.setattr(c, "_deliver", lambda text, target: delivered.append(text))
+    monkeypatch.setattr(
+        c, "_deliver", lambda text, target, seq=None: delivered.append(text)
+    )
     c._pending = 1
     c._finish(_take(partial=PARTIAL_8W, seq=3))
     assert delivered == [eng.second]  # the rescue's text landed

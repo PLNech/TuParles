@@ -394,26 +394,31 @@ class Controller(QObject):
             finally:
                 self._decode_q.task_done()
 
-    def _deliver(self, text: str, target: DeliveryTarget) -> None:
+    def _deliver(
+        self, text: str, target: DeliveryTarget, seq: int | None = None
+    ) -> None:
         """Route delivery to the take's origin window when asked (#14).
 
         Wayland keeps the bubble-hide path (no refocus-by-id there). On X11 in
         "origin" mode, if focus has ACTUALLY moved since the take was spoken,
         refocus the dictation window, paste, then hand focus back to where the
         user is now — so a queued take lands where it belongs without stranding
-        them. No overlap (focus unchanged) → a plain paste in place, unchanged."""
+        them. No overlap (focus unchanged) → a plain paste in place, unchanged.
+
+        `seq` is threaded into delivery so every `deliver:` log carries the take
+        id — `journalctl | grep 'deliver:'` then tells the whole delivery story."""
         if IS_WAYLAND:
-            deliver(text, target, before_paste=self._hide_bubble_for_paste)
+            deliver(text, target, before_paste=self._hide_bubble_for_paste, seq=seq)
             return
         origin = target.window_id
         if settings.get("deliver_to") == "origin" and origin:
             here = current_window_id()
             if here and here != origin:
                 activate_window(origin)
-                deliver(text, target)
+                deliver(text, target, seq=seq)
                 activate_window(here)  # polite: return the user where they were
                 return
-        deliver(text, target)
+        deliver(text, target, seq=seq)
 
     def _rescue_quiet(self, take: _QueuedTake, text: str, result, context):
         """Rescue second pass for quiet takes (2026-07-15 forensics).
@@ -524,7 +529,7 @@ class Controller(QObject):
             if text:
                 t1 = time.monotonic()
                 mn0 = mapping_canary.count()
-                self._deliver(text, take.target)
+                self._deliver(text, take.target, take.seq)
                 deliver_s = time.monotonic() - t1
                 mn_delta = mapping_canary.count() - mn0
                 # Remember for the next take's onset carryover (#18).

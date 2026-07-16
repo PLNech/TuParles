@@ -186,8 +186,18 @@ def _notify(title: str, body: str) -> None:
         pass
 
 
+def _seq_tag(seq: "int | None") -> str:
+    """'#N ' when a take seq is known, '' otherwise — so every delivery-branch
+    log can carry the take id when the daemon threads it in, and read cleanly
+    when a bare caller (tests, older paths) doesn't."""
+    return f"#{seq} " if seq is not None else ""
+
+
 def deliver(
-    text: str, target: "DeliveryTarget | str | None" = None, before_paste=None
+    text: str,
+    target: "DeliveryTarget | str | None" = None,
+    before_paste=None,
+    seq: "int | None" = None,
 ) -> None:
     if not text:
         return
@@ -207,7 +217,7 @@ def deliver(
     # _recover_with_partial). to_clipboard uses check=True, so this can raise.
     to_clipboard(text)
     t1 = time.monotonic()
-    _type_into_focus(text, target.wm_class, before_paste)
+    _type_into_focus(text, target.wm_class, before_paste, seq=seq)
     t2 = time.monotonic()
     if restore is not None:
         time.sleep(
@@ -229,7 +239,7 @@ def deliver(
     # (one settle + gap per piece), not a stall, so it must not cry wolf.
     if t2 - t0 > 1.0 and not _should_chunk(text):
         print(
-            f"deliver slow: clipboard {t1 - t0:.1f}s, "
+            f"deliver: {_seq_tag(seq)}slow: clipboard {t1 - t0:.1f}s, "
             f"focus-injection {t2 - t1:.1f}s ({len(text)} chars)"
         )
 
@@ -513,7 +523,12 @@ def _wayland_paste_key(combo: str) -> None:
 
 
 def _paste_chunks(
-    text: str, combo: str, send, label: str = "", newline_mode: str = "lf"
+    text: str,
+    combo: str,
+    send,
+    label: str = "",
+    newline_mode: str = "lf",
+    seq: "int | None" = None,
 ) -> None:
     """Paste `text` as several small pieces (see _chunk_for_paste), each set on
     the clipboard then pasted via `send` (the backend's paste-key sender),
@@ -536,7 +551,8 @@ def _paste_chunks(
         time.sleep(_CHUNK_PASTE_GAP)
     to_clipboard(text)
     print(
-        f"paste chunked: {len(chunks)} pieces, {combo} nl={newline_mode} {label}".rstrip()
+        f"deliver: {_seq_tag(seq)}paste chunked: {len(chunks)} pieces, "
+        f"{combo} nl={newline_mode} {label}".rstrip()
     )
 
 
@@ -561,7 +577,9 @@ def _x11_focus_combo(focus_class: str = "") -> tuple[str, str]:
     return wm_class, _paste_combo(_pair_is_terminal(wm_class))
 
 
-def _wayland_paste(focus_class: str = "", before_paste=None) -> None:
+def _wayland_paste(
+    focus_class: str = "", before_paste=None, seq: "int | None" = None
+) -> None:
     """Single-shot Wayland paste. The clipboard already holds the text
     (deliver() set it first). For long/multi-line text the caller chunks
     instead — see _type_into_focus.
@@ -576,7 +594,10 @@ def _wayland_paste(focus_class: str = "", before_paste=None) -> None:
     real target's focus, not the bubble's. Best-effort: a hide that throws
     must not abort a take whose text is already on the clipboard."""
     if shutil.which("ydotool") is None:
-        print("ydotool absent — transcript au presse-papiers, colle avec Ctrl+V")
+        print(
+            f"deliver: {_seq_tag(seq)}ydotool absent — transcript au "
+            f"presse-papiers, colle avec Ctrl+V"
+        )
         return
     if before_paste is not None:
         try:
@@ -585,10 +606,10 @@ def _wayland_paste(focus_class: str = "", before_paste=None) -> None:
             pass
     combo = _wayland_combo(focus_class)
     _wayland_paste_key(combo)
-    print(f"paste (wayland): {combo}")
+    print(f"deliver: {_seq_tag(seq)}paste (wayland): {combo}")
 
 
-def _paste_into_focus(focus_class: str = "") -> None:
+def _paste_into_focus(focus_class: str = "", seq: "int | None" = None) -> None:
     """Single-shot best-effort Ctrl+V into the focused window. The clipboard
     already holds the text (deliver() set it first). For long/multi-line text
     the caller chunks instead — see _type_into_focus.
@@ -600,17 +621,20 @@ def _paste_into_focus(focus_class: str = "") -> None:
     and re-typed all 1127 chars on top (paste-then-type-during-freeze)."""
     wm_class, combo = _x11_focus_combo(focus_class)
     _x11_paste_key(combo)
-    print(f"paste: {combo} into '{wm_class.strip() or '?'}'")
+    print(f"deliver: {_seq_tag(seq)}paste: {combo} into '{wm_class.strip() or '?'}'")
 
 
-def _type_into_focus(text: str, focus_class: str = "", before_paste=None) -> None:
+def _type_into_focus(
+    text: str, focus_class: str = "", before_paste=None, seq: "int | None" = None
+) -> None:
     if _WAYLAND:
         # Wayland always pastes (typing garbles azerty). Chunk the long/
         # multi-line ones so the editor doesn't fold them into "[Pasted text]".
         if _should_chunk(text):
             if shutil.which("ydotool") is None:
                 print(
-                    "ydotool absent — transcript au presse-papiers, colle avec Ctrl+V"
+                    f"deliver: {_seq_tag(seq)}ydotool absent — transcript au "
+                    f"presse-papiers, colle avec Ctrl+V"
                 )
                 return
             if before_paste is not None:
@@ -624,9 +648,10 @@ def _type_into_focus(text: str, focus_class: str = "", before_paste=None) -> Non
                 _wayland_paste_key,
                 label="(wayland)",
                 newline_mode=resolve_newline_mode(focus_class),
+                seq=seq,
             )
         else:
-            _wayland_paste(focus_class, before_paste)
+            _wayland_paste(focus_class, before_paste, seq=seq)
         return
     subprocess.run(["xdotool", "keyup", *_MODIFIERS], check=False, timeout=5)
     # Paste, don't type. `xdotool type` remaps the keymap per off-keymap char and
@@ -645,9 +670,10 @@ def _type_into_focus(text: str, focus_class: str = "", before_paste=None) -> Non
                 _x11_paste_key,
                 label=f"into '{wm_class.strip() or '?'}'",
                 newline_mode=resolve_newline_mode(wm_class),
+                seq=seq,
             )
         else:
-            _paste_into_focus(focus_class)
+            _paste_into_focus(focus_class, seq=seq)
         return
     # No clipboard tool at all. This app froze GNOME once by TYPING (the
     # per-off-keymap-char remap → MappingNotify storm → gnome-shell rebind →
@@ -662,7 +688,7 @@ def _type_into_focus(text: str, focus_class: str = "", before_paste=None) -> Non
             "xsel absent — text left on the clipboard, paste it manually (install "
             "xsel for automatic paste; set TUPARLES_ALLOW_TYPE_FALLBACK=1 to type)"
         )
-        print(f"deliver: {msg}")
+        print(f"deliver: {_seq_tag(seq)}{msg}")
         _notify("TuParles", msg)
         return
     # Opt-in typing path. delay 10: at 2 ms, ibus/app input queues drop and
@@ -670,8 +696,9 @@ def _type_into_focus(text: str, focus_class: str = "", before_paste=None) -> Non
     # while the history DB held the correct text). The old "frozen keyboard"
     # complaint that motivated delay 2 was the stuck-modifier bug above.
     print(
-        "deliver: xsel absent — TYPING directly (TUPARLES_ALLOW_TYPE_FALLBACK=1; "
-        "off-keymap/long text may churn the keymap and jank the desktop)"
+        f"deliver: {_seq_tag(seq)}xsel absent — TYPING directly "
+        f"(TUPARLES_ALLOW_TYPE_FALLBACK=1; off-keymap/long text may churn the "
+        f"keymap and jank the desktop)"
     )
     subprocess.run(
         ["xdotool", "type", "--delay", "10", "--", text],
