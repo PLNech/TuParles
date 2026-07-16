@@ -182,6 +182,10 @@ def deliver(
     t0 = time.monotonic()
     # Snapshot the user's clipboard first, when asked AND it's safely text (#28).
     restore = from_clipboard() if settings.get("clipboard_restore") else None
+    # Initial set stays UNGUARDED on purpose: the paste below depends on it, so
+    # if it raises (xsel gone/timeout), the take SHOULD fail loudly — deliver()
+    # aborts and the daemon's recovery belt copies the partial (see daemon.py
+    # _recover_with_partial). to_clipboard uses check=True, so this can raise.
     to_clipboard(text)
     t1 = time.monotonic()
     _type_into_focus(text, target.wm_class, before_paste)
@@ -190,7 +194,16 @@ def deliver(
         time.sleep(
             _CLIPBOARD_RESTORE_SETTLE
         )  # let the paste land before we put it back
-        to_clipboard(restore)
+        # Best-effort, mirroring _recover_with_partial: the take is ALREADY
+        # delivered, so a failed clipboard-restore must never turn a good take
+        # into an error. Swallow + log one line; the user keeps our pasted text.
+        try:
+            to_clipboard(restore)
+        except Exception as exc:
+            print(
+                f"deliver: clipboard-restore failed ({str(exc)[:80]}); "
+                f"left the dictation on the clipboard"
+            )
     # Pastes have clocked at ~3 s where ~0.3 s is expected — when delivery
     # drags, say which leg (clipboard vs xdotool) so the journal can tell.
     # Skip the warning for a chunked delivery: its pacing is deliberate
