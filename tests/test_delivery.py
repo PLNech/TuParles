@@ -212,10 +212,18 @@ class TestNoTypeFallback:
         assert not any(c[:2] == ["xdotool", "type"] for c in calls)
         assert ["xdotool", "key", "ctrl+v"] in calls
 
-    def test_types_only_when_no_clipboard_tool(self, monkeypatch):
-        # Graceful degrade: with no xsel at all there's nothing to paste
-        # through, so we type rather than drop the take (the churn is accepted
-        # on such a box; a lost take is worse).
+    def test_no_xsel_does_not_type_by_default(self, monkeypatch):
+        # New default (this app froze GNOME once by typing): with no xsel, the
+        # text is left on the clipboard with a loud notify — NOT typed.
+        monkeypatch.delenv("TUPARLES_ALLOW_TYPE_FALLBACK", raising=False)
+        calls = self._record_calls(monkeypatch, has_xsel=False)
+        _type_into_focus("just type this")
+        assert not any(c[:2] == ["xdotool", "type"] for c in calls)
+
+    def test_no_xsel_types_only_with_opt_in_env(self, monkeypatch):
+        # Explicit opt-in: TUPARLES_ALLOW_TYPE_FALLBACK=1 restores typing for a
+        # box where a lost take is judged worse than a transient churn.
+        monkeypatch.setenv("TUPARLES_ALLOW_TYPE_FALLBACK", "1")
         calls = self._record_calls(monkeypatch, has_xsel=False)
         _type_into_focus("just type this")
         assert any(c[:2] == ["xdotool", "type"] for c in calls)

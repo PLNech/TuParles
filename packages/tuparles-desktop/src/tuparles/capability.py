@@ -276,7 +276,10 @@ def probe(
         Chain(
             "paste",
             paste_layers,
-            fallback="clipboard set, manual Ctrl+V",
+            # No xsel/ydotool: the text stays on the clipboard for a manual paste.
+            # Typing is NOT the default degrade anymore (it churned the keymap and
+            # froze GNOME) — it's opt-in via TUPARLES_ALLOW_TYPE_FALLBACK=1.
+            fallback="clipboard, manual paste (type only if TUPARLES_ALLOW_TYPE_FALLBACK=1)",
             short="paste",
         ),
         Chain(
