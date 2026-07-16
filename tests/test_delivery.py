@@ -479,7 +479,7 @@ class TestBeforePasteHook:
         monkeypatch.setattr(
             delivery,
             "_wayland_paste",
-            lambda fc="", bp=None: seen.update(focus=fc, hook=bp),
+            lambda fc="", bp=None, seq=None: seen.update(focus=fc, hook=bp),
         )
 
         def hook():
@@ -593,7 +593,7 @@ class TestCaptureTarget:
         monkeypatch.setattr(
             delivery,
             "_type_into_focus",
-            lambda text, fc="", bp=None: seen.update(fc=fc),
+            lambda text, fc="", bp=None, seq=None: seen.update(fc=fc),
         )
         delivery.deliver("hi", delivery.DeliveryTarget(wm_class="kitty", window_id="9"))
         assert seen["fc"] == "kitty"
