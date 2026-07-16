@@ -93,3 +93,52 @@ def test_partial_failure_is_silent_and_does_not_fall_back():
     eng = _engine(lambda: FakeGpu(dies_after=0))
     assert eng.transcribe_partial(AUDIO) == ""  # swallowed
     assert eng.engine_name == "GpuEngine"  # no fallback triggered by a partial
+
+
+class _LangGpu:
+    """A backend that tracks how many times its sticky language was reset."""
+
+    supports_partials = True
+
+    def __init__(self):
+        self.resets = 0
+
+    def transcribe(self, audio, context=None):
+        return Transcription("gpu", language="fr")
+
+    def reset_partial_language(self):
+        self.resets += 1
+
+
+class _LangCpu(_LangGpu):
+    supports_partials = False
+
+    def transcribe(self, audio, context=None):
+        return Transcription("cpu")
+
+
+def test_reset_partial_language_does_not_force_build_cpu():
+    # On GPU with the CPU engine never used: reset the GPU, but do NOT build the
+    # heavy CPU fallback just to clear state it doesn't yet hold.
+    built = []
+    gpu = _LangGpu()
+    eng = ResilientEngine(
+        gpu_factory=lambda: gpu,
+        cpu_factory=lambda: built.append(_LangCpu()) or built[-1],
+    )
+    eng.reset_partial_language()
+    assert gpu.resets == 1
+    assert built == []  # CPU fallback not force-loaded
+
+
+def test_reset_partial_language_clears_both_backends_when_cpu_built():
+    # Once the CPU engine exists (a mid-session fallback built it), a take-start
+    # reset must clear BOTH — so a GPU-start take that later falls back to CPU
+    # can't inherit the previous take's sticky language across the boundary.
+    gpu, cpu = _LangGpu(), _LangCpu()
+    eng = ResilientEngine(gpu_factory=lambda: gpu, cpu_factory=lambda: cpu)
+    eng._cpu_engine()  # force the CPU engine into existence, as a fallback would
+    gpu.resets = cpu.resets = 0
+    eng.reset_partial_language()
+    assert gpu.resets == 1  # reset even though the GPU is still live
+    assert cpu.resets == 1  # the already-built CPU is cleared too
