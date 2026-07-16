@@ -9,9 +9,11 @@ client; gnome-shell answers by re-grabbing its ENTIRE keybinding table
 main loop — enough churn to jank or freeze the whole desktop. Measured under
 Xvfb: `xdotool type` of a 44-char accented take = 16 MappingNotify, even 32
 ASCII chars = 2; a clipboard paste = 0. So paste is the only injection path;
-it uses existing keycodes and is layout-blind. Typing survives only as a
-last-ditch fallback when no clipboard tool exists at all (lose-the-take is
-worse than a transient churn on such a box).
+it uses existing keycodes and is layout-blind. When no clipboard tool exists at
+all the text is LEFT ON THE CLIPBOARD with a loud notification to paste by hand
+— typing is no longer the silent default (it froze GNOME once). Typing survives
+only as an explicit opt-in, TUPARLES_ALLOW_TYPE_FALLBACK=1, for a box where
+losing the take is judged worse than a transient churn.
 
 On Wayland there is no xdotool: everything goes through the clipboard
 (wl-copy) and a Ctrl+V sent by ydotool's uinput keyboard. Typing is never
@@ -24,6 +26,7 @@ large/multi-line paste into a "[Pasted text]" placeholder you can't reread
 before sending; collapse is judged per paste event, so small pieces stay
 visible inline. Still paste-only — chunking never reintroduces typing."""
 
+import os
 import re
 import shutil
 import string
@@ -165,6 +168,22 @@ _injected_chars = 0
 
 def injected_chars_total() -> int:
     return _injected_chars
+
+
+def _notify(title: str, body: str) -> None:
+    """Best-effort desktop toast via notify-send. subprocess.run (not Popen) so
+    the short-lived process is reaped inline — no zombie — and a missing/hanging
+    notify-send never aborts a delivery decision. Silent when absent."""
+    if not shutil.which("notify-send"):
+        return
+    try:
+        subprocess.run(
+            ["notify-send", "-a", "TuParles", title, body],
+            check=False,
+            timeout=5,
+        )
+    except (subprocess.SubprocessError, OSError):
+        pass
 
 
 def deliver(
@@ -630,19 +649,30 @@ def _type_into_focus(text: str, focus_class: str = "", before_paste=None) -> Non
         else:
             _paste_into_focus(focus_class)
         return
-    # No clipboard tool at all: degrade to typing rather than DROP the take (the
-    # "still works on my laptop" bar). Warn when the text would remap the keymap
-    # — a transient churn is the price of having no xsel to paste through; a lost
-    # take is worse. Install xsel to get the (churn-free) paste path back.
-    if _should_paste(text):
-        print(
-            "xsel absent — typing off-keymap/long text directly (may briefly "
-            "churn the keymap and jank the desktop). Install xsel to paste instead."
+    # No clipboard tool at all. This app froze GNOME once by TYPING (the
+    # per-off-keymap-char remap → MappingNotify storm → gnome-shell rebind →
+    # desktop freeze), so typing is NO LONGER the silent default here. The text
+    # is already on the clipboard (deliver() set it via to_clipboard, which
+    # itself warns + no-ops when xsel is gone), so the honest degrade is: leave
+    # it there, tell the user loudly, and let them paste by hand or install xsel.
+    # Typing is a deliberate opt-in for a box where losing the take is worse than
+    # a transient churn — TUPARLES_ALLOW_TYPE_FALLBACK=1.
+    if os.environ.get("TUPARLES_ALLOW_TYPE_FALLBACK") != "1":
+        msg = (
+            "xsel absent — text left on the clipboard, paste it manually (install "
+            "xsel for automatic paste; set TUPARLES_ALLOW_TYPE_FALLBACK=1 to type)"
         )
-    # delay 10: at 2 ms, ibus/app input queues drop and reorder chars under
-    # load ("l'application et" landed as "l'applicat ionet" while the history
-    # DB held the correct text). The old "frozen keyboard" complaint that
-    # motivated delay 2 was the stuck-modifier bug above, not the delay.
+        print(f"deliver: {msg}")
+        _notify("TuParles", msg)
+        return
+    # Opt-in typing path. delay 10: at 2 ms, ibus/app input queues drop and
+    # reorder chars under load ("l'application et" landed as "l'applicat ionet"
+    # while the history DB held the correct text). The old "frozen keyboard"
+    # complaint that motivated delay 2 was the stuck-modifier bug above.
+    print(
+        "deliver: xsel absent — TYPING directly (TUPARLES_ALLOW_TYPE_FALLBACK=1; "
+        "off-keymap/long text may churn the keymap and jank the desktop)"
+    )
     subprocess.run(
         ["xdotool", "type", "--delay", "10", "--", text],
         check=True,
