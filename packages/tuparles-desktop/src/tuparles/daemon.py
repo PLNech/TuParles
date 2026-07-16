@@ -23,6 +23,7 @@ from PySide6.QtWidgets import QApplication
 from tuparles import (
     cue,
     history,
+    mapping_canary,
     privacy_policy,
     quickchat,
     settings,
@@ -145,6 +146,11 @@ class Controller(QObject):
         # (push-to-talk), not a second press (toggle) — recorded per take so the
         # journal tells the two apart when a delivery goes wrong
         self._backend_announced = False  # the one-time GPU→CPU toast has fired (#27)
+        # Read-only keymap-churn gauge (#10): counts MappingNotify on the X
+        # display so each take's delivery can report whether its pastes churned
+        # the keymap (the gnome-shell rebind storm that froze the desktop).
+        # Fail-open — start() disables itself on any error, never affects us.
+        mapping_canary.start()
 
     @Slot()
     def toggle_from_hotkey(self) -> None:
@@ -517,8 +523,10 @@ class Controller(QObject):
                 text = expansion
             if text:
                 t1 = time.monotonic()
+                mn0 = mapping_canary.count()
                 self._deliver(text, take.target)
                 deliver_s = time.monotonic() - t1
+                mn_delta = mapping_canary.count() - mn0
                 # Remember for the next take's onset carryover (#18).
                 self._last_delivered = text
                 self._last_delivered_t = time.monotonic()
@@ -540,6 +548,12 @@ class Controller(QObject):
                     f"lock {lock_wait_s:.2f}s, decode {decode_s:.2f}s, "
                     f"post {post_s:.2f}s, deliver {deliver_s:.2f}s"
                 )
+                # Keymap-churn canary (#10): how many MappingNotify this take's
+                # delivery caused. +0 is the win (paste-only is layout-blind);
+                # anything higher pins the gnome-shell rebind storm on us. Only
+                # when the canary actually armed (X11 + python-xlib), else silent.
+                if mapping_canary.enabled():
+                    print(f"deliver: take #{take.seq} mapping_notify=+{mn_delta}")
                 # A success event to pair against entry.dictation (the request):
                 # requests minus deliveries = the deliveries that went missing.
                 telemetry.event(
