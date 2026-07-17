@@ -24,7 +24,26 @@ class RecorderStateHolder @Inject constructor() {
     private val _state = MutableStateFlow<RecorderState>(RecorderState.Idle)
     val state: StateFlow<RecorderState> = _state.asStateFlow()
 
+    /**
+     * The live tail-window preview text (#42): the transcription of the last few seconds
+     * of audio while recording. Deliberately a separate flow from [state] so the ~5 s
+     * partial loop and the high-frequency level meter never clobber each other's writes.
+     * Null when not recording (or before the first window decodes).
+     */
+    private val _partial = MutableStateFlow<String?>(null)
+    val partial: StateFlow<String?> = _partial.asStateFlow()
+
     fun set(state: RecorderState) {
+        // Any non-recording state ends the preview; no stale partial survives into Saving/Idle.
+        if (state !is RecorderState.Recording) _partial.value = null
         _state.value = state
+    }
+
+    fun setPartial(text: String) {
+        _partial.value = text
+    }
+
+    fun clearPartial() {
+        _partial.value = null
     }
 }

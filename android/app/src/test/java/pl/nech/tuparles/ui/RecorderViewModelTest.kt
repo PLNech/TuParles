@@ -173,6 +173,25 @@ class RecorderViewModelTest {
     }
 
     @Test
+    fun partial_preview_text_flows_into_uiState() = runTest(dispatcher) {
+        // #42: the live tail-window preview is a separate holder flow; it must surface in UiState.
+        val holder = RecorderStateHolder()
+        val vm = RecorderViewModel(FakeNotesRepository(), holder)
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        holder.set(RecorderState.Recording(1_000L, 0.5f))
+        holder.setPartial("bonjour le")
+        advanceUntilIdle()
+        assertEquals("bonjour le", vm.uiState.value.partial)
+
+        // Leaving the recording state clears the preview (no stale partial into Saving/Idle).
+        holder.set(RecorderState.Saving)
+        advanceUntilIdle()
+        assertEquals(null, vm.uiState.value.partial)
+    }
+
+    @Test
     fun delete_forwards_to_repository() = runTest(dispatcher) {
         val repo = FakeNotesRepository()
         val target = note(7)

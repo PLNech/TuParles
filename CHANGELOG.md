@@ -59,6 +59,24 @@ untouched for Phase B.
   a house principle. Empty search shows a bilingual no-match state. New JVM tests
   (`FtsQueryTest`, `TranscriptSnippetTest`, `MigrationTest` v2→v3, ViewModel search
   cases) take the suite to 37 green; the on-device FTS index build stays device-only.
+- **Android — live partial transcripts while recording (#42)**: while a note records,
+  a dim, italic preview of the last ~15 s appears under the level meter — reassurance
+  that the mic hears you, deliberately not a running transcript (the durable text is
+  still the post-hoc decode of the full WAV). `AudioRecorderSession` keeps a ~480 KB
+  `PcmRingBuffer` of recent PCM alongside the WAV write; a `PartialTranscriber` on the
+  process-lived scope snapshots and decodes it every ~5 s, publishing a `partial` on
+  `RecorderStateHolder`. Self-pacing: the next window only starts after the previous
+  decode returns, so a slow device makes fewer partials, never a backlog. All native
+  decode now goes through a `DecodeGate` (kotlinx `Mutex`) that serialises the
+  non-thread-safe whisper singleton with a priority rule — committed post-hoc decodes
+  wait their turn, partials `tryLock` and skip when the engine is busy; a partial
+  failure is swallowed (repeated failures stop the loop) and never touches the recording
+  or the final decode. `TranscriptionEngine` gains `supportsPartials` + `transcribeSamples`
+  (default false/null), so a no-model build degrades to no-preview with recording
+  untouched — GPU-or-CPU house doctrine, mobile edition. Default ON, no toggle yet.
+  New JVM tests (`PcmRingBufferTest` wrap-around + concurrent snapshots, `DecodeGateTest`
+  committed-waits/partial-skips priority, `PartialTranscriberTest` pacing/publish/degrade,
+  ViewModel partial-flow) take the suite to 55 green; native decode stays device-only.
 
 ### Changed
 - **`android/` app module rewritten in place**: the Chaquopy `app` module and its

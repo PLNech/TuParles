@@ -191,6 +191,11 @@ rebuild**, shipped in phases:
   (`android/whisper`) behind the `TranscriptionEngine` interface; decode a note
   after recording, `language=auto`, `-O3` native build.
 - **Phase C — search**: Room FTS over transcripts.
+- **Live partials while recording**: a dim, ephemeral preview of the last ~15 s
+  appears under the level meter as you speak — reassurance the mic hears you, not
+  a running transcript (the durable text stays the post-hoc decode of the full
+  take). Self-paced, yields to committed decodes, and silently absent on a
+  no-model build.
 
 Build, architecture, and install notes are in
 [`android/README.md`](android/README.md); the design decision in

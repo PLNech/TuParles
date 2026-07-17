@@ -20,6 +20,12 @@ class AudioRecorderSession @Inject constructor() : RecorderSession {
     private var thread: Thread? = null
     private val samples = ArrayList<Short>(SAMPLE_RATE * 10)
 
+    // Most-recent audio kept alongside the full capture, for the live-partials preview (#42).
+    // Reads never disturb the recording; if nothing ever snapshots it, it costs one array copy.
+    private val ring = PcmRingBuffer(SAMPLE_RATE * PARTIAL_WINDOW_S)
+
+    override fun snapshotRecentSamples(): FloatArray = ring.snapshotFloats()
+
     @SuppressLint("MissingPermission") // caller checks RECORD_AUDIO before start()
     override fun start(onLevel: (rms: Float, elapsedMs: Long) -> Unit) {
         val minBuf = AudioRecord.getMinBufferSize(
@@ -43,6 +49,7 @@ class AudioRecorderSession @Inject constructor() : RecorderSession {
             throw IllegalStateException("micro indisponible (permission ou occupé)")
         }
         samples.clear()
+        ring.clear()
         record = rec
         recording = true
         rec.startRecording()
@@ -58,6 +65,7 @@ class AudioRecorderSession @Inject constructor() : RecorderSession {
                     break
                 }
                 for (i in 0 until n) samples.add(chunk[i])
+                ring.append(chunk, n)
                 totalRead += n
                 if (n > 0) {
                     var sum = 0.0
@@ -86,5 +94,8 @@ class AudioRecorderSession @Inject constructor() : RecorderSession {
 
     private companion object {
         const val TAG = "TuParles"
+        // How many seconds of recent audio the partials preview sees (#42): the tail only,
+        // ~15 s × 16 kHz × 2 B ≈ 480 KB. Not the whole take — reassurance, not a transcript.
+        const val PARTIAL_WINDOW_S = 15
     }
 }
