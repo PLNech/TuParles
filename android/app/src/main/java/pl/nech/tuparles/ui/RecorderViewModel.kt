@@ -8,6 +8,7 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -47,6 +48,14 @@ class RecorderViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val query = MutableStateFlow("")
+
+    /**
+     * The live, undebounced query for the text field to echo. A Compose TextField must be driven
+     * by state that updates synchronously with each keystroke; binding it to the debounced
+     * search round-trip below would reset the field to a stale value on every recomposition and
+     * swallow input (#41). Search execution keeps the debounce; display does not.
+     */
+    val queryText: StateFlow<String> = query.asStateFlow()
 
     /** Either the full list (empty/punctuation-only query) or the search hits, with the hint count. */
     private val notesView =

@@ -149,6 +149,30 @@ class RecorderViewModelTest {
     }
 
     @Test
+    fun query_echoes_synchronously_while_search_stays_debounced() = runTest(dispatcher) {
+        // Regression for #41: the text field must echo each keystroke immediately, so the display
+        // query updates synchronously with onQueryChange; only the search execution is debounced.
+        val repo = FakeNotesRepository()
+        val vm = RecorderViewModel(repo, RecorderStateHolder())
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.uiState.collect {} }
+        advanceUntilIdle()
+        repo.emit(listOf(noteT(1, "bonjour le monde"), noteT(2, "hello world")))
+        advanceUntilIdle()
+
+        vm.onQueryChange("bonjour")
+        // Display echoes instantly — no scheduler advance, no debounce.
+        assertEquals("bonjour", vm.queryText.value)
+        // The search itself has not run yet: still the full, unfiltered list.
+        assertFalse(vm.uiState.value.searching)
+        assertEquals(2, vm.uiState.value.notes.size)
+
+        // Only after the debounce window does the filtered result land.
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.searching)
+        assertEquals(listOf(1L), vm.uiState.value.notes.map { it.id })
+    }
+
+    @Test
     fun delete_forwards_to_repository() = runTest(dispatcher) {
         val repo = FakeNotesRepository()
         val target = note(7)

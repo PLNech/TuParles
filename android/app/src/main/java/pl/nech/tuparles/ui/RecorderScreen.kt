@@ -69,6 +69,8 @@ import pl.nech.tuparles.util.TranscriptSnippet
 fun RecorderScreen(viewModel: RecorderViewModel = hiltViewModel()) {
     val context = LocalContext.current
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    // The field echoes the raw query synchronously; only search execution is debounced (#41).
+    val queryText by viewModel.queryText.collectAsStateWithLifecycle()
 
     var pendingDelete by remember { mutableStateOf<Note?>(null) }
 
@@ -107,8 +109,8 @@ fun RecorderScreen(viewModel: RecorderViewModel = hiltViewModel()) {
 
             // The search field appears once there's anything to search (or a query in
             // flight); with no notes ever recorded it stays out of the way.
-            if (state.notes.isNotEmpty() || state.query.isNotEmpty()) {
-                SearchField(state.query, viewModel::onQueryChange)
+            if (state.notes.isNotEmpty() || queryText.isNotEmpty()) {
+                SearchField(queryText, viewModel::onQueryChange)
             }
             if (state.searching && state.untranscribedHidden > 0) {
                 UntranscribedHint(state.untranscribedHidden)
@@ -116,9 +118,9 @@ fun RecorderScreen(viewModel: RecorderViewModel = hiltViewModel()) {
 
             when {
                 // Nothing recorded yet.
-                state.query.isEmpty() && state.notes.isEmpty() -> EmptyState(Modifier.weight(1f))
+                queryText.isEmpty() && state.notes.isEmpty() -> EmptyState(Modifier.weight(1f))
                 // A search that matched nothing.
-                state.notes.isEmpty() -> NoMatchState(state.query, Modifier.weight(1f))
+                state.notes.isEmpty() -> NoMatchState(queryText, Modifier.weight(1f))
                 else -> LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
