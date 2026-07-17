@@ -17,6 +17,7 @@ import pl.nech.tuparles.core.TranscriptionEngine
 import pl.nech.tuparles.core.WhisperTranscriptionEngine
 import pl.nech.tuparles.data.AppDatabase
 import pl.nech.tuparles.data.MIGRATION_1_2
+import pl.nech.tuparles.data.MIGRATION_2_3
 import pl.nech.tuparles.data.NoteDao
 import pl.nech.tuparles.data.RoomNotesRepository
 import pl.nech.tuparles.record.AudioRecorderSession
@@ -30,7 +31,7 @@ object DataModule {
     @Singleton
     fun database(@ApplicationContext ctx: Context): AppDatabase =
         Room.databaseBuilder(ctx, AppDatabase::class.java, AppDatabase.NAME)
-            .addMigrations(MIGRATION_1_2)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
             .build()
 
     @Provides

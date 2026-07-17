@@ -36,6 +36,9 @@ class RecorderViewModelTest {
 
     private fun note(id: Long) = Note(id = id, wavPath = "/tmp/note_$id.wav", createdAt = id, durationS = 2f)
 
+    private fun noteT(id: Long, transcript: String?) =
+        Note(id = id, wavPath = "/tmp/note_$id.wav", createdAt = id, durationS = 2f, transcript = transcript)
+
     @Test
     fun uiState_starts_idle_and_empty() = runTest(dispatcher) {
         val vm = RecorderViewModel(FakeNotesRepository(), RecorderStateHolder())
@@ -62,6 +65,87 @@ class RecorderViewModelTest {
         assertEquals(2, state.notes.size)
         assertTrue(state.isRecording)
         assertTrue(state.isBusy)
+    }
+
+    @Test
+    fun search_filters_to_matching_transcripts_and_counts_untranscribed() = runTest(dispatcher) {
+        val repo = FakeNotesRepository()
+        val vm = RecorderViewModel(repo, RecorderStateHolder())
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        repo.emit(
+            listOf(
+                noteT(1, "bonjour le monde"),
+                noteT(2, "hello world"),
+                noteT(3, null), // never transcribed
+            ),
+        )
+        advanceUntilIdle()
+
+        // No query: the whole list, not in search mode.
+        assertEquals(3, vm.uiState.value.notes.size)
+        assertFalse(vm.uiState.value.searching)
+        assertEquals(0, vm.uiState.value.untranscribedHidden)
+
+        vm.onQueryChange("bonjour")
+        advanceUntilIdle()
+
+        val s = vm.uiState.value
+        assertTrue(s.searching)
+        assertEquals(listOf(1L), s.notes.map { it.id })
+        // Note 3 has no transcript, so it can't appear — surface that as a hint.
+        assertEquals(1, s.untranscribedHidden)
+    }
+
+    @Test
+    fun search_matches_prefix_as_you_type() = runTest(dispatcher) {
+        val repo = FakeNotesRepository()
+        val vm = RecorderViewModel(repo, RecorderStateHolder())
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.uiState.collect {} }
+        advanceUntilIdle()
+        repo.emit(listOf(noteT(1, "bonjour le monde"), noteT(2, "hello world")))
+        advanceUntilIdle()
+
+        vm.onQueryChange("bon") // prefix of "bonjour"
+        advanceUntilIdle()
+
+        assertEquals(listOf(1L), vm.uiState.value.notes.map { it.id })
+    }
+
+    @Test
+    fun clearing_query_restores_the_full_list() = runTest(dispatcher) {
+        val repo = FakeNotesRepository()
+        val vm = RecorderViewModel(repo, RecorderStateHolder())
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.uiState.collect {} }
+        advanceUntilIdle()
+        repo.emit(listOf(noteT(1, "bonjour"), noteT(2, "hello")))
+        advanceUntilIdle()
+
+        vm.onQueryChange("bonjour")
+        advanceUntilIdle()
+        assertEquals(1, vm.uiState.value.notes.size)
+
+        vm.onQueryChange("")
+        advanceUntilIdle()
+        assertFalse(vm.uiState.value.searching)
+        assertEquals(2, vm.uiState.value.notes.size)
+    }
+
+    @Test
+    fun no_match_yields_empty_results_still_in_search_mode() = runTest(dispatcher) {
+        val repo = FakeNotesRepository()
+        val vm = RecorderViewModel(repo, RecorderStateHolder())
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.uiState.collect {} }
+        advanceUntilIdle()
+        repo.emit(listOf(noteT(1, "bonjour"), noteT(2, "hello")))
+        advanceUntilIdle()
+
+        vm.onQueryChange("zzz")
+        advanceUntilIdle()
+
+        assertTrue(vm.uiState.value.searching)
+        assertTrue(vm.uiState.value.notes.isEmpty())
     }
 
     @Test

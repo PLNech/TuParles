@@ -47,4 +47,11 @@ interface NotesRepository {
 
     /** Notes whose transcript is queued or was interrupted mid-decode (resume on start). */
     suspend fun pendingTranscripts(): List<Note>
+
+    /**
+     * Full-text search over transcripts (issue #40). [query] is raw user text; the
+     * implementation turns it into a safe FTS match. Notes without a transcript are
+     * naturally absent from the results. Ordered newest-first.
+     */
+    fun search(query: String): Flow<List<Note>>
 }
