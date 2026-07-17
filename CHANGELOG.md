@@ -67,6 +67,13 @@ untouched for Phase B.
   `settings.gradle.kts` drop the Chaquopy plugin and Maven repo; all plugins move
   to the version catalog.
 
+- **Last upstream JNI ghost exorcised**: the unused `initContextFromInputStream`
+  chain (native function still carrying the upstream `com_whispercppdemo` symbol
+  prefix + its Kotlin binding + its InputStream loader callbacks) is deleted —
+  84 lines of dead code that would have thrown `UnsatisfiedLinkError` on first
+  use. All remaining JNI symbols carry the module's real `com_whispercpp_whisper`
+  prefix; native build re-verified green.
+
 ### Infra
 - Build gate green on the box: `assembleDebug lint testDebugUnitTest` — APK builds,
   the `whisper` native module still compiles (arm64), lint 0 errors, 6/6 unit tests.

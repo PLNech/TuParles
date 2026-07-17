@@ -760,5 +760,17 @@
     "subject": "Release pipeline: signing + SA + first Play internal upload (vc4 live)",
     "completedAt": "2026-07-17",
     "learnings": "Five attempts, four distinct root causes, zero blind retries: (1) httplib2 Http timeout must be set on the CONSTRUCTOR in _service() — setdefaulttimeout after construction never reaches the connection; (2) googleapiclient MediaFileUpload silently defaults to 100MB chunks — only chunksize=-1 is a true single request, and ANY chunking dies on httplib2 treating Play's 308 Resume Incomplete as a redirect; (3) verify library claims against the installed source, not memory (the agent's honest self-correction found DEFAULT_CHUNK_SIZE in the installed http.py); (4) the reused Domovoy service account already had app access — check auth read-only (play.py status) before assuming Console steps are needed. AAB compression: 187MB APK → 146MB bundle, under the 200MB cap."
+  },
+  {
+    "id": "11",
+    "subject": "Device validation: Phases A+B+C on the Fairphone 6",
+    "completedAt": "2026-07-17",
+    "learnings": "First real-device pass (Play install, no adb) validated recording + on-device decode same-day. A device-only Compose bug (search field echoes no keystrokes) survived 37 green JVM tests — state-binding bugs of this class are invisible to JVM suites; only a hands-on device pass catches them. Fold un-validatable legs into the blocking bug's task instead of leaving a zombie validation task."
+  },
+  {
+    "id": "12",
+    "subject": "Clean stale JNI symbol prefix in whisper module jni.c",
+    "completedAt": "2026-07-17",
+    "learnings": "Prefer deleting a dead JNI chain (native fn + Kotlin external binding + helper callbacks, 84 lines) over renaming the symbol — a renamed-but-unused path is still a trap. Verify with rg for the old package prefix AND a native rebuild (assembleDebug --offline recompiles and links the .so without touching a 98%-full disk). Release variants gated on signing env vars can't serve as the compile check; debug links the same JNI."
   }
 ]
