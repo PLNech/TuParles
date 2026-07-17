@@ -5,7 +5,6 @@ import android.os.Build
 import android.util.Log
 import kotlinx.coroutines.*
 import java.io.File
-import java.io.InputStream
 import java.util.concurrent.Executors
 
 private const val LOG_TAG = "LibWhisper"
@@ -71,15 +70,6 @@ class WhisperContext private constructor(private var ptr: Long) {
             return WhisperContext(ptr)
         }
 
-        fun createContextFromInputStream(stream: InputStream): WhisperContext {
-            val ptr = WhisperLib.initContextFromInputStream(stream)
-
-            if (ptr == 0L) {
-                throw java.lang.RuntimeException("Couldn't create context from input stream")
-            }
-            return WhisperContext(ptr)
-        }
-
         fun createContextFromAsset(assetManager: AssetManager, assetPath: String): WhisperContext {
             val ptr = WhisperLib.initContextFromAsset(assetManager, assetPath)
 
@@ -136,7 +126,6 @@ private class WhisperLib {
         }
 
         // JNI methods
-        external fun initContextFromInputStream(inputStream: InputStream): Long
         external fun initContextFromAsset(assetManager: AssetManager, assetPath: String): Long
         external fun initContext(modelPath: String): Long
         external fun freeContext(contextPtr: Long)
