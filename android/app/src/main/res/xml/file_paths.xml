@@ -1,10 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
-    <!-- The capture takes live under getExternalFilesDir("captures"). -->
-    <external-files-path name="captures" path="captures/" />
-    <!-- Durable debug logs (the post-trip recovery net) shared via the Logs button. -->
-    <external-files-path name="logs" path="logs/" />
-    <!-- The learning store (takes.jsonl) + opt-in per-take WAVs, shared from Historique. -->
-    <external-files-path name="history" path="history/" />
-    <external-files-path name="takes" path="takes/" />
+    <!-- Recorded notes live under filesDir/notes (app-private internal storage). -->
+    <files-path name="notes" path="notes/" />
 </paths>

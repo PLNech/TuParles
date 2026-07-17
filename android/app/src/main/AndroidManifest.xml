@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Structural privacy: no INTERNET permission is declared, by design. The whole
-     point is local-only STT — the OS itself denies any socket the app might try.
-     RECORD_AUDIO is the only sensitive permission; the audio never leaves the box. -->
+<!-- Structural privacy: no INTERNET permission is declared, by design. This is a
+     local dictaphone — nothing leaves the device except via the user's own share
+     sheet. RECORD_AUDIO is the only sensitive permission. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <!-- Hold the mic correctly while dictating: a foreground service of type
-         microphone (Android 14+ requirement) + its notification. No INTERNET here. -->
+    <!-- Hold the mic correctly while recording: a foreground service of type
+         microphone (Android 14+ requirement) + its notification. No INTERNET. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -16,91 +16,29 @@
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
-        android:label="TuParles"
+        android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@style/Theme.AppCompat.DayNight.NoActionBar">
-        <!-- Home: the dictation scratchpad. -->
+        android:theme="@style/Theme.TuParles">
+
         <activity
-            android:name=".ScratchpadActivity"
+            android:name=".ui.MainActivity"
             android:exported="true"
-            android:configChanges="orientation|screenSize|smallestScreenSize|keyboardHidden|uiMode|density|fontScale">
+            android:theme="@style/Theme.TuParles">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
-        <!-- The de-risk / capture harness, now reached from the scratchpad. -->
-        <activity
-            android:name=".MainActivity"
-            android:exported="false"
-            android:screenOrientation="portrait"
-            android:configChanges="orientation|screenSize|smallestScreenSize|keyboardHidden|uiMode|density|fontScale" />
-
-        <!-- The learning store, made visible: per-take 👍/👎/✏️ labelling. -->
-        <activity
-            android:name=".HistoryActivity"
-            android:exported="false"
-            android:configChanges="orientation|screenSize|smallestScreenSize|keyboardHidden|uiMode|density|fontScale" />
-
-        <!-- Full settings (perf/threads, models, privacy) — the "it's a setting" home. -->
-        <activity
-            android:name=".SettingsActivity"
-            android:exported="false"
-            android:configChanges="orientation|screenSize|smallestScreenSize|keyboardHidden|uiMode|density|fontScale" />
-
-        <!-- Compute backbone: owns recording + decode off the UI lifecycle (fixes the
-             lost-take bug), foreground type=microphone while active. -->
+        <!-- Compute backbone: owns recording off the UI lifecycle (a take survives
+             screen-off / app-switch), foreground type=microphone while active. -->
         <service
-            android:name=".DictationService"
+            android:name=".record.RecordingService"
             android:exported="false"
             android:foregroundServiceType="microphone" />
 
-        <!-- The TuParles speech keyboard (InputMethodService): what makes the STT
-             app-agnostic — commits postprocessed text into any app's focused field. -->
-        <service
-            android:name=".TuParlesIme"
-            android:label="TuParles"
-            android:permission="android.permission.BIND_INPUT_METHOD"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.view.InputMethod" />
-            </intent-filter>
-            <meta-data
-                android:name="android.view.im"
-                android:resource="@xml/method" />
-        </service>
-
-        <!-- TuParles as the system speech recognizer: set it as the device voice-input
-             service and the mic-button anywhere routes to on-device TuParles. -->
-        <service
-            android:name=".TuParlesRecognitionService"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.speech.RecognitionService" />
-            </intent-filter>
-            <meta-data
-                android:name="android.speech"
-                android:resource="@xml/recognition_service" />
-        </service>
-
-        <!-- Smart home-screen widget: one-tap dictate → clipboard + notification,
-             live state pushed by DictationService. -->
-        <receiver
-            android:name=".TuParlesWidget"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-                <action android:name="pl.nech.tuparles.WIDGET_TOGGLE" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/widget_info" />
-        </receiver>
-
-        <!-- Shares capture files to an email app via content:// URIs. No INTERNET
-             permission for us — the email app does the sending, off-device control
-             stays with the user. -->
+        <!-- Shares a note's WAV to another app via a content:// URI. No INTERNET
+             for us — the receiving app does any sending, the user drives it. -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="pl.nech.tuparles.fileprovider"

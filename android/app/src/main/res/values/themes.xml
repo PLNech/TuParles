@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- A bare NoActionBar DayNight host; all real theming is Compose Material3.
+         Parented on Material3 so the system status/nav bars follow the day/night
+         mode without any AppCompat baggage. -->
+    <style name="Theme.TuParles" parent="Theme.Material3.DayNight.NoActionBar" />
+</resources>
