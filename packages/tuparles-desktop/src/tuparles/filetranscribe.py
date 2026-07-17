@@ -419,6 +419,14 @@ def _low_confidence(
     )
 
 
+def _f(x: float | None) -> float | None:
+    """None-safe cast to native float. faster-whisper hands timings/probabilities
+    back as numpy scalars (np.float32), and a numpy comparison yields np.bool_ —
+    json.dumps can serialize neither. We cast at the sidecar boundary, where the
+    model outputs actually land, so the dict is native before it hits json."""
+    return float(x) if x is not None else None
+
+
 def _message(blk: _Block, seg: Segment, content: str, seam: bool) -> dict:
     """One block → a schema-v1 message. Per-block: span, word list, words_per_s.
     Shared-from-parent-segment: the QC metrics (a split block can't re-derive its
@@ -429,20 +437,23 @@ def _message(blk: _Block, seg: Segment, content: str, seam: bool) -> dict:
         round(n_words / span, 2) if (n_words is not None and span > 0) else None
     )
     words_json = (
-        [{"w": w.word.strip(), "s": w.start, "e": w.end, "p": w.p} for w in blk.words]
+        [
+            {"w": w.word.strip(), "s": _f(w.start), "e": _f(w.end), "p": _f(w.p)}
+            for w in blk.words
+        ]
         if blk.words is not None
         else None
     )
     return {
-        "start": blk.start,
-        "end": blk.end,
+        "start": _f(blk.start),
+        "end": _f(blk.end),
         "content": content,
         "annotations": {
-            "turn_seam": seam,
-            "avg_logprob": seg.avg_logprob,
-            "no_speech_prob": seg.no_speech_prob,
-            "compression_ratio": seg.compression_ratio,
-            "words_per_s": words_per_s,
+            "turn_seam": bool(seam),
+            "avg_logprob": _f(seg.avg_logprob),
+            "no_speech_prob": _f(seg.no_speech_prob),
+            "compression_ratio": _f(seg.compression_ratio),
+            "words_per_s": _f(words_per_s),
             "low_confidence": _low_confidence(
                 seg.avg_logprob, seg.no_speech_prob, words_per_s
             ),

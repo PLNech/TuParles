@@ -79,6 +79,18 @@ re-decode a compressed copy; condition the level transient-proof.
   `/tmp/tuparles_leveler_ab.png`. Réglages toggle *« Égaliser le niveau de
   la voix »*.
 
+### Fixed
+- **`tuparles transcribe` no longer crashes writing the JSON sidecar.** The txt
+  wrote fine, then `json.dumps` threw `TypeError: Object of type bool is not JSON
+  serializable` — the "bool" being a `numpy.bool_`. faster-whisper hands segment/
+  word timings and probabilities back as `np.float32`, and the turn-seam
+  comparison over those numpy timings (`blk.start - prev_end > threshold`) yields
+  `np.bool_`; json serializes neither. Fixed at the sidecar boundary
+  (`filetranscribe._message`): the timing/probability/QC fields and the
+  `turn_seam` flag are cast to native `float`/`bool` where the message dict is
+  built, so readers get plain scalars, never numpy. Regression test drives numpy
+  scalars through `render_json` and asserts the dump succeeds with native types.
+
 ## Sprint 32 — 2026-07-15 · Ne plus jamais retoucher le clavier (X11)
 
 A gnome-shell wedge got traced back to us: the minute a dictation daemon came

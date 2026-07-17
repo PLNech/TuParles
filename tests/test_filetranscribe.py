@@ -435,6 +435,53 @@ def test_render_json_sparse_block_flags_low_confidence():
     assert ann["low_confidence"] is True
 
 
+def test_render_json_coerces_numpy_scalars_for_json_dump():
+    # faster-whisper hands timings/probs back as numpy scalars (np.float32), and
+    # the seam comparison on numpy timings yields np.bool_ — json.dumps chokes on
+    # both ("Object of type bool is not JSON serializable"). The sidecar must cast
+    # to native types at the boundary so the dump succeeds and readers get plain
+    # int/float/bool, never numpy.
+    import json
+
+    import numpy as np
+
+    words = (
+        ft.Word(np.float32(0.0), np.float32(0.5), " Bonjour", np.float32(0.9)),
+        ft.Word(np.float32(0.5), np.float32(1.0), " monde.", np.float32(0.8)),
+        ft.Word(np.float32(3.5), np.float32(4.0), " Oui", np.float32(0.95)),
+    )
+    seg = ft.Segment(
+        np.float32(0.0),
+        np.float32(4.0),
+        "Bonjour monde. Oui",
+        words,
+        avg_logprob=np.float32(-0.31),
+        no_speech_prob=np.float32(0.02),
+        compression_ratio=np.float32(1.4),
+    )
+    data = ft.render_json(
+        [seg],
+        source="x.m4a",
+        model="m",
+        device="cpu",
+        duration=4.0,  # a Python float, like the cli computes it
+        date="d",
+        turn_gap=1.2,  # the 2.5 s word gap opens a seam → np.bool_ turn_seam
+    )
+
+    dumped = json.dumps(data, ensure_ascii=False)  # must not raise TypeError
+    assert '"turn_seam": true' in dumped  # the np.bool_ that crashed the sidecar
+
+    ann = data["messages"][1]["annotations"]
+    assert type(ann["turn_seam"]) is bool  # native bool, not np.bool_
+    assert type(ann["avg_logprob"]) is float
+    assert type(ann["words_per_s"]) is float
+    for m in data["messages"]:
+        for w in m["annotations"]["words"]:
+            assert type(w["s"]) is float and type(w["e"]) is float
+            assert type(w["p"]) is float
+
+
 def test_render_json_invents_nothing_when_decode_is_silent():
     # No words, no QC (words=None, QC defaulted None): the sidecar must carry
     # None, never a fabricated number. words_per_s is None (no word count).
