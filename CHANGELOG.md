@@ -116,6 +116,10 @@ untouched for Phase B.
   `play-store-release.md`.
 
 ### Released
+- **v1.0.0-internal2 (vc5) to the Play internal track** — same-evening
+  follow-up to internal1: the search-field fix (#41, query echoes instantly,
+  debounce only on the search) plus live tail-window partial transcripts while
+  recording (#42), both from the first real-device session's findings.
 - **v1.0.0-internal1 (vc4) live on the Play internal track** — same-day
   vocal-to-store: the app dictated into existence at 09:40 was installable from
   Play by evening. First real-device session (Fairphone 6, via Play install, no
