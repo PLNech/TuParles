@@ -43,6 +43,22 @@ untouched for Phase B.
   legacy rows read as `NONE`). New JVM tests (`WavDecoderTest`, `MigrationTest`,
   `TranscriptionManagerTest`) take the suite to 17 green; the native decode itself
   stays device-only.
+- **Android Phase C — transcript full-text search (#40)**: a search field on the
+  main screen filters the note list live (250 ms debounce) as you type. Matching
+  is Room FTS4 over `Note.transcript` — a `NoteFts` external-content virtual table
+  (`@Fts4(contentEntity = Note::class)`) kept in sync by Room's generated triggers,
+  populated on upgrade by `MIGRATION_2_3` (create table + the four content-sync
+  triggers + `rebuild`, all additive — the `notes` rows and their WAVs are never
+  touched). Free user text is turned into a safe prefix MATCH by `FtsQuery.toMatch`
+  (splits on non-alphanumerics so stray quotes/operators can't blow up the query;
+  each token gets a trailing `*` so "bon" already matches "bonjour"). Results rank
+  newest-first; each hit shows a snippet centred on the match (`TranscriptSnippet`,
+  word-boundary-aware with ellipses); expanding a hit reveals the full text.
+  Un-transcribed notes are naturally absent from results, with a visible hint
+  ("N notes sans transcript, non cherchables") so the exclusion is never silent —
+  a house principle. Empty search shows a bilingual no-match state. New JVM tests
+  (`FtsQueryTest`, `TranscriptSnippetTest`, `MigrationTest` v2→v3, ViewModel search
+  cases) take the suite to 37 green; the on-device FTS index build stays device-only.
 
 ### Changed
 - **`android/` app module rewritten in place**: the Chaquopy `app` module and its
@@ -59,6 +75,11 @@ untouched for Phase B.
   — ~45 MB without a model; ~186 MB with the base model bundled as an uncompressed
   asset. No `INTERNET` in the release manifest — the model reaches the device inside
   the APK (or by `adb push` into files), never over the network.
+- Phase C gate green: same command, 37/37 unit tests, lint 0 errors. APK ~187 MB
+  with the base model bundled — unchanged from Phase B (FTS adds only an index over
+  text already on disk). The FTS DDL in `MIGRATION_2_3` was captured verbatim from
+  Room's own generated schema (a throwaway `exportSchema=true` build) so it matches
+  the runtime's open-time validation byte-for-byte.
 
 ### Doctrine
 - **The POC was scaffolding, not the building.** Its Chaquopy embed validated the

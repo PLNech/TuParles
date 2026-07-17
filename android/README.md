@@ -5,11 +5,11 @@ Local, private FR/EN dictation on the phone. A fresh Kotlin/Compose rebuild
 `INTERNET` permission ships. Speak, save, share — the audio never leaves the box
 unless *you* push it out via the share sheet.
 
-**Phase A** (record / save / share) and **Phase B** (on-device transcription) are
-in (see `docs/research/2026-07-17-android-dictaphone-rebuild-design.md`): a real
-dictaphone you can live with, that transcribes on-device when a model is bundled and
-falls back to audio-only when it is not. Full-text search (Phase C) layers on next,
-behind the interfaces already in place.
+**Phase A** (record / save / share), **Phase B** (on-device transcription) and
+**Phase C** (full-text search over transcripts) are in (see
+`docs/research/2026-07-17-android-dictaphone-rebuild-design.md`): a real dictaphone you
+can live with, that transcribes on-device when a model is bundled, falls back to
+audio-only when it is not, and lets you search back through everything you have said.
 
 > The Chaquopy + whisper.cpp proof-of-concept that came before is preserved in the
 > git tag [`android-poc-0.1`](https://github.com/PLNech/TuParles/releases/tag/android-poc-0.1).
@@ -22,6 +22,7 @@ behind the interfaces already in place.
 | **Record** | A foreground `RecordingService` (type `microphone`) captures 16 kHz mono PCM16 via `AudioRecord`, saves a canonical WAV to app-private storage. A take survives screen-off and app-switch — the exact failure that motivated the rebuild. |
 | **Notes** | Room database — `Note(id, wavPath, createdAt, durationS, transcript?, transcriptState, transcriptLang)`. Newest-first list with date + duration. |
 | **Transcribe** (Phase B) | After a recording is saved, `TranscriptionManager` decodes the WAV on-device via the `:whisper` module (`language=auto`), off the UI lifecycle. The row shows a `transcription…` hint, then the transcript preview; tapping a decoded note expands the full text. No model bundled → the engine reports unavailable and the app stays a pure dictaphone. |
+| **Search** (Phase C) | A search field filters the list live (250 ms debounce) via Room **FTS4** over the transcripts (`NoteFts` external-content table). Prefix matching as you type ("bon" → "bonjour"); each hit shows a snippet centred on the match. Notes with no transcript can't match — a hint says how many are hidden so the exclusion is never silent. |
 | **Share** | A note's WAV goes out via the system share sheet (`FileProvider`, `ACTION_SEND`). Once a transcript exists, the share button offers **Partager le texte** alongside the audio. |
 | **Delete** | With a confirmation dialog — the audio is the artifact, so we ask first. |
 
@@ -58,12 +59,14 @@ app/src/main/java/pl/nech/tuparles/
   core/WhisperTranscriptionEngine.kt  Phase B: process-scoped whisper.cpp singleton
   core/NoopTranscriptionEngine.kt     unused reference impl (available=false)
   data/                       Note, NoteDao, AppDatabase, RoomNotesRepository,
-                              TranscriptState, Converters, Migrations (MIGRATION_1_2)
+                              TranscriptState, Converters, Migrations (1→2, 2→3),
+                              NoteFts (FTS4 index), FtsQuery (safe MATCH builder)
   record/                     AudioRecorderSession, Wav, WavDecoder, RecorderState(+Holder), RecordingService
   transcribe/TranscriptionManager.kt  post-record decode + persisted state machine
-  di/AppModule.kt             Hilt wiring (Room + migration + contract binds + app scope)
+  di/AppModule.kt             Hilt wiring (Room + migrations + contract binds + app scope)
   ui/                         MainActivity, RecorderViewModel, RecorderScreen, Share, theme/
   util/Format.kt              duration / filename / timestamp (pure, unit-tested)
+  util/TranscriptSnippet.kt   search-result excerpt centred on the match (pure, unit-tested)
 ```
 
 The `:whisper` gradle module (vendored whisper.cpp + the fixed CMake `-O3`/NEON + JNI)
@@ -132,21 +135,33 @@ ANDROID_SERIAL=<device> ./gradlew connectedDebugAndroidTest  # on-device (needs 
 ```
 
 - **`FormatTest`** — duration formatting (clamp / truncate edges) and note filenames.
-- **`RecorderViewModelTest`** — the ViewModel combines notes + recorder state, and
-  delete forwards to the repository (fake repo, `StandardTestDispatcher`).
+- **`RecorderViewModelTest`** — the ViewModel combines notes + recorder state, delete
+  forwards to the repository, and search filters to matching transcripts (prefix, live),
+  counts the un-transcribed notes hidden from results, and restores the full list when
+  cleared (fake repo, `StandardTestDispatcher`).
 - **`WavDecoderTest`** — the WAV round-trip (`writeWav` → `decodeWavToFloats`) that
   feeds whisper: PCM16 recovers to normalised floats in `[-1, 1]`, empty-safe.
 - **`TranscriptionManagerTest`** — the state machine: engine available → `DONE`,
   unavailable → `UNAVAILABLE` (engine never called), throws → `FAILED` (audio kept),
   already-`DONE` is idempotent, and `resumePending` re-decodes interrupted notes.
-- **`MigrationTest`** — `MIGRATION_1_2` emits exactly the two additive `ALTER`s, no
-  drops. (A real device upgrade via `MigrationTestHelper` needs a device — untested here.)
+- **`MigrationTest`** — `MIGRATION_1_2` emits exactly the two additive `ALTER`s;
+  `MIGRATION_2_3` creates the FTS4 virtual table + the four content-sync triggers +
+  `rebuild`, and never drops or deletes from `notes`. (A real device upgrade via
+  `MigrationTestHelper` needs a device — untested here.)
+- **`FtsQueryTest`** — free text → safe prefix `MATCH`: stars per token, stray
+  quotes/operators neutralised, blank/punctuation-only → null (show the full list).
+- **`TranscriptSnippetTest`** — the search excerpt centres on the match, adds ellipses
+  only where trimmed, and never cuts mid-word.
 
-17 unit tests, all on the JVM. The native whisper decode runs only on-device.
+37 unit tests, all on the JVM. The native whisper decode and the FTS index build run
+only on-device.
 
 ## Next
 
 - **Phase B follow-ups**: the model sweet-spot (base vs small vs large-v3-turbo) is
   [issue #13](https://github.com/PLNech/TuParles/issues/13); on-device decode
   quality/speed is confirmed only on the Fairphone 6 (no AVD on the build box).
-- **Phase C — search**: Room FTS over transcripts, keyword search, share the text.
+- **Phase C on-device confirm**: the FTS4 index build + live search are JVM-tested; the
+  actual `MIGRATION_2_3` upgrade and search over a populated DB are confirmed only by
+  build-time SQL assertions (the DDL was captured verbatim from Room's generated
+  schema), not yet exercised on a device.

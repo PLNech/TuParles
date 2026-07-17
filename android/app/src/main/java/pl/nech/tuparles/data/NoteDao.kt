@@ -18,6 +18,18 @@ interface NoteDao {
     @Query("SELECT * FROM notes WHERE transcriptState IN ('PENDING', 'RUNNING') ORDER BY createdAt ASC")
     suspend fun pendingTranscripts(): List<Note>
 
+    /**
+     * Full-text search over transcripts (issue #40). [match] is an FTS4 MATCH
+     * expression built by [FtsQuery.toMatch]; the join pins each hit back to its
+     * note by docid. Ranked by recency — newest first — which is fine for a
+     * personal dictaphone (no scoring gymnastics).
+     */
+    @Query(
+        "SELECT notes.* FROM notes JOIN notesFts ON notes.id = notesFts.docid " +
+            "WHERE notesFts MATCH :match ORDER BY notes.createdAt DESC",
+    )
+    fun search(match: String): Flow<List<Note>>
+
     @Insert
     suspend fun insert(note: Note): Long
 

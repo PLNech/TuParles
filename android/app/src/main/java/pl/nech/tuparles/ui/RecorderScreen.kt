@@ -21,8 +21,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
@@ -35,6 +37,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -59,6 +62,7 @@ import pl.nech.tuparles.data.TranscriptState
 import pl.nech.tuparles.record.RecorderState
 import pl.nech.tuparles.record.RecordingService
 import pl.nech.tuparles.util.Format
+import pl.nech.tuparles.util.TranscriptSnippet
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -101,10 +105,21 @@ fun RecorderScreen(viewModel: RecorderViewModel = hiltViewModel()) {
         ) {
             RecordControl(state.recorder, onRecordTap)
 
-            if (state.notes.isEmpty()) {
-                EmptyState(Modifier.weight(1f))
-            } else {
-                LazyColumn(
+            // The search field appears once there's anything to search (or a query in
+            // flight); with no notes ever recorded it stays out of the way.
+            if (state.notes.isNotEmpty() || state.query.isNotEmpty()) {
+                SearchField(state.query, viewModel::onQueryChange)
+            }
+            if (state.searching && state.untranscribedHidden > 0) {
+                UntranscribedHint(state.untranscribedHidden)
+            }
+
+            when {
+                // Nothing recorded yet.
+                state.query.isEmpty() && state.notes.isEmpty() -> EmptyState(Modifier.weight(1f))
+                // A search that matched nothing.
+                state.notes.isEmpty() -> NoMatchState(state.query, Modifier.weight(1f))
+                else -> LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(horizontal = 12.dp),
@@ -113,6 +128,7 @@ fun RecorderScreen(viewModel: RecorderViewModel = hiltViewModel()) {
                     items(state.notes, key = { it.id }) { note ->
                         NoteRow(
                             note = note,
+                            query = if (state.searching) state.query else "",
                             onShareAudio = { shareNote(context, note) },
                             onShareText = { shareText(context, note) },
                             onDelete = { pendingDelete = note },
@@ -192,8 +208,59 @@ private fun RecordControl(recorder: RecorderState, onTap: () -> Unit) {
 }
 
 @Composable
+private fun SearchField(query: String, onQueryChange: (String) -> Unit) {
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        singleLine = true,
+        placeholder = { Text("Chercher dans les transcriptions") },
+        leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+        trailingIcon = {
+            if (query.isNotEmpty()) {
+                IconButton(onClick = { onQueryChange("") }) {
+                    Icon(Icons.Filled.Close, contentDescription = "Effacer la recherche")
+                }
+            }
+        },
+    )
+}
+
+/** Why some notes vanished during a search: they have no transcript to match against. */
+@Composable
+private fun UntranscribedHint(count: Int) {
+    val label = if (count == 1) {
+        "1 note sans transcript, non cherchable"
+    } else {
+        "$count notes sans transcript, non cherchables"
+    }
+    Text(
+        text = label,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 2.dp),
+    )
+}
+
+@Composable
+private fun NoMatchState(query: String, modifier: Modifier = Modifier) {
+    Box(modifier = modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        Text(
+            "Aucun résultat pour « ${query.trim()} ».\nEssayez d'autres mots — try other words.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
 private fun NoteRow(
     note: Note,
+    query: String,
     onShareAudio: () -> Unit,
     onShareText: () -> Unit,
     onDelete: () -> Unit,
@@ -217,7 +284,7 @@ private fun NoteRow(
             Column(modifier = Modifier.weight(1f)) {
                 Text(Format.timestamp(note.createdAt), style = MaterialTheme.typography.bodyLarge)
                 Text(
-                    text = subtitle(note, hasTranscript),
+                    text = subtitle(note, hasTranscript, query, expanded),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = if (expanded) Int.MAX_VALUE else 2,
@@ -232,8 +299,13 @@ private fun NoteRow(
     }
 }
 
-/** The row's second line: transcript when decoded, a live hint while decoding, else duration. */
-private fun subtitle(note: Note, hasTranscript: Boolean): String = when {
+/**
+ * The row's second line: while collapsed inside a search it shows a snippet centred on
+ * the match; otherwise the transcript when decoded, a live hint while decoding, else
+ * duration. Expanding always reveals the full transcript.
+ */
+private fun subtitle(note: Note, hasTranscript: Boolean, query: String, expanded: Boolean): String = when {
+    hasTranscript && query.isNotBlank() && !expanded -> TranscriptSnippet.around(note.transcript!!, query)
     hasTranscript -> note.transcript!!.trim()
     note.transcriptState.inFlight -> "transcription…"
     note.transcriptState == TranscriptState.FAILED -> "transcription échouée — durée ${Format.duration(note.durationS)}"
