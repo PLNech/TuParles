@@ -772,5 +772,23 @@
     "subject": "Clean stale JNI symbol prefix in whisper module jni.c",
     "completedAt": "2026-07-17",
     "learnings": "Prefer deleting a dead JNI chain (native fn + Kotlin external binding + helper callbacks, 84 lines) over renaming the symbol — a renamed-but-unused path is still a trap. Verify with rg for the old package prefix AND a native rebuild (assembleDebug --offline recompiles and links the .so without touching a 98%-full disk). Release variants gated on signing env vars can't serve as the compile check; debug links the same JNI."
+  },
+  {
+    "id": "14",
+    "subject": "Fix: search field displays no typed text on device (GH #41)",
+    "completedAt": "2026-07-17",
+    "learnings": "Never drive a Compose TextField from a debounced/async state: value bound to the query AFTER debounce→flatMapLatest→combine→stateIn resets the field to stale on every recomposition, so keystrokes never echo — on device only, invisible to 37 green JVM tests. Fix pattern: expose the raw MutableStateFlow undebounced for display, keep the debounce solely on the search-execution flow. Regression test = assert display state updates synchronously while filtering still debounces."
+  },
+  {
+    "id": "15",
+    "subject": "Feature: live partial transcripts while recording (GH #42)",
+    "completedAt": "2026-07-17",
+    "learnings": "Tail-window partials MVP: 15s PCM ring buffer (480KB) + self-pacing 5s decode loop + DecodeGate mutex where committed decodes wait and partials tryLock-skip. Extract JVM-untestable seams into pure classes (PcmRingBuffer, DecodeGate) — the priority rule and wrap-around got deterministic tests without a device. transcribeSamples returns null for both busy-skip and unsupported so a skip never counts toward the failure-stop threshold. Publish partials on a SEPARATE StateFlow from the high-frequency level meter to avoid clobbering."
+  },
+  {
+    "id": "16",
+    "subject": "Release v1.0.0-internal2 (vc5) to Play internal track",
+    "completedAt": "2026-07-17",
+    "learnings": "Same-evening two-fix release, gate re-run fresh as free cross-verification of both builders (55 green). Upload hiccups: play.py deps live in NO consumer venv (throwaway scratchpad venv, deleted after); a failed resumable edit consumes no versionCode so identical re-run is safe — resolve ambiguous exits against play.py status ground truth, never an empty output file. New global doctrine from the stuck watcher: pgrep/pkill -f self-matches the watcher's own cmdline — wait on the PID (tail --pid) or bracket-trick the pattern."
   }
 ]
