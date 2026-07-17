@@ -27,6 +27,22 @@ untouched for Phase B.
   singleton (`RecorderStateHolder`) shared by the service and the ViewModel, so
   the read path has no Android on it. Unit tests: `FormatTest` (duration/filename)
   + `RecorderViewModelTest` (state combine + delete), 6 green on the JVM.
+- **Android Phase B — on-device STT (#39)**: the vendored `:whisper` module
+  (whisper.cpp + JNI) is now wired behind `TranscriptionEngine` as
+  `WhisperTranscriptionEngine` — a process-scoped `@Singleton` context loaded once
+  from an uncompressed `assets/models/ggml-base.bin`, `language="auto"` (never the
+  POC's hardcoded FR→EN). After a recording is saved, a `TranscriptionManager` on a
+  process-lived coroutine scope decodes the WAV off the UI lifecycle and drives the
+  note through a persisted state machine (`PENDING → RUNNING → DONE`, or `FAILED`,
+  or `UNAVAILABLE`). The note row shows a "transcription…" hint, then the transcript
+  preview; tapping a decoded note expands the full text; the share affordance gains
+  "Partager le texte" alongside the audio once a transcript exists. If no model
+  asset is bundled, the engine reports `available=false` and the app degrades to
+  Phase A (audio-only) — recording is never blocked by STT. Room `Note` gains
+  `transcriptState` + `transcriptLang` via a proper `MIGRATION_1_2` (additive,
+  legacy rows read as `NONE`). New JVM tests (`WavDecoderTest`, `MigrationTest`,
+  `TranscriptionManagerTest`) take the suite to 17 green; the native decode itself
+  stays device-only.
 
 ### Changed
 - **`android/` app module rewritten in place**: the Chaquopy `app` module and its
@@ -38,6 +54,11 @@ untouched for Phase B.
 ### Infra
 - Build gate green on the box: `assembleDebug lint testDebugUnitTest` — APK builds,
   the `whisper` native module still compiles (arm64), lint 0 errors, 6/6 unit tests.
+- Phase B gate green: same command, 17/17 unit tests, lint 0 errors. The debug APK
+  now packages the arm64 whisper libs (`libwhisper*.so`, `libggml*.so`, `libomp.so`)
+  — ~45 MB without a model; ~186 MB with the base model bundled as an uncompressed
+  asset. No `INTERNET` in the release manifest — the model reaches the device inside
+  the APK (or by `adb push` into files), never over the network.
 
 ### Doctrine
 - **The POC was scaffolding, not the building.** Its Chaquopy embed validated the

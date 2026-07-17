@@ -26,6 +26,8 @@ import kotlinx.coroutines.launch
 import pl.nech.tuparles.core.NotesRepository
 import pl.nech.tuparles.core.RecorderSession
 import pl.nech.tuparles.data.Note
+import pl.nech.tuparles.data.TranscriptState
+import pl.nech.tuparles.transcribe.TranscriptionManager
 import pl.nech.tuparles.ui.MainActivity
 import java.io.File
 import javax.inject.Inject
@@ -43,6 +45,7 @@ class RecordingService : Service() {
     @Inject lateinit var recorder: RecorderSession
     @Inject lateinit var notes: NotesRepository
     @Inject lateinit var stateHolder: RecorderStateHolder
+    @Inject lateinit var transcription: TranscriptionManager
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     @Volatile private var recording = false
@@ -101,13 +104,17 @@ class RecordingService : Service() {
                     val dir = File(filesDir, "notes").apply { mkdirs() }
                     val file = File(dir, "note_$createdAt.wav")
                     writeWav(file, pcm)
-                    notes.add(
+                    val id = notes.add(
                         Note(
                             wavPath = file.absolutePath,
                             createdAt = createdAt,
                             durationS = pcm.size.toFloat() / SAMPLE_RATE,
+                            // Enqueued for STT; the manager flips this to RUNNING→DONE,
+                            // or UNAVAILABLE if no on-device model is bundled.
+                            transcriptState = TranscriptState.PENDING,
                         ),
                     )
+                    transcription.onNoteSaved(id)
                 }
             } finally {
                 stateHolder.set(RecorderState.Idle)

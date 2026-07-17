@@ -41,6 +41,10 @@ interface TranscriptionEngine {
 interface NotesRepository {
     fun observeNotes(): Flow<List<Note>>
     suspend fun add(note: Note): Long
+    suspend fun update(note: Note)
     suspend fun delete(note: Note)
     suspend fun get(id: Long): Note?
+
+    /** Notes whose transcript is queued or was interrupted mid-decode (resume on start). */
+    suspend fun pendingTranscripts(): List<Note>
 }
