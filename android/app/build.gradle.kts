@@ -24,8 +24,8 @@ android {
         applicationId = "pl.nech.tuparles"
         minSdk = 26 // no more Chaquopy floor; covers ~95% of devices
         targetSdk = 36
-        versionCode = 4
-        versionName = "1.0.0-internal1" // First Play internal-testing upload
+        versionCode = 5
+        versionName = "1.0.0-internal2" // Same-evening follow-up: #41 + #42
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
