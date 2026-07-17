@@ -26,6 +26,11 @@ vocab.txt
 # Local-only notes / idea scratchpads — never pushed
 *.local.md
 
+# Machine-local symlink to the canonical Play CLI (SRE/bin/play.py) — never
+# committed: it hardcodes the operator's home path. See SRE runbook
+# play-store-release.md for the ln -s pattern.
+tools/play.py
+
 # Coverage artefacts
 .coverage
 htmlcov/
