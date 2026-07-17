@@ -90,6 +90,18 @@ untouched for Phase B.
   internal track via the shared `tools/play.py` CLI. Follows the SRE runbook
   `play-store-release.md`.
 
+### Released
+- **v1.0.0-internal1 (vc4) live on the Play internal track** — same-day
+  vocal-to-store: the app dictated into existence at 09:40 was installable from
+  Play by evening. First real-device session (Fairphone 6, via Play install, no
+  adb): recording + on-device decode work. Two findings filed: the search field
+  doesn't display typed text (bug), and long dictations want live partial
+  transcripts (feature) — see the android issues. The upload itself took five
+  attempts across four distinct root causes (transport timeout, then
+  googleapiclient's silent 100 MB default chunking tripping httplib2's 308
+  handling); every fix landed in the canonical `SRE/bin/play.py` + runbook, so
+  the next app inherits a hardened pipeline.
+
 ### Doctrine
 - **The POC was scaffolding, not the building.** Its Chaquopy embed validated the
   engine on-device and nothing else; keeping it would have taxed every future
