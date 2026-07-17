@@ -80,6 +80,15 @@ untouched for Phase B.
   text already on disk). The FTS DDL in `MIGRATION_2_3` was captured verbatim from
   Room's own generated schema (a throwaway `exportSchema=true` build) so it matches
   the runtime's open-time validation byte-for-byte.
+- **Play internal-testing release pipeline.** Env-driven release signing in
+  `app/build.gradle.kts` (`TUPARLES_UPLOAD_*` from a gitignored `.env`, credentials
+  never committed; a `whenReady` task-graph guard fails fast on a release task when
+  they are unset, debug builds untouched). Upload keystore lives outside the repo
+  (`~/.secrets/android/`, mode 600); `.env.example` carries the key names valueless.
+  First signed AAB is `pl.nech.tuparles` vc4 / `1.0.0-internal1` (~146 MB, under
+  Play's 200 MB base-module cap), built with `:app:bundleRelease` and shipped to the
+  internal track via the shared `tools/play.py` CLI. Follows the SRE runbook
+  `play-store-release.md`.
 
 ### Doctrine
 - **The POC was scaffolding, not the building.** Its Chaquopy embed validated the

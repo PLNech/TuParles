@@ -9,6 +9,13 @@ plugins {
     alias(libs.plugins.hilt)
 }
 
+// Release signing credentials from the environment (see .env / .env.example) so
+// nothing secret is committed. The store password doubles as the key password.
+val uploadKeystorePath = providers.environmentVariable("TUPARLES_UPLOAD_KEYSTORE").orNull
+val uploadKeyAlias = providers.environmentVariable("TUPARLES_UPLOAD_KEY_ALIAS").orNull
+val uploadKeystorePass = providers.environmentVariable("TUPARLES_UPLOAD_KEYSTORE_PASS").orNull
+val hasUploadSigning = uploadKeystorePath != null && uploadKeyAlias != null && uploadKeystorePass != null
+
 android {
     namespace = "pl.nech.tuparles"
     compileSdk = 36
@@ -17,14 +24,26 @@ android {
         applicationId = "pl.nech.tuparles"
         minSdk = 26 // no more Chaquopy floor; covers ~95% of devices
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.0.0-dictaphone" // Phase A: fresh Kotlin rebuild
+        versionCode = 4
+        versionName = "1.0.0-internal1" // First Play internal-testing upload
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        create("release") {
+            if (hasUploadSigning) {
+                storeFile = file(uploadKeystorePath!!)
+                storePassword = uploadKeystorePass
+                keyAlias = uploadKeyAlias
+                keyPassword = uploadKeystorePass
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = if (hasUploadSigning) signingConfigs.getByName("release") else null
         }
     }
 
@@ -92,4 +111,20 @@ dependencies {
 
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.test.runner)
+}
+
+// Fail fast on a release assemble/bundle/sign task when signing env vars are
+// missing, rather than emitting an unsigned bundle Play rejects. Debug builds
+// and non-build tasks are unaffected.
+gradle.taskGraph.whenReady {
+    val wantsSignedRelease = allTasks.any { t ->
+        val n = t.name.lowercase()
+        n.contains("bundlerelease") || n.contains("assemblerelease") || n.contains("signrelease")
+    }
+    if (wantsSignedRelease && !hasUploadSigning) {
+        throw GradleException(
+            "Release signing requires env vars TUPARLES_UPLOAD_KEYSTORE, " +
+            "TUPARLES_UPLOAD_KEY_ALIAS, TUPARLES_UPLOAD_KEYSTORE_PASS. See .env.example.",
+        )
+    }
 }
