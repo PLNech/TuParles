@@ -1,5 +1,53 @@
 # Changelog
 
+## Sprint 34 — 2026-07-17 · Le dictaphone : repartir en Kotlin propre
+
+The morning voice-note flow (record on the phone → transcribe on the PC) proved
+its worth — and proved that what it really wants is a real app. Decision: full
+rewrite of the Android app in place, pure Kotlin/Compose, no Chaquopy. The June
+proof-of-concept is preserved in its git tag (`android-poc-0.1`); the vendored
+`whisper` gradle module (fixed CMake `-O3` + JNI, `language=auto`) is kept
+untouched for Phase B.
+
+### Added
+- **Android Phase A — the dictaphone (#2)**: a fresh single-activity Compose app.
+  A foreground `RecordingService` (type `microphone`) captures 16 kHz mono PCM16
+  and writes a canonical WAV to app-private storage — a take now survives
+  screen-off and app-switch, the exact failure that motivated the rebuild. Notes
+  persist in a Room database (`Note(id, wavPath, createdAt, durationS,
+  transcript?)`), listed newest-first with date + duration. Share a note's WAV
+  via the system share sheet (`FileProvider` + `ACTION_SEND`); delete with a
+  confirmation dialog. Hilt DI, ViewModel + StateFlow, Material 3 (dynamic colour
+  on Android 12+), version catalog (`libs.versions.toml`). minSdk 26, targetSdk
+  36. No model, no `INTERNET` — the lean APK is ~20 MB.
+- **Portable-core seam on Android (#2)**: `RecorderSession`, `TranscriptionEngine`,
+  `NotesRepository` interfaces mark the platform boundary. `TranscriptionEngine`
+  ships as `NoopTranscriptionEngine` (`available=false`) — Phase B binds the
+  native `whisper` module behind it. Recording state flows through a single Hilt
+  singleton (`RecorderStateHolder`) shared by the service and the ViewModel, so
+  the read path has no Android on it. Unit tests: `FormatTest` (duration/filename)
+  + `RecorderViewModelTest` (state combine + delete), 6 green on the JVM.
+
+### Changed
+- **`android/` app module rewritten in place**: the Chaquopy `app` module and its
+  plugin wiring are removed; the new Kotlin app scaffolds in the same directory
+  (git is the versioning layer — no `-v2`). Root `build.gradle.kts` +
+  `settings.gradle.kts` drop the Chaquopy plugin and Maven repo; all plugins move
+  to the version catalog.
+
+### Infra
+- Build gate green on the box: `assembleDebug lint testDebugUnitTest` — APK builds,
+  the `whisper` native module still compiles (arm64), lint 0 errors, 6/6 unit tests.
+
+### Doctrine
+- **The POC was scaffolding, not the building.** Its Chaquopy embed validated the
+  engine on-device and nothing else; keeping it would have taxed every future
+  change. Kept the one part that earned it — the `whisper` module — and rebuilt
+  the rest clean. See `docs/research/2026-07-17-android-dictaphone-rebuild-design.md`.
+- **Dictaphone first, transcription later.** The audio is always kept: on-device
+  decode (Phase B) can fail or be coarse, but the note is never lost — it stays
+  retranscribable on the desktop in large-v3. Graceful degradation, mobile edition.
+
 ## Sprint 33 — 2026-07-15 · Rattraper les prises parlées trop bas
 
 A quiet, muffled take lost large chunks in the FINAL transcript that the live

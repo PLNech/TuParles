@@ -1,8 +1,12 @@
-// Root build script. Versions pinned to a known-good combo (see android/README.md):
-//   Chaquopy 17.0 ↔ AGP 8.9 ↔ Gradle 8.11.1 ↔ Kotlin 2.0.x ↔ JDK 21.
-// Chaquopy is declared here but applied only from the app module at Rung 1.
+// Root build script. Versions live in gradle/libs.versions.toml (the version catalog),
+// pinned to a known-good combo (see android/README.md):
+//   AGP 8.9 · Kotlin 2.0.21 · Gradle 8.11.1 · JDK 21 · NDK 27 · compileSdk 36.
+// All plugins declared here, applied per-module.
 plugins {
-    id("com.android.application") version "8.9.0" apply false
-    id("org.jetbrains.kotlin.android") version "2.0.21" apply false
-    id("com.chaquo.python") version "17.0.0" apply false
+    alias(libs.plugins.android.application) apply false
+    alias(libs.plugins.android.library) apply false
+    alias(libs.plugins.kotlin.android) apply false
+    alias(libs.plugins.kotlin.compose) apply false
+    alias(libs.plugins.ksp) apply false
+    alias(libs.plugins.hilt) apply false
 }

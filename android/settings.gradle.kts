@@ -3,7 +3,6 @@ pluginManagement {
         google()
         mavenCentral()
         gradlePluginPortal()
-        maven(url = "https://chaquo.com/maven") // Chaquopy plugin (Rung 1+)
     }
 }
 dependencyResolutionManagement {
@@ -11,7 +10,6 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        maven(url = "https://chaquo.com/maven")
     }
 }
 
