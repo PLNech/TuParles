@@ -700,5 +700,53 @@
     "subject": "Take-consent review closed; real-voice corpus unlocked",
     "completedAt": "2026-07-11",
     "learnings": "The consent tool must run in the USER'S terminal, never via the session (it prints transcripts by design - 'you can't consent to what you can't read'); the assistant verifies counts-only afterward via share_ok. 62 shared / 7 private / 180 unreviewed; the paired real-voice A/B unblocked same-day."
+  },
+  {
+    "id": "s34-json-sidecar-fix",
+    "subject": "fix(cli): transcribe JSON sidecar crashed on numpy scalars",
+    "completedAt": "2026-07-17",
+    "learnings": "A comparison over np.float32 timings yields np.bool_ (turn_seam) — EVERY faster-whisper output field is numpy; coerce to native at dict-build time, and json's error message names numpy types by their Python lookalikes ('type bool'), hiding the real culprit."
+  },
+  {
+    "id": "s34-android-recon",
+    "subject": "Recon: POC android/ quality + tooling inventory",
+    "completedAt": "2026-07-17",
+    "learnings": "Audit before rewriting paid: both historic POC bugs (-O3, language=auto) were already fixed in-code, making the whisper JNI module worth keeping verbatim while the Chaquopy app died."
+  },
+  {
+    "id": "s34-android-design",
+    "subject": "Design note: fresh Kotlin dictaphone app",
+    "completedAt": "2026-07-17",
+    "learnings": "Align the new app's seams (RecorderSession/TranscriptionEngine) with the pre-existing library-extraction issue (#2) so the app is the contract's first host rather than another fork to unify later."
+  },
+  {
+    "id": "s34-android-phase-a",
+    "subject": "Phase A: Compose dictaphone — record/save/share",
+    "completedAt": "2026-07-17",
+    "learnings": "Shell ANDROID_HOME was a stale macOS path silently shadowing the real SDK — gitignored local.properties is the repo-local antidote; also reverting a 'suggested' lint cleanup (mipmap-anydpi-v26 rename) beat forcing it: adaptive icons need the -v26 folder."
+  },
+  {
+    "id": "s34-android-phase-b",
+    "subject": "Phase B: on-device STT behind TranscriptionEngine",
+    "completedAt": "2026-07-17",
+    "learnings": "Model ships as UNCOMPRESSED asset (noCompress 'bin') so JNI streams without heap inflation; engine absence degrades to pure recorder — audio stays the source of truth, STT is never allowed to block capture."
+  },
+  {
+    "id": "s34-gh-backlog",
+    "subject": "GH epic #37 + children #38-40 for the Android app",
+    "completedAt": "2026-07-17",
+    "learnings": ""
+  },
+  {
+    "id": "s34-sre-privacy-runbook",
+    "subject": "SRE: play-store runbook + nech.pl/privacy umbrella live",
+    "completedAt": "2026-07-17",
+    "learnings": "The brief assumed /privacy was a dead redirect; a 2026-07-12 session had already shipped a bilingual page + nginx wiring — survey live state before authoring 'new' infra, and extending the existing umbrella was the right move (backup first)."
+  },
+  {
+    "id": "s34-playpy-extraction",
+    "subject": "Extract play.py to SRE/bin as SSOT + symlink pattern",
+    "completedAt": "2026-07-17",
+    "learnings": "The shared CLI carried a SILENT project default (pl.nech.domovoy package fallback) — one unset env var away from uploading to the wrong app's Play listing; extraction to SSOT must convert silent defaults to loud failures. Consumer symlinks stay gitignored: public repos can't carry machine-local paths."
   }
 ]
