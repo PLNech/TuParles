@@ -14,6 +14,11 @@ dist/
 *.log
 .tuparles/
 
+# Release secrets and signed artifacts — never committed. .env holds the upload
+# keystore password + SA key path; dist-play/ holds the signed AAB.
+.env
+dist-play/
+
 # Code-switch eval: generated fixtures + downloaded TTS voices.
 # corpus.json is the source of truth; regenerate with
 # scripts/gen_codeswitch_wavs.py — WAVs/voices/manifest are machine-local.
