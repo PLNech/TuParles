@@ -32,6 +32,13 @@ android {
         compose = true
     }
 
+    // The whisper GGML model ships as an UNCOMPRESSED asset (POC lesson): the JNI
+    // loader mmaps/streams it straight from the APK instead of inflating ~142MB into
+    // heap. The model itself is fetched by scripts/fetch-android-model.sh and gitignored.
+    androidResources {
+        noCompress += "bin"
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -39,9 +46,19 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    testOptions {
+        // Let android.jar stubs (e.g. android.util.Log) return defaults instead of
+        // throwing "not mocked" so pure-logic JVM tests can exercise code that logs.
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 dependencies {
+    // Phase B: on-device STT engine (vendored whisper.cpp + JNI). Builds libwhisper.so
+    // for arm64 via the NDK; the app degrades to Phase A if no model asset is present.
+    implementation(project(":whisper"))
+
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.androidx.lifecycle.runtime.compose)

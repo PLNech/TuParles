@@ -6,6 +6,8 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +27,8 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -51,6 +55,7 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import pl.nech.tuparles.data.Note
+import pl.nech.tuparles.data.TranscriptState
 import pl.nech.tuparles.record.RecorderState
 import pl.nech.tuparles.record.RecordingService
 import pl.nech.tuparles.util.Format
@@ -108,7 +113,8 @@ fun RecorderScreen(viewModel: RecorderViewModel = hiltViewModel()) {
                     items(state.notes, key = { it.id }) { note ->
                         NoteRow(
                             note = note,
-                            onShare = { shareNote(context, note) },
+                            onShareAudio = { shareNote(context, note) },
+                            onShareText = { shareText(context, note) },
                             onDelete = { pendingDelete = note },
                         )
                     }
@@ -186,8 +192,22 @@ private fun RecordControl(recorder: RecorderState, onTap: () -> Unit) {
 }
 
 @Composable
-private fun NoteRow(note: Note, onShare: () -> Unit, onDelete: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+private fun NoteRow(
+    note: Note,
+    onShareAudio: () -> Unit,
+    onShareText: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    val hasTranscript = !note.transcript.isNullOrBlank()
+    var expanded by remember(note.id) { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize()
+            // Tapping a note with a transcript expands/collapses the full text.
+            .clickable(enabled = hasTranscript) { expanded = !expanded },
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -197,19 +217,52 @@ private fun NoteRow(note: Note, onShare: () -> Unit, onDelete: () -> Unit) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(Format.timestamp(note.createdAt), style = MaterialTheme.typography.bodyLarge)
                 Text(
-                    text = note.transcript?.takeIf { it.isNotBlank() } ?: "durée ${Format.duration(note.durationS)}",
+                    text = subtitle(note, hasTranscript),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 2,
+                    maxLines = if (expanded) Int.MAX_VALUE else 2,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            IconButton(onClick = onShare) {
-                Icon(Icons.Filled.Share, contentDescription = "Partager")
-            }
+            ShareButton(hasTranscript, onShareAudio, onShareText)
             IconButton(onClick = onDelete) {
                 Icon(Icons.Filled.Delete, contentDescription = "Supprimer")
             }
+        }
+    }
+}
+
+/** The row's second line: transcript when decoded, a live hint while decoding, else duration. */
+private fun subtitle(note: Note, hasTranscript: Boolean): String = when {
+    hasTranscript -> note.transcript!!.trim()
+    note.transcriptState.inFlight -> "transcription…"
+    note.transcriptState == TranscriptState.FAILED -> "transcription échouée — durée ${Format.duration(note.durationS)}"
+    else -> "durée ${Format.duration(note.durationS)}"
+}
+
+/** One share affordance: audio-only until a transcript exists, then a menu (audio / texte). */
+@Composable
+private fun ShareButton(hasTranscript: Boolean, onShareAudio: () -> Unit, onShareText: () -> Unit) {
+    if (!hasTranscript) {
+        IconButton(onClick = onShareAudio) {
+            Icon(Icons.Filled.Share, contentDescription = "Partager l'audio")
+        }
+        return
+    }
+    var menuOpen by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { menuOpen = true }) {
+            Icon(Icons.Filled.Share, contentDescription = "Partager")
+        }
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            DropdownMenuItem(
+                text = { Text("Partager le texte") },
+                onClick = { menuOpen = false; onShareText() },
+            )
+            DropdownMenuItem(
+                text = { Text("Partager l'audio") },
+                onClick = { menuOpen = false; onShareAudio() },
+            )
         }
     }
 }

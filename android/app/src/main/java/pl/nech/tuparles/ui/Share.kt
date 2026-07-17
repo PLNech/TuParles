@@ -21,7 +21,20 @@ fun shareNote(context: Context, note: Note) {
         putExtra(Intent.EXTRA_STREAM, uri)
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
-    context.startActivity(Intent.createChooser(intent, "Partager la note").apply {
+    context.startActivity(Intent.createChooser(intent, "Partager l'audio").apply {
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     })
+}
+
+/**
+ * Share the decoded transcript as plain text through the system share sheet. Offered
+ * alongside [shareNote] once a note has a transcript — still the user pushing, no INTERNET.
+ */
+fun shareText(context: Context, note: Note) {
+    val text = note.transcript?.takeIf { it.isNotBlank() } ?: return
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_TEXT, text)
+    }
+    context.startActivity(Intent.createChooser(intent, "Partager le texte"))
 }
