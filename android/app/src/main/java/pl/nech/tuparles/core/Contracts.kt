@@ -20,6 +20,14 @@ interface RecorderSession {
 
     /** Stops the mic and returns the captured PCM16 samples. */
     fun stop(): ShortArray
+
+    /**
+     * The most recent few seconds of captured audio as normalised floats ([-1, 1], 16 kHz
+     * mono), for the live-partials preview (#42). Thread-safe; safe to call mid-recording.
+     * A recorder that keeps no such buffer returns empty — the partials loop then simply
+     * publishes nothing (graceful degradation), and recording is unaffected either way.
+     */
+    fun snapshotRecentSamples(): FloatArray = FloatArray(0)
 }
 
 /** The result of decoding audio to text. Model/language are for provenance. */
@@ -35,6 +43,21 @@ interface TranscriptionEngine {
     val available: Boolean
 
     suspend fun transcribe(wavPath: String): Transcript
+
+    /**
+     * Whether this engine can decode raw samples for live tail-window partials (#42),
+     * mirroring the desktop's `supports_partials`. Defaults false so any engine that
+     * doesn't implement partials degrades to no-preview without a wiring change.
+     */
+    val supportsPartials: Boolean get() = false
+
+    /**
+     * Decode raw normalised float samples ([-1, 1], 16 kHz mono) to text, for the live
+     * preview. Returns null when no partial is produced — the engine was busy with a
+     * committed decode, or partials are unsupported. MUST NOT disturb a committed decode
+     * or the recording. Defaults to null (no partials).
+     */
+    suspend fun transcribeSamples(samples: FloatArray): String? = null
 }
 
 /** Persistence for recorded notes. Room-backed on Android (see data/). */

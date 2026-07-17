@@ -52,6 +52,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -105,7 +107,7 @@ fun RecorderScreen(viewModel: RecorderViewModel = hiltViewModel()) {
                 .padding(padding),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            RecordControl(state.recorder, onRecordTap)
+            RecordControl(state.recorder, state.partial, onRecordTap)
 
             // The search field appears once there's anything to search (or a query in
             // flight); with no notes ever recorded it stays out of the way.
@@ -160,7 +162,7 @@ fun RecorderScreen(viewModel: RecorderViewModel = hiltViewModel()) {
 }
 
 @Composable
-private fun RecordControl(recorder: RecorderState, onTap: () -> Unit) {
+private fun RecordControl(recorder: RecorderState, partial: String?, onTap: () -> Unit) {
     val recording = recorder is RecorderState.Recording
     val saving = recorder is RecorderState.Saving
     val elapsed = (recorder as? RecorderState.Recording)?.elapsedMs ?: 0L
@@ -205,6 +207,21 @@ private fun RecordControl(recorder: RecorderState, onTap: () -> Unit) {
                     .fillMaxWidth()
                     .clip(CircleShape),
             )
+            // Live preview of the last ~15 s (#42). Deliberately dim + italic: it is
+            // provisional and only the recent tail, not the whole take — reassurance that
+            // the mic hears you, never the durable transcript. "Provisional" reads from the
+            // typography (secondary colour, italic), never a different hue.
+            if (!partial.isNullOrBlank()) {
+                Text(
+                    text = partial,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontStyle = FontStyle.Italic),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
     }
 }

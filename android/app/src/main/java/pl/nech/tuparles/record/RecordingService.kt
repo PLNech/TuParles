@@ -27,6 +27,7 @@ import pl.nech.tuparles.core.NotesRepository
 import pl.nech.tuparles.core.RecorderSession
 import pl.nech.tuparles.data.Note
 import pl.nech.tuparles.data.TranscriptState
+import pl.nech.tuparles.transcribe.PartialTranscriber
 import pl.nech.tuparles.transcribe.TranscriptionManager
 import pl.nech.tuparles.ui.MainActivity
 import java.io.File
@@ -46,6 +47,7 @@ class RecordingService : Service() {
     @Inject lateinit var notes: NotesRepository
     @Inject lateinit var stateHolder: RecorderStateHolder
     @Inject lateinit var transcription: TranscriptionManager
+    @Inject lateinit var partials: PartialTranscriber
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     @Volatile private var recording = false
@@ -78,6 +80,9 @@ class RecordingService : Service() {
             recorder.start { level, elapsed ->
                 if (recording) stateHolder.set(RecorderState.Recording(elapsed, level))
             }
+            // Live preview of the last few seconds (#42). No-op if no on-device model:
+            // recording proceeds identically (graceful degradation).
+            partials.start { recorder.snapshotRecentSamples() }
             // Safety cap: a forgotten recording can't hold the mic forever.
             capJob = scope.launch {
                 delay(MAX_RECORD_MS)
@@ -85,6 +90,7 @@ class RecordingService : Service() {
             }
         } catch (e: Throwable) {
             recording = false
+            partials.stop()
             stateHolder.set(RecorderState.Idle)
             stopForegroundAndSelf()
         }
@@ -93,6 +99,7 @@ class RecordingService : Service() {
     private fun stopAndSave() {
         if (!recording) return // idempotent: a stop tap racing the safety cap can't double-fire
         capJob?.cancel()
+        partials.stop() // end the preview before we release the mic; final decode is the durable text
         recording = false
         stateHolder.set(RecorderState.Saving)
         updateNotif("💾 enregistrement…")
@@ -167,6 +174,7 @@ class RecordingService : Service() {
     }
 
     override fun onDestroy() {
+        partials.stop()
         if (recording) recorder.stop()
         scope.cancel()
         super.onDestroy()
