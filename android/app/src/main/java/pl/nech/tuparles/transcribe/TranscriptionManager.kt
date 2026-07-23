@@ -8,6 +8,7 @@ import pl.nech.tuparles.core.TranscriptionEngine
 import pl.nech.tuparles.data.Note
 import pl.nech.tuparles.data.TranscriptState
 import pl.nech.tuparles.di.ApplicationScope
+import pl.nech.tuparles.model.PendingWork
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -26,26 +27,35 @@ import javax.inject.Singleton
  * State machine (persisted on [Note.transcriptState]):
  *   saved → PENDING → RUNNING → DONE            (engine available, decode ok)
  *                              ↘ FAILED          (engine threw; audio still safe)
- *   saved → UNAVAILABLE                          (no engine/model → Phase A behaviour)
+ *   saved → PENDING (no model)                  (lean APK, no model yet — "en attente
+ *                                                d'un modèle"; auto-decodes once one lands)
+ *
+ * With the lean-APK change (#13) a fresh install has no model, so an un-decodable note
+ * stays PENDING rather than UNAVAILABLE: it is genuinely *waiting for a model*, and
+ * [retryPending] — called when a download completes — sweeps it up. The audio is always
+ * saved regardless; transcription is never allowed to block or lose a recording.
  */
 @Singleton
 class TranscriptionManager @Inject constructor(
     private val engine: TranscriptionEngine,
     private val notes: NotesRepository,
     @ApplicationScope private val scope: CoroutineScope,
-) {
+) : PendingWork {
 
     /** Called right after a note is saved. Marks state and (if possible) kicks off decode. */
     fun onNoteSaved(noteId: Long) {
         scope.launch { process(noteId) }
     }
 
-    /** Re-enqueue notes interrupted mid-decode (or never started) by a previous process. */
+    /** Re-enqueue notes interrupted mid-decode, never started, or waiting for a model. */
     fun resumePending() {
         scope.launch {
             for (note in notes.pendingTranscripts()) process(note.id)
         }
     }
+
+    /** [PendingWork]: a model just became available — decode whatever was waiting. */
+    override fun retryPending() = resumePending()
 
     /**
      * The full lifecycle for one note, sequential and side-effecting on the repository.
@@ -56,8 +66,9 @@ class TranscriptionManager @Inject constructor(
         if (note.transcriptState == TranscriptState.DONE) return // already decoded, idempotent
 
         if (!engine.available) {
-            if (note.transcriptState != TranscriptState.UNAVAILABLE) {
-                notes.update(note.copy(transcriptState = TranscriptState.UNAVAILABLE))
+            // No model yet (lean APK / download not finished): the note waits for one.
+            if (note.transcriptState != TranscriptState.PENDING) {
+                notes.update(note.copy(transcriptState = TranscriptState.PENDING))
             }
             return
         }
