@@ -14,6 +14,9 @@ package pl.nech.tuparles.model
  *                  and for a cheap integrity pre-check before the (slower) sha256.
  * @param sha256    lower-case hex digest, verified before a download is ever activated.
  * @param recommended exactly one entry is the recommended default (see the bench).
+ * @param xRT       approximate decode time ÷ audio length on the reference device
+ *                  (Fairphone 6, dotprod-ON where measured; see the bench). A *hint*,
+ *                  not a promise — real speed varies by device class and clip.
  */
 data class ModelSpec(
     val id: String,
@@ -23,6 +26,7 @@ data class ModelSpec(
     val sizeBytes: Long,
     val sha256: String,
     val recommended: Boolean = false,
+    val xRT: Double = 99.0,
 ) {
     /** The whisper.cpp GGML mirror; resolve endpoint streams the actual weights. */
     val url: String get() = "$HF_BASE$fileName"
@@ -30,9 +34,24 @@ data class ModelSpec(
     /** Whole megabytes, for compact UI (e.g. "466 Mo"). */
     val sizeMb: Int get() = ((sizeBytes + BYTES_PER_MB / 2) / BYTES_PER_MB).toInt()
 
-    private companion object {
-        const val HF_BASE = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/"
-        const val BYTES_PER_MB = 1024L * 1024L
+    /**
+     * Fast enough to keep up with speech in the *rolling* live transcript (decode faster
+     * than ~[LIVE_XRT_MAX]× real time). When false, arming the rolling path would just pile
+     * decodes up behind the speaker, so the app degrades honestly to a post-stop decode.
+     * Estimate, not a guarantee — the rolling path stays a "setting", this only gates the
+     * smart default.
+     */
+    val liveCapable: Boolean get() = xRT <= LIVE_XRT_MAX
+
+    companion object {
+        /**
+         * The xRT ceiling for live rolling decode (single source of truth). ~1.2 keeps the
+         * near-real-time models (tiny, base-f16) live and drops everything slower — from the
+         * 2026-07-22 FP6 bench, where small-f16 at ~3.3× already queued behind speech.
+         */
+        const val LIVE_XRT_MAX = 1.2
+        private const val HF_BASE = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/"
+        private const val BYTES_PER_MB = 1024L * 1024L
     }
 }
 
@@ -59,6 +78,7 @@ object ModelCatalog {
             character = "le plus rapide, le plus brouillon",
             sizeBytes = 32_152_673L,
             sha256 = "818710568da3ca15689e31a743197b520007872ff9576237bda97bd1b469c3d7",
+            xRT = 0.82,
         ),
         ModelSpec(
             id = "base-q5_1",
@@ -67,6 +87,7 @@ object ModelCatalog {
             character = "quantifié : bien plus léger que Base, un peu plus lent",
             sizeBytes = 59_707_625L,
             sha256 = "422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898",
+            xRT = 1.5,
         ),
         ModelSpec(
             id = "base-f16",
@@ -75,6 +96,7 @@ object ModelCatalog {
             character = "léger, quasi temps réel, bute sur le vocabulaire technique",
             sizeBytes = 147_951_465L,
             sha256 = "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
+            xRT = 0.92,
         ),
         ModelSpec(
             id = "small-q5_1",
@@ -83,6 +105,7 @@ object ModelCatalog {
             character = "presque la qualité de Small, 2.5x plus léger, un peu plus lent",
             sizeBytes = 190_085_487L,
             sha256 = "ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb",
+            xRT = 4.4,
         ),
         ModelSpec(
             id = "small-f16",
@@ -92,6 +115,7 @@ object ModelCatalog {
             sizeBytes = 487_601_967L,
             sha256 = "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
             recommended = true,
+            xRT = 3.3,
         ),
         ModelSpec(
             id = "medium-q5_0",
@@ -100,6 +124,7 @@ object ModelCatalog {
             character = "le plus précis, lent (~18x) — pour le différé",
             sizeBytes = 539_212_467L,
             sha256 = "19fea4b380c3a618ec4723c3eef2eb785ffba0d0538cf43f8f235e7b3b34220f",
+            xRT = 12.8,
         ),
         ModelSpec(
             id = "large-v3-turbo-q5_0",
@@ -108,6 +133,7 @@ object ModelCatalog {
             character = "quasi parfait, le plus lent",
             sizeBytes = 574_041_195L,
             sha256 = "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2",
+            xRT = 20.0,
         ),
     )
 

@@ -2,6 +2,7 @@ package pl.nech.tuparles.transcribe
 
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -14,6 +15,8 @@ import pl.nech.tuparles.core.Transcript
 import pl.nech.tuparles.core.TranscriptionEngine
 import pl.nech.tuparles.data.Note
 import pl.nech.tuparles.data.TranscriptState
+import pl.nech.tuparles.model.ModelResolver
+import pl.nech.tuparles.model.ModelSource
 import pl.nech.tuparles.record.ClosedSegment
 import pl.nech.tuparles.record.RecorderPreferences
 import pl.nech.tuparles.record.RecorderStateHolder
@@ -47,6 +50,16 @@ class RollingTranscriberTest {
 
     private class FakePrefs(override var rollingTranscriptEnabled: Boolean = true) : RecorderPreferences
 
+    /** A resolver whose live-capability and presence the test dictates directly. */
+    private class FakeResolver(
+        private val live: Boolean = true,
+        private val present: Boolean = true,
+    ) : ModelResolver {
+        override fun current(): ModelSource? =
+            if (present) ModelSource.DownloadedFile("/x/ggml-small.bin", "ggml-small") else null
+        override fun currentLiveCapable(): Boolean = live
+    }
+
     /** A closed segment whose marker sample encodes its index (so decode is order-checkable). */
     private fun seg(index: Int, start: Int, end: Int) =
         ClosedSegment(index, start, end, floatArrayOf(index.toFloat()))
@@ -60,23 +73,62 @@ class RollingTranscriberTest {
         holder: RecorderStateHolder,
         prefs: RecorderPreferences,
         scope: CoroutineScope,
-    ) = RollingTranscriber(engine, repo, holder, prefs, scope)
+        resolver: ModelResolver = FakeResolver(live = true),
+    ) = RollingTranscriber(engine, repo, holder, prefs, resolver, scope)
 
     @Test
-    fun should_arm_only_when_feature_on_and_model_available() {
+    fun should_arm_only_when_feature_on_and_model_available_and_fast_enough() {
         val repo = FakeNotesRepository()
         val holder = RecorderStateHolder()
         assertTrue(
-            rolling(FakeEngine(available = true), repo, holder, FakePrefs(true), noopScope()).shouldArm(),
+            rolling(FakeEngine(available = true), repo, holder, FakePrefs(true), noopScope(), FakeResolver(live = true)).shouldArm(),
         )
         assertFalse(
             "off when the toggle is off",
-            rolling(FakeEngine(available = true), repo, holder, FakePrefs(false), noopScope()).shouldArm(),
+            rolling(FakeEngine(available = true), repo, holder, FakePrefs(false), noopScope(), FakeResolver(live = true)).shouldArm(),
         )
         assertFalse(
             "off when no model is loaded (record-only degrade)",
-            rolling(FakeEngine(available = false), repo, holder, FakePrefs(true), noopScope()).shouldArm(),
+            rolling(FakeEngine(available = false), repo, holder, FakePrefs(true), noopScope(), FakeResolver(live = true)).shouldArm(),
         )
+    }
+
+    @Test
+    fun a_slow_model_degrades_honestly_even_with_the_toggle_on() {
+        val repo = FakeNotesRepository()
+        val holder = RecorderStateHolder()
+        // Toggle ON, a model IS loaded, but it is too slow for live decode.
+        val rt = rolling(FakeEngine(available = true), repo, holder, FakePrefs(true), noopScope(), FakeResolver(live = false))
+        assertFalse("do not arm the rolling path on a slow model", rt.shouldArm())
+        assertTrue("and surface the degrade hint to the UI", rt.isLiveDegraded())
+    }
+
+    @Test
+    fun no_degrade_hint_when_there_is_no_model_at_all() {
+        val repo = FakeNotesRepository()
+        val holder = RecorderStateHolder()
+        val rt = rolling(FakeEngine(available = false), repo, holder, FakePrefs(true), noopScope(), FakeResolver(live = false, present = false))
+        assertFalse("record-only mode is not a 'slow model' degrade", rt.isLiveDegraded())
+    }
+
+    @Test
+    fun pending_count_reflects_the_undecoded_backlog() = runTest {
+        val repo = FakeNotesRepository()
+        repo.add(recordingNote(1))
+        val holder = RecorderStateHolder()
+        // Standard (not unconfined) dispatcher: the worker does not drain until we advance,
+        // so the submitted-but-undecoded backlog is observable.
+        val scope = CoroutineScope(StandardTestDispatcher(testScheduler))
+        val rt = rolling(FakeEngine(), repo, holder, FakePrefs(), scope)
+
+        rt.begin(1)
+        rt.submit(seg(0, 0, SAMPLE_RATE))
+        rt.submit(seg(1, SAMPLE_RATE, 2 * SAMPLE_RATE))
+        rt.submit(seg(2, 2 * SAMPLE_RATE, 3 * SAMPLE_RATE))
+        assertEquals("all three queued, none decoded yet", 3, rt.pendingCount())
+
+        advanceUntilIdle()
+        assertEquals("backlog drained", 0, rt.pendingCount())
     }
 
     @Test

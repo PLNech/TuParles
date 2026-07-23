@@ -17,6 +17,12 @@ class WhisperContext private constructor(private var ptr: Long) {
 
     suspend fun transcribeData(data: FloatArray, printTimestamp: Boolean = true, language: String = "auto", threads: Int = 0, prompt: String = ""): String = withContext(scope.coroutineContext) {
         require(ptr != 0L)
+        // Decode is background work: drop this decode thread's priority so the ggml worker
+        // threads it spawns inherit BACKGROUND and yield the big cores to the UI thread. On
+        // the Fairphone 6 the 4 decode threads were starving the main thread, lagging the
+        // stop button (device validation, #13). We do NOT reduce the thread COUNT — only its
+        // scheduling priority — so throughput is unchanged, responsiveness improves.
+        android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND)
         // threads <= 0 means "auto" (the high-perf core count); a positive override is
         // clamped to the actual core count so a bad setting can't oversubscribe.
         val numThreads = if (threads > 0) {

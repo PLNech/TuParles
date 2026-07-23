@@ -99,6 +99,9 @@ class RecordingService : Service() {
         }
         scope.launch {
             try {
+                // If the live transcript is wanted but the model is too slow, degrade honestly
+                // and tell the UI (a one-line hint), rather than piling decodes behind speech.
+                stateHolder.setLiveDegraded(rolling.isLiveDegraded())
                 var sink: SegmentationSink? = null
                 if (rolling.shouldArm()) {
                     val createdAt = System.currentTimeMillis()
@@ -146,14 +149,20 @@ class RecordingService : Service() {
         partials.stop() // end the preview before we release the mic; committed text is durable
         recording = false
         startToken++ // cancel any still-pending start coroutine
-        stateHolder.set(RecorderState.Saving)
-        updateNotif("💾 enregistrement…")
-        val pcm = recorder.stop()
-        val remainder = recorder.flushOpenSegment() // the tail after the last committed segment
+        // Honest post-stop state, set the instant the user taps: we are transcribing now, not
+        // recording. Show the live-decode backlog (0 when rolling was not armed). The heavy
+        // work — the blocking recorder.stop() join + PCM copy, the WAV write, the decode drain —
+        // ALL runs on the scope, so the stop tap does zero blocking work on the main thread
+        // (stop-button lag, device validation #13).
+        val queued = if (activeNoteId != 0L) rolling.pendingCount() else 0
+        stateHolder.set(RecorderState.Transcribing(queued))
+        updateNotif("💾 transcription…")
         val noteId = activeNoteId
         val wav = activeWav
         scope.launch {
             try {
+                val pcm = recorder.stop()
+                val remainder = recorder.flushOpenSegment() // tail after the last committed segment
                 when {
                     // Rolling path: the note exists (RECORDING) with its committed segments.
                     noteId != 0L && pcm.isNotEmpty() && wav != null -> {

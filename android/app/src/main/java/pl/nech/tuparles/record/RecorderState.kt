@@ -10,7 +10,14 @@ import javax.inject.Singleton
 sealed interface RecorderState {
     data object Idle : RecorderState
     data class Recording(val elapsedMs: Long, val level: Float) : RecorderState
-    data object Saving : RecorderState
+
+    /**
+     * Recording stopped; the note is being written and transcribed. This is NOT "recording"
+     * — the mic is released — so the UI must say "transcription…", never "enregistrement…".
+     * [remaining] is the live-decode backlog still to commit (0 when nothing is queued or the
+     * rolling path was not armed). The honest post-stop state (device validation, #13).
+     */
+    data class Transcribing(val remaining: Int = 0) : RecorderState
 }
 
 /**
@@ -43,13 +50,28 @@ class RecorderStateHolder @Inject constructor() {
     private val _committed = MutableStateFlow<String?>(null)
     val committed: StateFlow<String?> = _committed.asStateFlow()
 
+    /**
+     * True while recording with the rolling transcript wanted (toggle on, model loaded) but
+     * the active model too slow for it — so we degraded to a post-stop decode and the UI
+     * shows a one-line hint. A separate flow, like the others, so nothing clobbers it.
+     */
+    private val _liveDegraded = MutableStateFlow(false)
+    val liveDegraded: StateFlow<Boolean> = _liveDegraded.asStateFlow()
+
     fun set(state: RecorderState) {
-        // Any non-recording state ends the live previews; no stale text survives into Saving/Idle.
+        // Any non-recording state ends the live previews; no stale text survives into
+        // Transcribing/Idle. The degrade hint is a recording-only cue, so it clears too.
         if (state !is RecorderState.Recording) {
             _partial.value = null
             _committed.value = null
+            _liveDegraded.value = false
         }
         _state.value = state
+    }
+
+    /** Flag (or clear) the "model too slow for the live transcript" degrade hint. */
+    fun setLiveDegraded(degraded: Boolean) {
+        _liveDegraded.value = degraded
     }
 
     fun setPartial(text: String) {

@@ -1,6 +1,7 @@
 package pl.nech.tuparles.model
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -48,6 +49,19 @@ class ModelCatalogTest {
     fun exactly_one_model_is_recommended() {
         assertEquals(1, ModelCatalog.models.count { it.recommended })
         assertEquals("small-f16", ModelCatalog.recommended.id)
+    }
+
+    @Test
+    fun live_capability_follows_the_xrt_hint_and_only_the_near_real_time_models_qualify() {
+        // liveCapable == xRT <= LIVE_XRT_MAX, evaluated per spec.
+        for (m in ModelCatalog.models) {
+            assertEquals("liveCapable disagrees with xRT for ${m.id}", m.xRT <= ModelSpec.LIVE_XRT_MAX, m.liveCapable)
+        }
+        val live = ModelCatalog.models.filter { it.liveCapable }.map { it.id }.toSet()
+        // From the FP6 bench (dotprod-ON): only tiny and base-f16 keep up with speech.
+        assertEquals(setOf("tiny-q5_1", "base-f16"), live)
+        // The recommended default is deliberately NOT live-capable — hence the honest degrade.
+        assertFalse("small-f16 is the quality pick, not the live pick", ModelCatalog.recommended.liveCapable)
     }
 
     @Test

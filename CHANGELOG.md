@@ -86,6 +86,39 @@ dictaphone.
   gate path); `RecorderStateHolder` gains a `committed` flow, kept separate from the
   ~5 s partial and the high-frequency level meter so none clobbers another.
 
+### Fixed
+- **Model download could stall forever on Android 15 (device validation).** On the
+  Fairphone 6 the system `DownloadManager`'s JobScheduler job sat RUNNABLE with every
+  constraint satisfied (Wi-Fi validated + unmetered, bucket ACTIVE) yet was never
+  promoted to active — 0 bytes, indefinitely (scheduler *deferral*, not policy). A pure,
+  fake-clock `StallDetector` now watches byte progress; after ~15 s of none it cancels the
+  system download and falls back to a `DirectHttpFileDownloader` (plain `HttpURLConnection`,
+  no new dependency) streaming to the same staging area, publishing the same progress
+  states and handing the file to the same verify + atomic-install path. Redirects are
+  followed https-only; the byte-pump and redirect logic are unit-tested. `DownloadManager`
+  stays primary (background-survival, resume); the in-process fallback is reached only on a
+  stall — and never over metered data the user declined (`ACCESS_NETWORK_STATE` added for
+  the check). See the lean-APK design note's forensics.
+- **Post-stop UI said "enregistrement…" while transcribing.** Stopping now enters a distinct
+  `Transcribing(remaining)` state — "transcription…" plus the live-decode backlog count —
+  instead of a "recording…"-labelled Saving state. A state-machine fix, not a string swap.
+- **Stop button lagged 100 ms+.** The stop handler no longer runs the blocking
+  `recorder.stop()` (thread-join + O(n) PCM copy) on the main thread — it is posted to the
+  scope with all other stop work — and the JNI decode thread runs at
+  `THREAD_PRIORITY_BACKGROUND` so its ggml workers yield the big cores to the UI thread
+  (thread priority, not count — decode throughput unchanged).
+
+### Changed (live-vs-quality)
+- **Rolling transcript arms only when the model can keep up.** Each catalog model carries an
+  approximate `xRT` hint (FP6 bench, device-class estimate — not a promise) and
+  `liveCapable = xRT <= LIVE_XRT_MAX` (~1.2, one place). A slow active model (small-f16 at
+  ~3.4× real time, medium, large) **degrades honestly** to the post-stop decode — with a
+  one-line recorder hint ("Modèle trop lent pour le direct — le texte arrivera après
+  l'arrêt") — instead of piling decodes behind the speaker. Honesty beats the toggle: even
+  with the setting ON, a slow model still degrades. Only `tiny-q5_1` and `base-f16` arm the
+  live path today; the real fix (a fast live model + the quality model at stop) is the
+  dual-model follow-up in the rolling-transcript design note.
+
 ### Doctrine
 - **Every feature degrades — dotprod → fp16 → baseline, never dotprod-or-nothing.**
   The dotprod object only loads behind an `asimddp` probe, mirroring the fp16 gate

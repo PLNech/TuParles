@@ -39,9 +39,11 @@ data class UiState(
     val committed: String? = null,
     /** Live tail-window preview text while recording (#42); null when idle or not yet decoded. */
     val partial: String? = null,
+    /** Recording with the live transcript wanted but the model too slow → post-stop decode. */
+    val liveDegraded: Boolean = false,
 ) {
     val isRecording: Boolean get() = recorder is RecorderState.Recording
-    val isBusy: Boolean get() = recorder is RecorderState.Recording || recorder is RecorderState.Saving
+    val isBusy: Boolean get() = recorder is RecorderState.Recording || recorder is RecorderState.Transcribing
 }
 
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
@@ -91,7 +93,8 @@ class RecorderViewModel @Inject constructor(
             notesView,
             stateHolder.committed,
             stateHolder.partial,
-        ) { recorder, view, committed, partial ->
+            stateHolder.liveDegraded,
+        ) { recorder, view, committed, partial, liveDegraded ->
             UiState(
                 recorder = recorder,
                 notes = view.notes,
@@ -100,6 +103,7 @@ class RecorderViewModel @Inject constructor(
                 untranscribedHidden = view.untranscribedHidden,
                 committed = committed,
                 partial = partial,
+                liveDegraded = liveDegraded,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UiState())
 

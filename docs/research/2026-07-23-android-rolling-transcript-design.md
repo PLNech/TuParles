@@ -93,6 +93,41 @@ before, the note goes PENDING, and the existing pending-work path decodes it whe
 lands. Feature toggle off → same. "It still works on my laptop on the train" holds: the
 segmenter is pure CPU-cheap math; the decode uses whatever model is loaded (or none).
 
+### The live-vs-quality model split (device validation)
+
+The rolling transcript only helps if the model can keep up with speech. Device
+validation with the recommended `small-f16` (~3.4× real time on the Fairphone 6)
+showed the failure mode plainly: segment decodes queue up *behind* the speaker, and
+after stop the app drains the backlog for roughly as long as the recording lasted.
+A faithful transcript, but not a *live* one — and worse, it hid behind a stale
+"recording…" label while draining.
+
+So arming is now gated on **speed, not just availability**: each model carries an
+approximate `xRT` hint from the bench, and `liveCapable = xRT <= LIVE_XRT_MAX`
+(~1.2, one place). `shouldArm()` requires the active model be `liveCapable`; a slow
+model (small-f16, medium, large) **degrades honestly** to the existing post-hoc
+path — the tail preview during recording, the full decode at stop — and the
+recorder shows a one-line hint ("Modèle trop lent pour le direct — le texte
+arrivera après l'arrêt"). Honesty beats the toggle: even with the setting ON, a
+slow model still degrades, because piling decodes behind the speaker helps no one.
+Only the near-real-time rungs (`tiny-q5_1`, `base-f16`) arm the live path today.
+The `xRT` values are device-class *estimates* (FP6 bench), not promises — they gate
+a default, never block recording.
+
+Two honesty fixes rode along. **Post-stop state:** stopping now enters a distinct
+`Transcribing(remaining)` state (mic released, "transcription…" + the live-decode
+backlog count) instead of a "recording…"-labelled `Saving` — the label was a state
+bug, fixed in the state machine, not the string. **Stop-button lag:** the stop
+handler no longer does the blocking `recorder.stop()` (thread-join + O(n) PCM copy)
+on the main thread — it is posted to the scope with everything else — and the JNI
+decode thread runs at `THREAD_PRIORITY_BACKGROUND` so its ggml workers yield the big
+cores to the UI thread (thread *priority*, not count — throughput unchanged).
+
+The real answer is a **dual-model** setup — a fast model live while recording, the
+quality model at stop for the durable transcript — so the user gets both an
+instant-ish live view and best-quality final text. That is the fenced follow-up
+below; this change is the honest degrade until then.
+
 ## Follow-ups
 
 1. **Segment-context prompting.** The JNI `transcribeData` already accepts an
@@ -100,7 +135,13 @@ segmenter is pure CPU-cheap math; the decode uses whatever model is loaded (or n
    improve boundary words. Deferred: needs a quality A/B against the code-switch eval to
    confirm it doesn't drag one segment's error into the next (conservative-by-default), and
    a cheap token budget. Note it, don't ship it blind.
-2. **Crash-safe streaming WAV.** Stream PCM to the file during recording so the
+2. **Dual-model live + quality (the real fix for the speed↔quality split).** Run a
+   `liveCapable` model (tiny/base) for the rolling live transcript *while recording*, then
+   decode the durable transcript with the user's quality model (small+) at stop — best of
+   both, instead of today's either/or. Needs two loaded contexts (memory budget) or a fast
+   swap, and a clear story for which text is "kept". Fenced off; the current live-vs-quality
+   gate is the honest degrade until this lands.
+3. **Crash-safe streaming WAV.** Stream PCM to the file during recording so the
    post-death *remainder* is always recoverable (not only on a finalisation crash). This is
    the single thing standing between "committed text survives" and "everything survives",
    and it is fenced off here because it reworks the WAV write path.
