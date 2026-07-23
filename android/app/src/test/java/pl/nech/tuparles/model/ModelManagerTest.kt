@@ -131,6 +131,81 @@ class ModelManagerTest {
     }
 
     @Test
+    fun a_stalled_primary_download_falls_back_to_the_direct_path_and_completes() = runTest {
+        val bytes = "the fallback delivered these bytes".toByteArray()
+        val spec = specFor(bytes)
+        val staged = tmp.newFile("fb.bin").apply { writeBytes(bytes) }
+        // Primary never progresses: PENDING, 0 bytes, forever (the Android-15 symptom).
+        val primary = FakeFileDownloader(
+            script = listOf(DownloadStatus(RawDownloadState.PENDING, 0L, spec.sizeBytes)),
+            staged = { null },
+        )
+        // Fallback delivers immediately.
+        val fallback = FakeFileDownloader(
+            script = listOf(DownloadStatus(RawDownloadState.SUCCESS, spec.sizeBytes, spec.sizeBytes)),
+            staged = { staged },
+        )
+        val store = ModelStore(tmp.newFolder("models"))
+        val pending = RecordingPendingWork()
+        var clock = 0L
+        val mgr = ModelManager(
+            store = store, downloader = primary, prefs = FakeModelPreferences(),
+            scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler)),
+            bundledAssetPresent = false, pending = Lazy { pending }, pollIntervalMs = 1L,
+            fallbackDownloader = fallback, isMetered = { false },
+            now = { clock += 10_000L; clock }, stallThresholdMs = 15_000L,
+        )
+
+        mgr.startDownload(spec, allowMetered = true)
+        advanceUntilIdle()
+
+        assertEquals(ModelDownloadState.Ready, mgr.downloads.value[spec.id])
+        assertTrue("model installed via the fallback", store.fileFor(spec).exists())
+        assertEquals("pending notes woken once", 1, pending.retries)
+        assertEquals("fallback was enqueued exactly once", 1, fallback.enqueued)
+        assertTrue("stalled primary was cancelled", primary.cancelled >= 1)
+    }
+
+    @Test
+    fun a_stall_on_metered_data_the_user_declined_does_not_force_the_fallback() = runTest {
+        val bytes = "primary eventually delivers".toByteArray()
+        val spec = specFor(bytes)
+        val staged = tmp.newFile("pri.bin").apply { writeBytes(bytes) }
+        // Primary stalls past the threshold, then finally succeeds (DownloadManager holding
+        // for Wi-Fi, then catching up) — the fallback must never be reached.
+        val primary = FakeFileDownloader(
+            script = listOf(
+                DownloadStatus(RawDownloadState.PENDING, 0L, spec.sizeBytes),
+                DownloadStatus(RawDownloadState.PENDING, 0L, spec.sizeBytes),
+                DownloadStatus(RawDownloadState.PENDING, 0L, spec.sizeBytes),
+                DownloadStatus(RawDownloadState.PENDING, 0L, spec.sizeBytes),
+                DownloadStatus(RawDownloadState.SUCCESS, spec.sizeBytes, spec.sizeBytes),
+            ),
+            staged = { staged },
+        )
+        val fallback = FakeFileDownloader(
+            script = listOf(DownloadStatus(RawDownloadState.SUCCESS, spec.sizeBytes, spec.sizeBytes)),
+            staged = { staged },
+        )
+        val store = ModelStore(tmp.newFolder("models"))
+        var clock = 0L
+        val mgr = ModelManager(
+            store = store, downloader = primary, prefs = FakeModelPreferences(),
+            scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler)),
+            bundledAssetPresent = false, pending = Lazy { RecordingPendingWork() }, pollIntervalMs = 1L,
+            fallbackDownloader = fallback,
+            isMetered = { true }, // active network is metered
+            now = { clock += 10_000L; clock }, stallThresholdMs = 15_000L,
+        )
+
+        mgr.startDownload(spec, allowMetered = false) // user declined cellular
+        advanceUntilIdle()
+
+        assertEquals(ModelDownloadState.Ready, mgr.downloads.value[spec.id])
+        assertEquals("fallback NOT used on declined metered data", 0, fallback.enqueued)
+    }
+
+    @Test
     fun resolver_prefers_a_downloaded_catalog_model_then_bundled_then_none() = runTest {
         val dir = tmp.newFolder("models")
         val store = ModelStore(dir)

@@ -31,6 +31,17 @@ class ModelManager(
     private val bundledAssetPresent: Boolean,
     private val pending: Lazy<PendingWork>,
     private val pollIntervalMs: Long = DEFAULT_POLL_MS,
+    // Fallback path for a stalled system download (Android 15 scheduler deferral, #13):
+    // the direct in-app HTTP downloader. Defaults to the primary so existing call sites
+    // and tests that never stall are unaffected.
+    private val fallbackDownloader: FileDownloader = downloader,
+    // Is the active network metered right now? Consulted only when deciding whether to
+    // fall back while allowMetered=false — so we never force a metered transfer the user
+    // declined. Injected (not ConnectivityManager directly) to keep this class pure.
+    private val isMetered: () -> Boolean = { false },
+    // Time source for the stall watchdog; injected so it is fake-clock testable.
+    private val now: () -> Long = { System.currentTimeMillis() },
+    private val stallThresholdMs: Long = DEFAULT_STALL_MS,
 ) : ModelResolver {
 
     private val _downloads = MutableStateFlow<Map<String, ModelDownloadState>>(emptyMap())
@@ -50,6 +61,9 @@ class ModelManager(
 
     private val jobs = mutableMapOf<String, Job>()
     private val handles = mutableMapOf<String, Long>()
+    // Which downloader currently owns each handle, so cancel() routes to the right one
+    // after a stall handoff swaps the primary for the fallback.
+    private val activeDownloaders = mutableMapOf<String, FileDownloader>()
 
     // ---- ModelResolver (read by the engine) --------------------------------------------
 
@@ -90,7 +104,9 @@ class ModelManager(
     /** Cancel an in-flight download and drop its partial bytes. */
     fun cancel(spec: ModelSpec) {
         jobs.remove(spec.id)?.cancel()
-        handles.remove(spec.id)?.let(downloader::cancel)
+        val handle = handles.remove(spec.id)
+        val owner = activeDownloaders.remove(spec.id) ?: downloader
+        handle?.let(owner::cancel)
         setState(spec.id, ModelDownloadState.Failed(FailReason.CANCELLED))
     }
 
@@ -112,16 +128,24 @@ class ModelManager(
     }
 
     private suspend fun runDownload(spec: ModelSpec, allowMetered: Boolean) {
-        val handle = runCatching { downloader.enqueue(spec.url, spec.label, allowMetered) }
+        // Start on the primary (system DownloadManager). `active` swaps to the fallback
+        // in-app HTTP downloader if the primary stalls (Android 15 scheduler deferral).
+        var active: FileDownloader = downloader
+        var usedFallback = false
+        var handle = runCatching { active.enqueue(spec.url, spec.label, allowMetered) }
             .getOrElse {
                 Log.w(TAG, "enqueue failed for ${spec.id}", it)
                 setState(spec.id, ModelDownloadState.Failed(FailReason.NETWORK))
                 return
             }
         handles[spec.id] = handle
+        activeDownloaders[spec.id] = active
+
+        // Watchdog runs only against the primary; once we are on the fallback we commit to it.
+        val stall = StallDetector(stallThresholdMs, now)
 
         while (true) {
-            val status = runCatching { downloader.status(handle) }.getOrElse {
+            val status = runCatching { active.status(handle) }.getOrElse {
                 setState(spec.id, ModelDownloadState.Failed(FailReason.NETWORK))
                 return
             }
@@ -129,11 +153,34 @@ class ModelManager(
                 RawDownloadState.PENDING, RawDownloadState.RUNNING -> {
                     val total = if (status.totalBytes > 0L) status.totalBytes else spec.sizeBytes
                     setState(spec.id, ModelDownloadState.Downloading(status.bytesSoFar, total))
+                    if (!usedFallback && stall.isStalled(status.bytesSoFar)) {
+                        // The primary is not moving. Fall back to the direct path — unless
+                        // the user declined metered data AND we are on a metered network,
+                        // in which case the stall is legitimate policy waiting (DownloadManager
+                        // is correctly holding for Wi-Fi): keep waiting on the primary.
+                        if (allowMetered || !isMetered()) {
+                            Log.w(TAG, "primary download stalled for ${spec.id}; falling back to direct HTTP")
+                            runCatching { active.cancel(handle) }
+                            active = fallbackDownloader
+                            usedFallback = true
+                            handle = runCatching { active.enqueue(spec.url, spec.label, allowMetered) }
+                                .getOrElse {
+                                    Log.w(TAG, "fallback enqueue failed for ${spec.id}", it)
+                                    handles.remove(spec.id)
+                                    activeDownloaders.remove(spec.id)
+                                    setState(spec.id, ModelDownloadState.Failed(FailReason.NETWORK))
+                                    return
+                                }
+                            handles[spec.id] = handle
+                            activeDownloaders[spec.id] = active
+                        }
+                    }
                     delay(pollIntervalMs)
                 }
                 RawDownloadState.FAILED -> {
-                    downloader.cancel(handle)
+                    active.cancel(handle)
                     handles.remove(spec.id)
+                    activeDownloaders.remove(spec.id)
                     setState(spec.id, ModelDownloadState.Failed(FailReason.NETWORK))
                     return
                 }
@@ -142,17 +189,19 @@ class ModelManager(
         }
 
         setState(spec.id, ModelDownloadState.Verifying)
-        val staged = downloader.stagedFile(handle)
+        val staged = active.stagedFile(handle)
         if (staged == null) {
-            downloader.cancel(handle)
+            active.cancel(handle)
             handles.remove(spec.id)
+            activeDownloaders.remove(spec.id)
             setState(spec.id, ModelDownloadState.Failed(FailReason.STORAGE))
             return
         }
 
         val result = store.install(staged, spec)
-        downloader.cancel(handle) // clear the DownloadManager record + its staging copy
+        active.cancel(handle) // clear the downloader record + its staging copy
         handles.remove(spec.id)
+        activeDownloaders.remove(spec.id)
 
         when (result) {
             ModelStore.InstallResult.OK -> {
@@ -180,5 +229,9 @@ class ModelManager(
     private companion object {
         const val TAG = "TuParles"
         const val DEFAULT_POLL_MS = 400L
+        // How long the primary download may make zero forward progress before we give up
+        // on the system scheduler and pump the bytes ourselves. The single source of truth
+        // for the stall threshold (Android 15 RUNNABLE-never-active symptom, #13).
+        const val DEFAULT_STALL_MS = 15_000L
     }
 }
