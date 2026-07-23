@@ -790,5 +790,17 @@
     "subject": "Release v1.0.0-internal2 (vc5) to Play internal track",
     "completedAt": "2026-07-17",
     "learnings": "Same-evening two-fix release, gate re-run fresh as free cross-verification of both builders (55 green). Upload hiccups: play.py deps live in NO consumer venv (throwaway scratchpad venv, deleted after); a failed resumable edit consumes no versionCode so identical re-run is safe — resolve ambiguous exits against play.py status ground truth, never an empty output file. New global doctrine from the stuck watcher: pgrep/pkill -f self-matches the watcher's own cmdline — wait on the PID (tail --pid) or bracket-trick the pattern."
+  },
+  {
+    "id": "s2026-07-22-2",
+    "subject": "On-device whisper model bench (6x8 matrix) -> daily default picked (GH #13)",
+    "completedAt": "2026-07-23",
+    "learnings": "Bench fidelity beats bench idealism: building the standalone whisper-cli with the app's EXACT JNI flags (-march=armv8.2-a+fp16, no dotprod) surfaced the decision-relevant inversion (f16 beats q5 without dotprod) that an optimized build would have hidden. On-device timing needs on-device arithmetic: the 32-bit device shell overflows 19-digit ns epochs (bc on-device fixed it). An idempotent per-cell runner self-healed a mid-matrix USB disconnect (48/48 despite 17 'failed' cells). Calibration discipline paid: n=8 WER sd ~0.2 means adjacent-model gaps are noise -- report gradients, not decimals."
+  },
+  {
+    "id": "s2026-07-22-4",
+    "subject": "Dotprod A/B + thread sweep -> q5 1.1-1.4x faster, ranking holds, ship runtime-gated",
+    "completedAt": "2026-07-23",
+    "learnings": "Trust within-run comparisons, never cross-run absolutes: an apparent f16 'slowdown' was thermal drift, unmasked by a same-thermal back-to-back control. Prove a CPU-feature build by instruction census (llvm-objdump sdot/udot count: 0 -> 919), doubly convincing when an independent build reproduces the exact count. Ship CPU features via runtime cpuinfo gating (asimddp), never a hard -march baseline (SIGILL on older arm64); caveat found: FetchContent builds ONE shared libggml-cpu.so so per-tier isolation needs per-variant ggml (ticket filed). More threads hurt q5 on 4+4 big/little (t=8 ~1.5x worse than t=4)."
   }
 ]
