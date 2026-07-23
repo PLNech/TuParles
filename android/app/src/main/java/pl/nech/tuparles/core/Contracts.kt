@@ -2,6 +2,7 @@ package pl.nech.tuparles.core
 
 import kotlinx.coroutines.flow.Flow
 import pl.nech.tuparles.data.Note
+import pl.nech.tuparles.data.NoteSegment
 
 /**
  * The portable core contract sketched in issue #2: a small boundary between the
@@ -70,6 +71,15 @@ interface NotesRepository {
 
     /** Notes whose transcript is queued or was interrupted mid-decode (resume on start). */
     suspend fun pendingTranscripts(): List<Note>
+
+    /** Notes left mid-recording by a process death, recovered on next start. */
+    suspend fun recordingNotes(): List<Note>
+
+    /** Append one committed segment of a note's rolling transcript (written as it lands). */
+    suspend fun addSegment(segment: NoteSegment): Long
+
+    /** A note's committed segments, ordered — the source of truth its transcript concatenates. */
+    suspend fun segmentsFor(noteId: Long): List<NoteSegment>
 
     /**
      * Full-text search over transcripts (issue #40). [query] is raw user text; the

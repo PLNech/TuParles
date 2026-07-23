@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.map
 import pl.nech.tuparles.core.NotesRepository
 import pl.nech.tuparles.data.FtsQuery
 import pl.nech.tuparles.data.Note
+import pl.nech.tuparles.data.NoteSegment
 import pl.nech.tuparles.data.TranscriptState
 
 /** In-memory NotesRepository for unit tests — no Room, no Android. */
@@ -13,11 +14,16 @@ class FakeNotesRepository : NotesRepository {
     private val notes = MutableStateFlow<List<Note>>(emptyList())
     val deleted = mutableListOf<Note>()
 
+    private val segments = mutableListOf<NoteSegment>()
+    private var nextSegmentId = 1L
+
     fun emit(list: List<Note>) {
         notes.value = list
     }
 
-    override fun observeNotes(): Flow<List<Note>> = notes
+    override fun observeNotes(): Flow<List<Note>> =
+        // Mirror Room: a note still recording is hidden from the list until it finalises.
+        notes.map { list -> list.filter { it.transcriptState != TranscriptState.RECORDING } }
 
     override suspend fun add(note: Note): Long {
         notes.value = notes.value + note
@@ -30,6 +36,7 @@ class FakeNotesRepository : NotesRepository {
 
     override suspend fun delete(note: Note) {
         deleted += note
+        segments.removeAll { it.noteId == note.id }
         notes.value = notes.value - note
     }
 
@@ -37,6 +44,18 @@ class FakeNotesRepository : NotesRepository {
 
     override suspend fun pendingTranscripts(): List<Note> =
         notes.value.filter { it.transcriptState.inFlight }
+
+    override suspend fun recordingNotes(): List<Note> =
+        notes.value.filter { it.transcriptState == TranscriptState.RECORDING }
+
+    override suspend fun addSegment(segment: NoteSegment): Long {
+        val withId = segment.copy(id = nextSegmentId++)
+        segments += withId
+        return withId.id
+    }
+
+    override suspend fun segmentsFor(noteId: Long): List<NoteSegment> =
+        segments.filter { it.noteId == noteId }.sortedBy { it.segmentIndex }
 
     /**
      * A JVM stand-in for FTS4: prefix-token AND match over the transcript, newest-first.

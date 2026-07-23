@@ -7,6 +7,8 @@ package pl.nech.tuparles.data
  * blocked or lost by transcription.
  *
  * - [NONE]        never queued (legacy rows, or transcription not attempted yet).
+ * - [RECORDING]   the note is being recorded right now, its rolling transcript growing
+ *                 segment by segment; kept out of the notes list until it finalises.
  * - [PENDING]     queued for decode, waiting for the engine.
  * - [RUNNING]     the engine is decoding this note now.
  * - [DONE]        [Note.transcript] holds the decoded text.
@@ -15,6 +17,7 @@ package pl.nech.tuparles.data
  */
 enum class TranscriptState {
     NONE,
+    RECORDING,
     PENDING,
     RUNNING,
     DONE,

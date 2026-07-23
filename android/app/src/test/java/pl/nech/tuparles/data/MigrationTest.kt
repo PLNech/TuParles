@@ -81,6 +81,47 @@ class MigrationTest {
         assertTrue(executed.none { it.contains("DELETE FROM `notes`") })
     }
 
+    @Test
+    fun migration_3_4_has_correct_bounds() {
+        assertEquals(3, MIGRATION_3_4.startVersion)
+        assertEquals(4, MIGRATION_3_4.endVersion)
+    }
+
+    @Test
+    fun migration_3_4_creates_the_note_segments_table_and_its_index() {
+        val executed = record(MIGRATION_3_4)
+        assertEquals(2, executed.size)
+        // The rolling-transcript segment table, DDL matching Room's generated schema
+        // (columns, types, AUTOINCREMENT PK) so open-time validation passes byte-for-byte.
+        assertTrue(
+            executed.any {
+                it.contains("CREATE TABLE IF NOT EXISTS `note_segments`") &&
+                    it.contains("`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL") &&
+                    it.contains("`noteId` INTEGER NOT NULL") &&
+                    it.contains("`segmentIndex` INTEGER NOT NULL") &&
+                    it.contains("`text` TEXT NOT NULL") &&
+                    it.contains("`startSample` INTEGER NOT NULL") &&
+                    it.contains("`endSample` INTEGER NOT NULL")
+            },
+        )
+        // The noteId index Room expects for the @Index on the entity.
+        assertTrue(
+            executed.any {
+                it.contains("CREATE INDEX IF NOT EXISTS `index_note_segments_noteId`") &&
+                    it.contains("ON `note_segments` (`noteId`)")
+            },
+        )
+    }
+
+    @Test
+    fun migration_3_4_is_purely_additive() {
+        val executed = record(MIGRATION_3_4)
+        // Never drops or rewrites existing data (the notes and their audio are untouched).
+        assertTrue(executed.none { it.contains("DROP") })
+        assertTrue(executed.none { it.contains("DELETE") })
+        assertTrue(executed.none { it.contains("ALTER TABLE notes") })
+    }
+
     /** Drives [migration].migrate() through a recording proxy and returns the SQL it emitted. */
     private fun record(migration: androidx.room.migration.Migration): List<String> {
         val executed = mutableListOf<String>()

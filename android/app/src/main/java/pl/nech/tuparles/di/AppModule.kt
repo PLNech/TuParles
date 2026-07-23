@@ -19,6 +19,7 @@ import pl.nech.tuparles.core.WhisperTranscriptionEngine
 import pl.nech.tuparles.data.AppDatabase
 import pl.nech.tuparles.data.MIGRATION_1_2
 import pl.nech.tuparles.data.MIGRATION_2_3
+import pl.nech.tuparles.data.MIGRATION_3_4
 import pl.nech.tuparles.data.NoteDao
 import pl.nech.tuparles.data.RoomNotesRepository
 import pl.nech.tuparles.model.DownloadManagerFileDownloader
@@ -43,7 +44,7 @@ object DataModule {
     @Singleton
     fun database(@ApplicationContext ctx: Context): AppDatabase =
         Room.databaseBuilder(ctx, AppDatabase::class.java, AppDatabase.NAME)
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
             .build()
 
     @Provides
