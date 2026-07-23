@@ -16,6 +16,14 @@ object Format {
     /** Stable WAV filename for a note captured at [createdAt] (epoch millis). */
     fun wavFileName(createdAt: Long): String = "note_$createdAt.wav"
 
+    /** Size in whole mebibytes, French unit — 32_152_673 → "31 Mo", 0 → "0 Mo". */
+    fun megabytes(bytes: Long): String {
+        val mb = if (bytes <= 0L) 0L else (bytes + MB / 2) / MB
+        return "%d Mo".format(Locale.ROOT, mb)
+    }
+
+    private const val MB = 1024L * 1024L
+
     /** Human date for the list row (formatter built per-call: SimpleDateFormat isn't thread-safe). */
     fun timestamp(createdAt: Long): String =
         SimpleDateFormat("d MMM yyyy · HH:mm", Locale.getDefault()).format(Date(createdAt))

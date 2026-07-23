@@ -25,9 +25,11 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -61,6 +63,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import pl.nech.tuparles.data.Note
 import pl.nech.tuparles.data.TranscriptState
+import pl.nech.tuparles.model.ModelDownloadState
 import pl.nech.tuparles.record.RecorderState
 import pl.nech.tuparles.record.RecordingService
 import pl.nech.tuparles.util.Format
@@ -68,9 +71,14 @@ import pl.nech.tuparles.util.TranscriptSnippet
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RecorderScreen(viewModel: RecorderViewModel = hiltViewModel()) {
+fun RecorderScreen(
+    onOpenSettings: () -> Unit,
+    viewModel: RecorderViewModel = hiltViewModel(),
+    homeModel: HomeModelViewModel = hiltViewModel(),
+) {
     val context = LocalContext.current
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val modelState by homeModel.state.collectAsStateWithLifecycle()
     // The field echoes the raw query synchronously; only search execution is debounced (#41).
     val queryText by viewModel.queryText.collectAsStateWithLifecycle()
 
@@ -99,7 +107,16 @@ fun RecorderScreen(viewModel: RecorderViewModel = hiltViewModel()) {
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("TuParles") }) },
+        topBar = {
+            TopAppBar(
+                title = { Text("TuParles") },
+                actions = {
+                    IconButton(onClick = onOpenSettings) {
+                        Icon(Icons.Filled.Settings, contentDescription = "Réglages")
+                    }
+                },
+            )
+        },
     ) { padding ->
         Column(
             modifier = Modifier
@@ -108,6 +125,15 @@ fun RecorderScreen(viewModel: RecorderViewModel = hiltViewModel()) {
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             RecordControl(state.recorder, state.partial, onRecordTap)
+
+            if (modelState.showFirstRunCard) {
+                FirstRunModelCard(
+                    download = modelState.recommendedDownload,
+                    onDownload = { homeModel.downloadRecommended(allowMetered = true) },
+                    onOpenSettings = onOpenSettings,
+                    onDismiss = { homeModel.dismissCard() },
+                )
+            }
 
             // The search field appears once there's anything to search (or a query in
             // flight); with no notes ever recorded it stays out of the way.
@@ -133,6 +159,7 @@ fun RecorderScreen(viewModel: RecorderViewModel = hiltViewModel()) {
                         NoteRow(
                             note = note,
                             query = if (state.searching) state.query else "",
+                            modelReady = modelState.modelReady,
                             onShareAudio = { shareNote(context, note) },
                             onShareText = { shareText(context, note) },
                             onDelete = { pendingDelete = note },
@@ -280,6 +307,7 @@ private fun NoMatchState(query: String, modifier: Modifier = Modifier) {
 private fun NoteRow(
     note: Note,
     query: String,
+    modelReady: Boolean,
     onShareAudio: () -> Unit,
     onShareText: () -> Unit,
     onDelete: () -> Unit,
@@ -303,7 +331,7 @@ private fun NoteRow(
             Column(modifier = Modifier.weight(1f)) {
                 Text(Format.timestamp(note.createdAt), style = MaterialTheme.typography.bodyLarge)
                 Text(
-                    text = subtitle(note, hasTranscript, query, expanded),
+                    text = subtitle(note, hasTranscript, query, expanded, modelReady),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = if (expanded) Int.MAX_VALUE else 2,
@@ -323,9 +351,17 @@ private fun NoteRow(
  * the match; otherwise the transcript when decoded, a live hint while decoding, else
  * duration. Expanding always reveals the full transcript.
  */
-private fun subtitle(note: Note, hasTranscript: Boolean, query: String, expanded: Boolean): String = when {
+private fun subtitle(
+    note: Note,
+    hasTranscript: Boolean,
+    query: String,
+    expanded: Boolean,
+    modelReady: Boolean,
+): String = when {
     hasTranscript && query.isNotBlank() && !expanded -> TranscriptSnippet.around(note.transcript!!, query)
     hasTranscript -> note.transcript!!.trim()
+    // Waiting for a model (lean APK, none downloaded yet): say so, don't imply work in flight.
+    note.transcriptState.inFlight && !modelReady -> "en attente d'un modèle — durée ${Format.duration(note.durationS)}"
     note.transcriptState.inFlight -> "transcription…"
     note.transcriptState == TranscriptState.FAILED -> "transcription échouée — durée ${Format.duration(note.durationS)}"
     else -> "durée ${Format.duration(note.durationS)}"
@@ -366,5 +402,75 @@ private fun EmptyState(modifier: Modifier = Modifier) {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+    }
+}
+
+/**
+ * First-run nudge: recording works right now, but there is no model to transcribe with
+ * yet. Offer the bench-recommended default (with its size — no silent large download),
+ * a path to the full picker, and a dismiss. While its download runs, the card shows
+ * progress in place; it disappears on its own once a model is ready.
+ */
+@Composable
+private fun FirstRunModelCard(
+    download: ModelDownloadState,
+    onDownload: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val recommended = pl.nech.tuparles.model.ModelCatalog.recommended
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("Activer la transcription", style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = "Vos notes sont enregistrées. Pour les transcrire sur l'appareil, " +
+                    "téléchargez un modèle — « ${recommended.label} » (${Format.megabytes(recommended.sizeBytes)}) " +
+                    "est recommandé. Tout reste sur votre téléphone.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+            when (download) {
+                is ModelDownloadState.Downloading -> {
+                    LinearProgressIndicator(
+                        progress = { download.fraction },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 12.dp),
+                    )
+                    Text(
+                        text = "${Format.megabytes(download.bytesSoFar)} / ${Format.megabytes(download.totalBytes)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
+                ModelDownloadState.Verifying -> {
+                    Text(
+                        "Vérification…",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                }
+                else -> {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Button(onClick = onDownload) {
+                            Text("Télécharger (${Format.megabytes(recommended.sizeBytes)})")
+                        }
+                        TextButton(onClick = onOpenSettings) { Text("Choisir") }
+                        Spacer(Modifier.weight(1f))
+                        TextButton(onClick = onDismiss) { Text("Plus tard") }
+                    }
+                }
+            }
+        }
     }
 }

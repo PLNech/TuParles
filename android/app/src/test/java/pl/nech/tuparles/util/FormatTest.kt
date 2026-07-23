@@ -26,4 +26,13 @@ class FormatTest {
         assertEquals("note_1700000000000.wav", Format.wavFileName(1_700_000_000_000L))
         assertEquals("note_0.wav", Format.wavFileName(0L))
     }
+
+    @Test
+    fun megabytes_rounds_to_whole_mebibytes_with_the_french_unit() {
+        assertEquals("0 Mo", Format.megabytes(0L))
+        assertEquals("0 Mo", Format.megabytes(-5L))
+        assertEquals("31 Mo", Format.megabytes(32_152_673L)) // tiny-q5_1
+        assertEquals("141 Mo", Format.megabytes(147_951_465L)) // base-f16 (MiB)
+        assertEquals("465 Mo", Format.megabytes(487_601_967L)) // small-f16
+    }
 }
