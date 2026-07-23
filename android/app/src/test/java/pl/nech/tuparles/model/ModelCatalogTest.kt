@@ -36,6 +36,15 @@ class ModelCatalogTest {
     }
 
     @Test
+    fun catalog_holds_the_expected_seven_rungs_including_the_two_q5_downloads() {
+        assertEquals(7, ModelCatalog.models.size)
+        val ids = ModelCatalog.models.map { it.id }.toSet()
+        // The dotprod-era q5 rungs (added once the app shipped the +dotprod native tier).
+        assertTrue("base-q5_1 rung present", "base-q5_1" in ids)
+        assertTrue("small-q5_1 rung present", "small-q5_1" in ids)
+    }
+
+    @Test
     fun exactly_one_model_is_recommended() {
         assertEquals(1, ModelCatalog.models.count { it.recommended })
         assertEquals("small-f16", ModelCatalog.recommended.id)
