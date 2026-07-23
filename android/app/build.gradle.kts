@@ -25,8 +25,8 @@ android {
         applicationId = "pl.nech.tuparles"
         minSdk = 26 // no more Chaquopy floor; covers ~95% of devices
         targetSdk = 36
-        versionCode = 5
-        versionName = "1.0.0-internal2" // Same-evening follow-up: #41 + #42
+        versionCode = 6
+        versionName = "1.0.0" // First public 1.0: lean APK + model download, rolling transcript, dotprod tier
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -78,6 +78,17 @@ android {
         // Let android.jar stubs (e.g. android.util.Log) return defaults instead of
         // throwing "not mocked" so pure-logic JVM tests can exercise code that logs.
         unitTests.isReturnDefaultValues = true
+    }
+
+    lint {
+        // TOOLING-CRASH WORKAROUND (not a real-issue suppression). Under AGP 8.9.0 the
+        // Compose-runtime `MutableCollectionMutableStateDetector` throws a
+        // NoClassDefFoundError mid-analysis (its Kt facade fails to load), aborting the
+        // whole lint run with "this is a bug in lint or one of the libraries it depends
+        // on". Lint's own error message recommends disabling this one check; doing so
+        // lets lint complete and report genuine findings. Revisit when AGP/Compose lint
+        // are bumped — this is a crash, not a finding we are hiding.
+        disable += "MutableCollectionMutableState"
     }
 }
 
