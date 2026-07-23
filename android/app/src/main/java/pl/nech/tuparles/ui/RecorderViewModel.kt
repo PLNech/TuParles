@@ -35,6 +35,8 @@ data class UiState(
     val query: String = "",
     val searching: Boolean = false,
     val untranscribedHidden: Int = 0,
+    /** The growing committed (settled) transcript while recording; null when idle / off. */
+    val committed: String? = null,
     /** Live tail-window preview text while recording (#42); null when idle or not yet decoded. */
     val partial: String? = null,
 ) {
@@ -84,13 +86,19 @@ class RecorderViewModel @Inject constructor(
             }
 
     val uiState: StateFlow<UiState> =
-        combine(stateHolder.state, notesView, stateHolder.partial) { recorder, view, partial ->
+        combine(
+            stateHolder.state,
+            notesView,
+            stateHolder.committed,
+            stateHolder.partial,
+        ) { recorder, view, committed, partial ->
             UiState(
                 recorder = recorder,
                 notes = view.notes,
                 query = view.query,
                 searching = view.searching,
                 untranscribedHidden = view.untranscribedHidden,
+                committed = committed,
                 partial = partial,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), UiState())
