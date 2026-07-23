@@ -32,6 +32,8 @@ import pl.nech.tuparles.model.ModelStore
 import pl.nech.tuparles.model.PendingWork
 import pl.nech.tuparles.model.SharedPrefsModelPreferences
 import pl.nech.tuparles.record.AudioRecorderSession
+import pl.nech.tuparles.record.RecorderPreferences
+import pl.nech.tuparles.record.SharedPrefsRecorderPreferences
 import pl.nech.tuparles.transcribe.TranscriptionManager
 import java.io.File
 import javax.inject.Singleton
@@ -78,6 +80,10 @@ abstract class BindsModule {
     @Binds
     @Singleton
     abstract fun modelPreferences(impl: SharedPrefsModelPreferences): ModelPreferences
+
+    @Binds
+    @Singleton
+    abstract fun recorderPreferences(impl: SharedPrefsRecorderPreferences): RecorderPreferences
 
     @Binds
     @Singleton

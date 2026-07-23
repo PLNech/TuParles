@@ -25,9 +25,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import pl.nech.tuparles.core.NotesRepository
 import pl.nech.tuparles.core.RecorderSession
+import pl.nech.tuparles.core.SegmentationSink
 import pl.nech.tuparles.data.Note
 import pl.nech.tuparles.data.TranscriptState
 import pl.nech.tuparles.transcribe.PartialTranscriber
+import pl.nech.tuparles.transcribe.RollingTranscriber
 import pl.nech.tuparles.transcribe.TranscriptionManager
 import pl.nech.tuparles.ui.MainActivity
 import java.io.File
@@ -48,10 +50,18 @@ class RecordingService : Service() {
     @Inject lateinit var stateHolder: RecorderStateHolder
     @Inject lateinit var transcription: TranscriptionManager
     @Inject lateinit var partials: PartialTranscriber
+    @Inject lateinit var rolling: RollingTranscriber
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     @Volatile private var recording = false
     private var capJob: Job? = null
+
+    // Set for a rolling recording: the note is created at start (state RECORDING) so its
+    // committed segments have a durable home. Zero when the rolling feature is not armed
+    // (feature off / no model) — then the note is created post-hoc at stop, exactly as before.
+    @Volatile private var activeNoteId: Long = 0
+    private var activeWav: File? = null
+    @Volatile private var startToken = 0
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -75,55 +85,109 @@ class RecordingService : Service() {
             return
         }
         recording = true
+        activeNoteId = 0
+        activeWav = null
+        val myToken = ++startToken
         stateHolder.set(RecorderState.Recording(0L, 0f))
-        try {
-            recorder.start { level, elapsed ->
-                if (recording) stateHolder.set(RecorderState.Recording(elapsed, level))
+
+        // Rolling arms only when the feature is on AND a model is loaded; the note is then
+        // created up front so segments persist as they land. The insert is a suspend call, so
+        // the whole start runs on the scope — but a segment can't close before ~minSegment of
+        // audio, far longer than the insert, so no early segment is ever dropped.
+        val onLevel: (Float, Long) -> Unit = { level, elapsed ->
+            if (recording) stateHolder.set(RecorderState.Recording(elapsed, level))
+        }
+        scope.launch {
+            try {
+                var sink: SegmentationSink? = null
+                if (rolling.shouldArm()) {
+                    val createdAt = System.currentTimeMillis()
+                    val file = File(File(filesDir, "notes").apply { mkdirs() }, "note_$createdAt.wav")
+                    val id = notes.add(
+                        Note(
+                            wavPath = file.absolutePath,
+                            createdAt = createdAt,
+                            durationS = 0f,
+                            transcriptState = TranscriptState.RECORDING,
+                        ),
+                    )
+                    if (!recording || myToken != startToken) {
+                        // Stopped during the insert: don't leave the mic running / a stray note.
+                        notes.get(id)?.let { notes.delete(it) }
+                        return@launch
+                    }
+                    activeNoteId = id
+                    activeWav = file
+                    rolling.begin(id)
+                    sink = SegmentationSink(SegmentationConfig()) { seg -> rolling.submit(seg) }
+                }
+                if (!recording || myToken != startToken) return@launch
+                recorder.start(onLevel, sink)
+                // Live tail preview (#42), now covering only the audio after the last segment.
+                partials.start { recorder.snapshotRecentSamples() }
+            } catch (e: Throwable) {
+                recording = false
+                partials.stop()
+                rolling.cancel()
+                stateHolder.set(RecorderState.Idle)
+                stopForegroundAndSelf()
             }
-            // Live preview of the last few seconds (#42). No-op if no on-device model:
-            // recording proceeds identically (graceful degradation).
-            partials.start { recorder.snapshotRecentSamples() }
-            // Safety cap: a forgotten recording can't hold the mic forever.
-            capJob = scope.launch {
-                delay(MAX_RECORD_MS)
-                if (recording) stopAndSave()
-            }
-        } catch (e: Throwable) {
-            recording = false
-            partials.stop()
-            stateHolder.set(RecorderState.Idle)
-            stopForegroundAndSelf()
+        }
+        // Safety cap: a forgotten recording can't hold the mic forever.
+        capJob = scope.launch {
+            delay(MAX_RECORD_MS)
+            if (recording) stopAndSave()
         }
     }
 
     private fun stopAndSave() {
         if (!recording) return // idempotent: a stop tap racing the safety cap can't double-fire
         capJob?.cancel()
-        partials.stop() // end the preview before we release the mic; final decode is the durable text
+        partials.stop() // end the preview before we release the mic; committed text is durable
         recording = false
+        startToken++ // cancel any still-pending start coroutine
         stateHolder.set(RecorderState.Saving)
         updateNotif("💾 enregistrement…")
         val pcm = recorder.stop()
+        val remainder = recorder.flushOpenSegment() // the tail after the last committed segment
+        val noteId = activeNoteId
+        val wav = activeWav
         scope.launch {
             try {
-                if (pcm.isNotEmpty()) {
-                    val createdAt = System.currentTimeMillis()
-                    val dir = File(filesDir, "notes").apply { mkdirs() }
-                    val file = File(dir, "note_$createdAt.wav")
-                    writeWav(file, pcm)
-                    val id = notes.add(
-                        Note(
-                            wavPath = file.absolutePath,
-                            createdAt = createdAt,
-                            durationS = pcm.size.toFloat() / SAMPLE_RATE,
-                            // Enqueued for STT; the manager flips this to RUNNING→DONE,
-                            // or UNAVAILABLE if no on-device model is bundled.
-                            transcriptState = TranscriptState.PENDING,
-                        ),
-                    )
-                    transcription.onNoteSaved(id)
+                when {
+                    // Rolling path: the note exists (RECORDING) with its committed segments.
+                    noteId != 0L && pcm.isNotEmpty() && wav != null -> {
+                        // WAV written once, at stop — the write path is untouched. Then the
+                        // remainder is the only new decode; committed segments are never redone.
+                        writeWav(wav, pcm)
+                        rolling.finish(remainder, pcm.size.toFloat() / SAMPLE_RATE)
+                    }
+                    // Rolling armed but nothing captured (instant stop): drop the empty note.
+                    noteId != 0L -> {
+                        rolling.cancel()
+                        notes.get(noteId)?.let { notes.delete(it) }
+                    }
+                    // Legacy path (feature off / no model): create the note now, decode post-hoc.
+                    pcm.isNotEmpty() -> {
+                        val createdAt = System.currentTimeMillis()
+                        val file = File(File(filesDir, "notes").apply { mkdirs() }, "note_$createdAt.wav")
+                        writeWav(file, pcm)
+                        val id = notes.add(
+                            Note(
+                                wavPath = file.absolutePath,
+                                createdAt = createdAt,
+                                durationS = pcm.size.toFloat() / SAMPLE_RATE,
+                                // Enqueued for STT; the manager flips this to RUNNING→DONE,
+                                // or leaves it PENDING (waiting for a model) on a lean APK.
+                                transcriptState = TranscriptState.PENDING,
+                            ),
+                        )
+                        transcription.onNoteSaved(id)
+                    }
                 }
             } finally {
+                activeNoteId = 0
+                activeWav = null
                 stateHolder.set(RecorderState.Idle)
                 stopForegroundAndSelf()
             }

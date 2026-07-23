@@ -3,6 +3,8 @@ package pl.nech.tuparles.core
 import kotlinx.coroutines.flow.Flow
 import pl.nech.tuparles.data.Note
 import pl.nech.tuparles.data.NoteSegment
+import pl.nech.tuparles.record.ClosedSegment
+import pl.nech.tuparles.record.SegmentationConfig
 
 /**
  * The portable core contract sketched in issue #2: a small boundary between the
@@ -11,13 +13,29 @@ import pl.nech.tuparles.data.NoteSegment
  * end — when the library extraction (#2) lands, these three interfaces are the seam.
  */
 
+/**
+ * Optional live segmentation for the rolling committed transcript: a [config] and a callback
+ * fired (on the mic thread) each time a silence-bounded segment closes during recording. The
+ * segmenter is a pure observer of the same PCM the WAV is written from — it never touches the
+ * write path. Absent (null [start] arg) → no rolling, exactly the prior behaviour.
+ */
+class SegmentationSink(
+    val config: SegmentationConfig,
+    val onSegmentClosed: (ClosedSegment) -> Unit,
+)
+
 /** Captures 16 kHz mono PCM16 from the mic. start() opens it, stop() returns samples. */
 interface RecorderSession {
     /**
      * @param onLevel realtime feedback per audio chunk: (rms 0..1, elapsedMs) so a
      *   surface can paint a live meter + timer.
+     * @param segmentation when non-null, splits the stream into committed segments live
+     *   (the rolling transcript); when null, records as a single take like before.
      */
-    fun start(onLevel: (rms: Float, elapsedMs: Long) -> Unit)
+    fun start(
+        onLevel: (rms: Float, elapsedMs: Long) -> Unit,
+        segmentation: SegmentationSink? = null,
+    )
 
     /** Stops the mic and returns the captured PCM16 samples. */
     fun stop(): ShortArray
@@ -29,6 +47,12 @@ interface RecorderSession {
      * publishes nothing (graceful degradation), and recording is unaffected either way.
      */
     fun snapshotRecentSamples(): FloatArray = FloatArray(0)
+
+    /**
+     * The open segment still buffered when recording stops — the remainder after the last
+     * committed segment — for the final committed decode. Null when not segmenting or empty.
+     */
+    fun flushOpenSegment(): ClosedSegment? = null
 }
 
 /** The result of decoding audio to text. Model/language are for provenance. */
@@ -59,6 +83,15 @@ interface TranscriptionEngine {
      * or the recording. Defaults to null (no partials).
      */
     suspend fun transcribeSamples(samples: FloatArray): String? = null
+
+    /**
+     * Decode raw samples on the **committed** path — the rolling transcript's segments
+     * (issue: rolling-committed transcript). Unlike [transcribeSamples] this WAITS for the
+     * engine (it is durable product, never a skip), serialised behind any in-flight decode
+     * through the same gate, so segments commit in order and a live partial yields to them.
+     * Returns null only when no model is available. Defaults to null (no engine).
+     */
+    suspend fun transcribeSamplesCommitted(samples: FloatArray): Transcript? = null
 }
 
 /** Persistence for recorded notes. Room-backed on Android (see data/). */
