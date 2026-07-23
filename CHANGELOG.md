@@ -1,5 +1,65 @@
 # Changelog
 
+## Sprint 36 — 2026-07-23 · Le transcript qui tient — ce que tu vois est gardé
+
+"Record-minutes-and-pray": while recording a long note, all you had was a dim,
+discarded tail preview; the durable transcript was a single post-hoc decode of the
+whole WAV after stop — one all-or-nothing shot. Now the transcript is built *as you
+speak*. Completed, silence-bounded segments decode on the committed engine path and
+persist the instant they land, growing a durable transcript you watch settle. What
+you see is what you keep.
+
+### Added
+- **Rolling committed transcript**: a pure-Kotlin `SilenceSegmenter` cuts the live
+  PCM stream into silence-bounded, contiguous segments (RMS threshold + min-silence
+  / min-segment hysteresis, plus a ~30 s max-segment cap so a pause-free speaker
+  still commits). Each completed segment decodes through the `DecodeGate` **committed**
+  path — it waits, never skips — in order, one at a time, and is written to a new
+  `note_segments` table as it lands. The live tail preview (#42) now covers only the
+  audio *after* the last committed segment (the ring is cleared on each boundary), so
+  settled and unsettled text never double up.
+- **Progressive durability**: a note is created at record start (`TranscriptState.RECORDING`,
+  hidden from the list until it finalises) so committed segments have a durable home.
+  A process death mid-recording is recovered on next launch — the transcript is rebuilt
+  from the segments already written, and the remainder decoded post-hoc when the WAV
+  reached disk.
+- **Finalisation decodes only the remainder**: on stop the WAV is written as before,
+  then only the tail after the last committed segment is decoded and appended, and the
+  note is marked DONE — never a re-decode of the whole take. Notes with zero committed
+  segments (feature off, model arrived late, legacy rows) keep the existing full-WAV
+  post-hoc path.
+- **Réglages → "Transcription en continu"** toggle (default on): the smart default is
+  the rolling transcript; the switch restores the single post-hoc decode for anyone who
+  prefers it. "It's a setting."
+
+### Changed
+- The recorder screen shows the growing committed transcript as upright body text with
+  the dim italic tail preview appended, in a bounded scrollable box — settled vs
+  unsettled reads from the typography (weight + italic + colour), never a hue.
+- `TranscriptionEngine` gains `transcribeSamplesCommitted` (raw samples on the waiting
+  gate path); `RecorderStateHolder` gains a `committed` flow, kept separate from the
+  ~5 s partial and the high-frequency level meter so none clobbers another.
+
+### Doctrine
+- **Never silently replace committed text.** A segment, once decoded and persisted, is
+  final; finalisation and recovery only *append*. A visible mishear beats a silent
+  rewrite — the same asymmetry as the command-vs-text interlocks.
+- **The WAV write path stays sacred.** Segmentation is a guarded pure observer of the
+  same PCM the WAV is written from; a fault there never touches the recording. The WAV
+  is still written once, at stop — so post-death recovery keeps the committed text
+  always, and the un-committed tail only when the WAV made it to disk (a follow-up to
+  stream it would recover that tail too; see the design note).
+
+### Infra
+- Additive migration **3→4** (the `note_segments` table + its `noteId` index), DDL
+  copied from Room's generated schema; `exportSchema` is now on and the schema history
+  is checked in under `app/schemas/`. New JVM tests for the segmenter (hysteresis,
+  caps, contiguity, chunk-boundary carry), the rolling state machine (progressive
+  commit, never-replace, the no-dupes/no-loss reconciliation matrix, crash recovery),
+  the migration, and the ViewModel display + toggle: **107 tests green** (was 83),
+  lint 0 errors. Native decode stays device-only (see the design note's checklist).
+- Design note: `docs/research/2026-07-23-android-rolling-transcript-design.md`.
+
 ## Sprint 35 — 2026-07-23 · APK léger, modèle à la demande
 
 "130mb is heavy!" — and ~95% of it was one bundled `ggml-base`. The fix reframes

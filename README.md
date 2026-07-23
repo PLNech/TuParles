@@ -203,11 +203,16 @@ is a **fresh Kotlin/Compose rebuild**, shipped in phases:
   dictaphone — recording is never blocked; notes sit as *en attente d'un modèle*
   and decode once one is present. Everything after the download runs on-device.
 - **Phase C — search**: Room FTS over transcripts.
-- **Live partials while recording**: a dim, ephemeral preview of the last ~15 s
-  appears under the level meter as you speak — reassurance the mic hears you, not
-  a running transcript (the durable text stays the post-hoc decode of the full
-  take). Self-paced, yields to committed decodes, and silently absent until a
-  model is present.
+- **Rolling committed transcript**: for a long note, the transcript is built *as
+  you speak* rather than in one all-or-nothing decode after stop. Completed,
+  silence-bounded segments decode and persist the instant they land, so what you
+  watch settle is what you keep — a phone that dies mid-recording still keeps every
+  committed segment. Under the growing settled text runs the dim italic tail preview
+  (the last unsettled seconds), so *settled vs provisional* reads from the
+  typography, never a colour. On stop only the remainder is decoded, never the whole
+  take again. It's on by default, with a *Réglages → Transcription en continu*
+  toggle that restores the single post-hoc decode; with no model, recording is never
+  blocked — the note waits for one exactly as before.
 
 Build, architecture, and install notes are in
 [`android/README.md`](android/README.md); the design decision in
