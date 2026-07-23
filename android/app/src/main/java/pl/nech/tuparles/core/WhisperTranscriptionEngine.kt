@@ -64,6 +64,15 @@ class WhisperTranscriptionEngine @Inject constructor(
         }
     }
 
+    override suspend fun transcribeSamplesCommitted(samples: FloatArray): Transcript? {
+        if (!available || samples.isEmpty()) return null
+        return gate.committed {
+            val ctx = ensureContext()
+            val raw = ctx.transcribeData(samples, printTimestamp = false)
+            Transcript(text = raw.trim(), language = null, model = loaded?.displayName ?: "unknown")
+        }
+    }
+
     /**
      * Load the model once, or reload if the active model changed since. Always called
      * under [gate], so no extra lock. Throws if no model is resolvable (callers gate on

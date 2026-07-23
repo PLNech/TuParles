@@ -6,6 +6,7 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.util.Log
 import pl.nech.tuparles.core.RecorderSession
+import pl.nech.tuparles.core.SegmentationSink
 import javax.inject.Inject
 import kotlin.math.sqrt
 
@@ -24,10 +25,20 @@ class AudioRecorderSession @Inject constructor() : RecorderSession {
     // Reads never disturb the recording; if nothing ever snapshots it, it costs one array copy.
     private val ring = PcmRingBuffer(SAMPLE_RATE * PARTIAL_WINDOW_S)
 
+    // The rolling-transcript segmenter (null when the feature is off): a pure observer of the
+    // same PCM the WAV is written from. When a segment closes we also clear the tail ring, so
+    // the live partial previews only the *unsettled* audio after the last committed segment.
+    @Volatile private var segmenter: SilenceSegmenter? = null
+
     override fun snapshotRecentSamples(): FloatArray = ring.snapshotFloats()
 
+    override fun flushOpenSegment(): ClosedSegment? = segmenter?.flush()
+
     @SuppressLint("MissingPermission") // caller checks RECORD_AUDIO before start()
-    override fun start(onLevel: (rms: Float, elapsedMs: Long) -> Unit) {
+    override fun start(
+        onLevel: (rms: Float, elapsedMs: Long) -> Unit,
+        segmentation: SegmentationSink?,
+    ) {
         val minBuf = AudioRecord.getMinBufferSize(
             SAMPLE_RATE,
             AudioFormat.CHANNEL_IN_MONO,
@@ -50,6 +61,7 @@ class AudioRecorderSession @Inject constructor() : RecorderSession {
         }
         samples.clear()
         ring.clear()
+        segmenter = segmentation?.let { SilenceSegmenter(it.config) }
         record = rec
         recording = true
         rec.startRecording()
@@ -64,8 +76,20 @@ class AudioRecorderSession @Inject constructor() : RecorderSession {
                     Log.e(TAG, "mic: AudioRecord.read error $n")
                     break
                 }
+                // The WAV accumulation comes first and unconditionally — recording is sacred.
                 for (i in 0 until n) samples.add(chunk[i])
                 ring.append(chunk, n)
+                // Segmentation is a guarded observer: a fault here never breaks the recording.
+                if (segmentation != null && n > 0) {
+                    try {
+                        for (seg in segmenter!!.accept(chunk, n)) {
+                            ring.clear() // preview only the unsettled tail after this boundary
+                            segmentation.onSegmentClosed(seg)
+                        }
+                    } catch (e: Throwable) {
+                        Log.w(TAG, "segmentation error (recording unaffected)", e)
+                    }
+                }
                 totalRead += n
                 if (n > 0) {
                     var sum = 0.0
