@@ -130,7 +130,7 @@ fun RecorderScreen(
                 .padding(padding),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            RecordControl(state.recorder, state.committed, state.partial, onRecordTap)
+            RecordControl(state.recorder, state.committed, state.partial, state.liveDegraded, onRecordTap)
 
             if (modelState.showFirstRunCard) {
                 FirstRunModelCard(
@@ -195,9 +195,16 @@ fun RecorderScreen(
 }
 
 @Composable
-private fun RecordControl(recorder: RecorderState, committed: String?, partial: String?, onTap: () -> Unit) {
+private fun RecordControl(
+    recorder: RecorderState,
+    committed: String?,
+    partial: String?,
+    liveDegraded: Boolean,
+    onTap: () -> Unit,
+) {
     val recording = recorder is RecorderState.Recording
-    val saving = recorder is RecorderState.Saving
+    val transcribing = recorder is RecorderState.Transcribing
+    val remaining = (recorder as? RecorderState.Transcribing)?.remaining ?: 0
     val elapsed = (recorder as? RecorderState.Recording)?.elapsedMs ?: 0L
     val level = (recorder as? RecorderState.Recording)?.level ?: 0f
 
@@ -214,7 +221,7 @@ private fun RecordControl(recorder: RecorderState, committed: String?, partial: 
         )
         FilledIconButton(
             onClick = onTap,
-            enabled = !saving,
+            enabled = !transcribing,
             modifier = Modifier.size(96.dp),
         ) {
             Icon(
@@ -225,14 +232,27 @@ private fun RecordControl(recorder: RecorderState, committed: String?, partial: 
             )
         }
         Text(
+            // Post-stop is transcription, not recording — say so honestly, with the backlog
+            // count when the live decode is still catching up.
             text = when {
                 recording -> Format.duration(elapsed / 1000f)
-                saving -> "enregistrement…"
+                transcribing && remaining > 0 -> "transcription… ($remaining)"
+                transcribing -> "transcription…"
                 else -> "Appuyez pour dicter"
             },
             style = MaterialTheme.typography.titleMedium,
             color = buttonColor,
         )
+        if (recording && liveDegraded) {
+            // The user wanted the live transcript but the active model is too slow for it:
+            // be honest that the text lands after they stop, rather than pretending it is live.
+            Text(
+                text = "Modèle trop lent pour le direct — le texte arrivera après l'arrêt",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+        }
         if (recording) {
             LinearProgressIndicator(
                 progress = { level.coerceIn(0f, 1f) },

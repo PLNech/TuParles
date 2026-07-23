@@ -10,6 +10,8 @@ import pl.nech.tuparles.core.TranscriptionEngine
 import pl.nech.tuparles.data.NoteSegment
 import pl.nech.tuparles.data.TranscriptState
 import pl.nech.tuparles.di.ApplicationScope
+import pl.nech.tuparles.model.ModelResolver
+import java.util.concurrent.atomic.AtomicInteger
 import pl.nech.tuparles.record.ClosedSegment
 import pl.nech.tuparles.record.RecorderPreferences
 import pl.nech.tuparles.record.RecorderStateHolder
@@ -44,32 +46,56 @@ class RollingTranscriber @Inject constructor(
     private val notes: NotesRepository,
     private val stateHolder: RecorderStateHolder,
     private val prefs: RecorderPreferences,
+    private val resolver: ModelResolver,
     @ApplicationScope private val scope: CoroutineScope,
 ) {
     private var channel: Channel<ClosedSegment>? = null
     private var worker: Job? = null
     private var noteId: Long = 0
     private val committedTexts = mutableListOf<String>()
+    // Segments submitted but not yet decoded — the live decode backlog. On a slow model
+    // this grows behind the speaker; surfaced as the post-stop "transcription… (N)" count.
+    private val pendingSegments = AtomicInteger(0)
 
-    /** Whether to commit segments live for a new recording: feature on AND a model loaded. */
-    fun shouldArm(): Boolean = prefs.rollingTranscriptEnabled && engine.available
+    /**
+     * Whether to commit segments live for a new recording: feature on AND a model loaded
+     * AND that model is fast enough to keep up ([ModelSpec.liveCapable]). A slow model
+     * degrades honestly to the post-stop path — piling decodes up behind the speaker helps
+     * no one. Honesty beats the toggle: even with the setting ON, a slow model still degrades.
+     */
+    fun shouldArm(): Boolean =
+        prefs.rollingTranscriptEnabled && engine.available && resolver.currentLiveCapable()
+
+    /**
+     * The user asked for the live transcript (toggle on, model loaded) but the active model
+     * is too slow for it — so we degraded to a post-stop decode and should say so in the UI.
+     */
+    fun isLiveDegraded(): Boolean =
+        prefs.rollingTranscriptEnabled && engine.available && !resolver.currentLiveCapable()
+
+    /** Segments queued for decode but not yet committed (the live backlog). */
+    fun pendingCount(): Int = pendingSegments.get()
 
     /** Open a rolling session for [noteId]; segments submitted next decode in order. */
     fun begin(noteId: Long) {
         worker?.cancel()
         this.noteId = noteId
         committedTexts.clear()
+        pendingSegments.set(0)
         stateHolder.clearCommitted()
         val ch = Channel<ClosedSegment>(Channel.UNLIMITED)
         channel = ch
         worker = scope.launch {
-            for (segment in ch) decodeAndPersist(segment)
+            for (segment in ch) {
+                decodeAndPersist(segment)
+                pendingSegments.decrementAndGet()
+            }
         }
     }
 
     /** Hand a completed segment to the decode queue (non-blocking; ordering preserved). */
     fun submit(segment: ClosedSegment) {
-        channel?.trySend(segment)
+        if (channel?.trySend(segment)?.isSuccess == true) pendingSegments.incrementAndGet()
     }
 
     /** Abandon the session without finalising a note (nothing was captured). */
@@ -79,6 +105,7 @@ class RollingTranscriber @Inject constructor(
         channel?.close()
         channel = null
         committedTexts.clear()
+        pendingSegments.set(0)
         stateHolder.clearCommitted()
     }
 

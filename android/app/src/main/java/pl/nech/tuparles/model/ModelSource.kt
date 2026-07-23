@@ -28,4 +28,15 @@ interface ModelResolver {
 
     /** True iff [current] would return non-null. Cheap; safe to call per note. */
     fun hasModel(): Boolean = current() != null
+
+    /**
+     * Is the model that would load right now fast enough for the live rolling transcript
+     * (see [ModelSpec.liveCapable])? Maps the resolved source back to its catalog spec by
+     * file name. Null / unknown source ⇒ false (degrade to post-stop decode). A hint used
+     * only to gate the rolling *default*, never to block recording.
+     */
+    fun currentLiveCapable(): Boolean {
+        val src = current() ?: return false
+        return ModelCatalog.byFileName("${src.displayName}.bin")?.liveCapable ?: false
+    }
 }

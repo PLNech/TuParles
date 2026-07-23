@@ -185,8 +185,8 @@ class RecorderViewModelTest {
         advanceUntilIdle()
         assertEquals("bonjour le", vm.uiState.value.partial)
 
-        // Leaving the recording state clears the preview (no stale partial into Saving/Idle).
-        holder.set(RecorderState.Saving)
+        // Leaving the recording state clears the preview (no stale partial into Transcribing/Idle).
+        holder.set(RecorderState.Transcribing())
         advanceUntilIdle()
         assertEquals(null, vm.uiState.value.partial)
     }
@@ -208,10 +208,44 @@ class RecorderViewModelTest {
         assertEquals("et voici", vm.uiState.value.partial)
 
         // Leaving the recording state clears both the settled text and the preview.
-        holder.set(RecorderState.Saving)
+        holder.set(RecorderState.Transcribing())
         advanceUntilIdle()
         assertEquals(null, vm.uiState.value.committed)
         assertEquals(null, vm.uiState.value.partial)
+    }
+
+    @Test
+    fun post_stop_is_a_transcribing_state_busy_but_not_recording_with_the_backlog_count() = runTest(dispatcher) {
+        val holder = RecorderStateHolder()
+        val vm = RecorderViewModel(FakeNotesRepository(), holder)
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        holder.set(RecorderState.Transcribing(remaining = 3))
+        advanceUntilIdle()
+
+        val state = vm.uiState.value
+        assertFalse("transcribing is NOT recording (the mic is released)", state.isRecording)
+        assertTrue("but the UI is busy (button disabled, honest 'transcription…')", state.isBusy)
+        assertEquals(RecorderState.Transcribing(3), state.recorder)
+    }
+
+    @Test
+    fun the_slow_model_degrade_hint_flows_into_uiState() = runTest(dispatcher) {
+        val holder = RecorderStateHolder()
+        val vm = RecorderViewModel(FakeNotesRepository(), holder)
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        holder.set(RecorderState.Recording(0L, 0f))
+        holder.setLiveDegraded(true)
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.liveDegraded)
+
+        // Cleared when recording ends.
+        holder.set(RecorderState.Transcribing())
+        advanceUntilIdle()
+        assertFalse(vm.uiState.value.liveDegraded)
     }
 
     @Test
