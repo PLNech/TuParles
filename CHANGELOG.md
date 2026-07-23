@@ -1,101 +1,70 @@
 # Changelog
 
-## Sprint 36 — 2026-07-23 · Le transcript qui tient — ce que tu vois est gardé
+## Sprint 36 — 2026-07-23 · 1.0.0 — légère à installer, vive à l'écoute, fidèle à la parole
 
-"Record-minutes-and-pray": while recording a long note, all you had was a dim,
-discarded tail preview; the durable transcript was a single post-hoc decode of the
-whole WAV after stop — one all-or-nothing shot. Now the transcript is built *as you
-speak*. Completed, silence-bounded segments decode on the committed engine path and
-persist the instant they land, growing a durable transcript you watch settle. What
-you see is what you keep.
+The first public **1.0.0**. Three moats land together. The app ships **lean** and
+pulls a speech model on demand (no more bundling ~95% of the weight). It listens
+**faithfully** — the transcript is built as you speak and persisted segment by
+segment, not one all-or-nothing decode after stop. And it runs **vivid** on modern
+ARM: a third native CPU tier compiled with the int8 dot-product kernels speeds the
+quantised models, which brings the small, light q5 downloads back onto the ladder.
+Recording is never gated on any of this: no model, no network, no dotprod — still a
+dictaphone.
 
 ### Added
+- **Lean APK + on-device model download (#13, app-weight goal)**: the debug APK
+  drops from ~186 MB to **~53 MB** (release AAB target ≤25 MB) by no longer
+  packaging any model. A `ModelCatalog` (pure data, one editable list) offers the
+  rungs of a speed↔quality ladder; each carries its exact byte size and a sha256
+  (the git-LFS `oid`s from the whisper.cpp mirror, cross-checked against local
+  files). `small-f16` (465 Mo) is the single recommended default (the bench pick).
+- **Third native CPU tier — `+dotprod` (bench 2026-07-22 A/B)**: a new
+  `whisper_v8fp16_va_dotprod` CMake variant compiled `-march=armv8.2-a+fp16+dotprod`
+  (same forced `-O3` on the ggml-cpu/ggml-base compute targets). `LibWhisper.kt`
+  gains a third runtime probe: it loads the dotprod build when `/proc/cpuinfo`
+  advertises `asimddp` (the aarch64 dot-product HWCAP), with a graceful fallback
+  chain dotprod → fp16 (`fphp`) → baseline. The dot-product kernels (sdot/udot)
+  land in the shipped `libggml-cpu.so` — verified by `objdump` (919 sdot/udot,
+  0 in the prior fp16-only build), matching the benched whisper-cli exactly. On the
+  bench this is a 1.1–1.4x speed-up on the q5 models with no quality change.
+- **Two q5 download rungs earned back by dotprod**: `base-q5_1` (57 Mo, "quantifié :
+  bien plus léger que Base, un peu plus lent") and `small-q5_1` (182 Mo, "presque la
+  qualité de Small, 2.5x plus léger, un peu plus lent"). With the int8 path now
+  dot-product-accelerated they are fast enough to belong on the ladder, and their
+  ~2.5x smaller footprint is the whole point of the app-weight goal. The catalog is
+  now seven rungs (tiny-q5_1 · base-q5_1 · base-f16 · small-q5_1 · small-f16 ·
+  medium-q5_0 · large-v3-turbo-q5_0), ordered by footprint.
+- **First-run flow**: a fresh install records straightaway; un-decodable notes sit
+  as PENDING ("en attente d'un modèle") instead of a terminal state. A dismissible
+  card offers the recommended model with its size; when a model becomes ready the
+  waiting notes auto-transcribe (through the existing `TranscriptionManager`).
+- **Model manager in Réglages → Modèles**: the whole catalog with sizes,
+  downloaded/active state, per-model download/delete, active-model selection, and
+  total storage used. "Smart default, total override" — recommended is flagged,
+  every rung is one tap away. New two-screen navigation (recorder ⇄ Réglages), no
+  nav-library dependency.
+- **Downloader** on the system `DownloadManager` (resumable, survives process death,
+  no new deps): downloads to app-private staging, verifies size + sha256 **before**
+  activation, atomic-renames into `filesDir/models/`, deletes corrupt partials.
+  State (idle / downloading+progress / verifying / ready / failed) via `StateFlow`.
+  Sizes are shown before download — no silent large fetch over cellular.
 - **Rolling committed transcript**: a pure-Kotlin `SilenceSegmenter` cuts the live
   PCM stream into silence-bounded, contiguous segments (RMS threshold + min-silence
   / min-segment hysteresis, plus a ~30 s max-segment cap so a pause-free speaker
   still commits). Each completed segment decodes through the `DecodeGate` **committed**
   path — it waits, never skips — in order, one at a time, and is written to a new
   `note_segments` table as it lands. The live tail preview (#42) now covers only the
-  audio *after* the last committed segment (the ring is cleared on each boundary), so
-  settled and unsettled text never double up.
+  audio *after* the last committed segment, so settled and unsettled text never
+  double up.
 - **Progressive durability**: a note is created at record start (`TranscriptState.RECORDING`,
   hidden from the list until it finalises) so committed segments have a durable home.
-  A process death mid-recording is recovered on next launch — the transcript is rebuilt
-  from the segments already written, and the remainder decoded post-hoc when the WAV
-  reached disk.
-- **Finalisation decodes only the remainder**: on stop the WAV is written as before,
-  then only the tail after the last committed segment is decoded and appended, and the
-  note is marked DONE — never a re-decode of the whole take. Notes with zero committed
-  segments (feature off, model arrived late, legacy rows) keep the existing full-WAV
-  post-hoc path.
+  A process death mid-recording is recovered on next launch — the transcript is
+  rebuilt from the segments already written, and the remainder decoded post-hoc when
+  the WAV reached disk. Finalisation decodes **only the remainder** (never a whole
+  re-decode); notes with zero committed segments keep the existing full-WAV path.
 - **Réglages → "Transcription en continu"** toggle (default on): the smart default is
-  the rolling transcript; the switch restores the single post-hoc decode for anyone who
-  prefers it. "It's a setting."
-
-### Changed
-- The recorder screen shows the growing committed transcript as upright body text with
-  the dim italic tail preview appended, in a bounded scrollable box — settled vs
-  unsettled reads from the typography (weight + italic + colour), never a hue.
-- `TranscriptionEngine` gains `transcribeSamplesCommitted` (raw samples on the waiting
-  gate path); `RecorderStateHolder` gains a `committed` flow, kept separate from the
-  ~5 s partial and the high-frequency level meter so none clobbers another.
-
-### Doctrine
-- **Never silently replace committed text.** A segment, once decoded and persisted, is
-  final; finalisation and recovery only *append*. A visible mishear beats a silent
-  rewrite — the same asymmetry as the command-vs-text interlocks.
-- **The WAV write path stays sacred.** Segmentation is a guarded pure observer of the
-  same PCM the WAV is written from; a fault there never touches the recording. The WAV
-  is still written once, at stop — so post-death recovery keeps the committed text
-  always, and the un-committed tail only when the WAV made it to disk (a follow-up to
-  stream it would recover that tail too; see the design note).
-
-### Infra
-- Additive migration **3→4** (the `note_segments` table + its `noteId` index), DDL
-  copied from Room's generated schema; `exportSchema` is now on and the schema history
-  is checked in under `app/schemas/`. New JVM tests for the segmenter (hysteresis,
-  caps, contiguity, chunk-boundary carry), the rolling state machine (progressive
-  commit, never-replace, the no-dupes/no-loss reconciliation matrix, crash recovery),
-  the migration, and the ViewModel display + toggle: **107 tests green** (was 83),
-  lint 0 errors. Native decode stays device-only (see the design note's checklist).
-- Design note: `docs/research/2026-07-23-android-rolling-transcript-design.md`.
-
-## Sprint 35 — 2026-07-23 · APK léger, modèle à la demande
-
-"130mb is heavy!" — and ~95% of it was one bundled `ggml-base`. The fix reframes
-the moat: our privacy story is not the absence of a permission, it is that *your
-voice, recordings, and notes never leave the device*. So the app now ships lean
-and fetches a model on first run — INTERNET is declared, but strictly inbound
-(huggingface.co → your phone), never a byte about you outbound. Recording is
-never gated on any of this: no model, still a dictaphone.
-
-### Added
-- **Lean APK + on-device model download (#13, app-weight goal)**: the debug APK
-  drops from ~186 MB to **~45 MB** (release AAB target ≤25 MB) by no longer
-  packaging any model. A `ModelCatalog` (pure data, one editable list) offers five
-  rungs on a speed↔quality ladder — `tiny-q5_1` (31 Mo, "le plus rapide, le plus
-  brouillon"), `base-f16` (141 Mo, "léger, quasi temps réel, bute sur le
-  vocabulaire technique"), **`small-f16`** (465 Mo, recommended, "le meilleur
-  équilibre ~3.4x temps réel"), `medium-q5_0` (515 Mo, "le plus précis, lent"),
-  and `large-v3-turbo-q5_0` (547 Mo, "quasi parfait, le plus lent"). Each carries
-  its exact byte size and a sha256 (the git-LFS `oid`s from the whisper.cpp mirror;
-  four cross-checked against local files). Lineup and default are the bench's
-  (`docs/research/2026-07-22-android-model-bench.md`); a dotprod A/B may revise it,
-  so the catalog is trivially editable.
-- **First-run flow**: a fresh install records straightaway; un-decodable notes sit
-  as PENDING ("en attente d'un modèle") instead of a terminal state. A dismissible
-  card offers the recommended model with its size; when a model becomes ready the
-  waiting notes auto-transcribe (driven through the existing `TranscriptionManager`).
-- **Model manager in Réglages → Modèles**: the whole catalog with sizes,
-  downloaded/active state, per-model download/delete, active-model selection, and
-  total storage used. "Smart default, total override" — recommended is flagged,
-  every rung is one tap away. New two-screen navigation (recorder ⇄ Réglages), no
-  nav-library dependency.
-- **Downloader** on the system `DownloadManager` (resumable, survives process
-  death, no new deps): downloads to app-private staging, verifies size + sha256
-  **before** activation, atomic-renames into `filesDir/models/`, deletes corrupt
-  partials. State (idle / downloading+progress / verifying / ready / failed) via
-  `StateFlow`. Sizes are shown before download — no silent large fetch over cellular.
+  the rolling transcript; the switch restores the single post-hoc decode. "It's a
+  setting."
 
 ### Changed
 - **`INTERNET` permission declared**, with the manifest comments rewritten honestly:
@@ -105,21 +74,59 @@ never gated on any of this: no model, still a dictaphone.
 - **Engine model resolution is now live and ordered**: active downloaded model →
   recommended-if-downloaded → any downloaded → bundled asset (dev builds) →
   unavailable. `WhisperTranscriptionEngine.available` tracks it dynamically, so the
-  app flips to ready the moment a model lands. A **runtime model switch** reloads
-  the non-thread-safe native context on the committed path (via `DecodeGate`);
-  live partials degrade gracefully during the swap.
+  app flips to ready the moment a model lands. A **runtime model switch** reloads the
+  non-thread-safe native context on the committed path (via `DecodeGate`); live
+  partials degrade gracefully during the swap.
 - No-model notes are PENDING, not UNAVAILABLE — a note genuinely *waiting for a
   model*, swept up by `retryPending()` when one arrives.
+- The recorder screen shows the growing committed transcript as upright body text
+  with the dim italic tail preview appended, in a bounded scrollable box — settled vs
+  unsettled reads from the typography (weight + italic + colour), never a hue.
+- `TranscriptionEngine` gains `transcribeSamplesCommitted` (raw samples on the waiting
+  gate path); `RecorderStateHolder` gains a `committed` flow, kept separate from the
+  ~5 s partial and the high-frequency level meter so none clobbers another.
+
+### Doctrine
+- **Every feature degrades — dotprod → fp16 → baseline, never dotprod-or-nothing.**
+  The dotprod object only loads behind an `asimddp` probe, mirroring the fp16 gate
+  already shipping. Caveat recorded for the next build: the compute kernels live in
+  the **shared** `libggml-cpu.so`, so the shipped ggml carries dotprod and the app's
+  effective CPU floor rises `fphp` → `asimddp` — on the real Android arm64 fleet
+  every fp16-capable SoC also advertises dot-product (mandatory from ARMv8.4, present
+  on Cortex-A55/A75+), so practical device loss is nil. True per-tier isolation
+  (a dotprod ggml *and* an fp16 ggml in one APK) would need per-variant ggml — a
+  scoped follow-up, not a 1.0 blocker.
+- **Never silently replace committed text.** A segment, once decoded and persisted,
+  is final; finalisation and recovery only *append*. A visible mishear beats a silent
+  rewrite — the same asymmetry as the command-vs-text interlocks.
+- **The WAV write path stays sacred.** Segmentation is a guarded pure observer of the
+  same PCM the WAV is written from; a fault there never touches the recording.
+- **A wrong autocorrect is worse than a visible mishear** carries to the lexicon: the
+  q5 rungs are offered honestly ("un peu plus lent"), never oversold.
 
 ### Infra
-- Packaging excludes `assets/models` (`ignoreAssetsPatterns`), so a build stays
-  lean even on a dev box that ran `fetch-android-model.sh`; the engine keeps the
-  asset-load path for a deliberate offline-demo build. Model resolution, download
-  state machine, catalog integrity, `ModelStore` (sha256/atomic install), and the
-  new ViewModels are all unit-tested on the JVM (fake `DownloadManager`, temp-dir
-  store, sparse-file catalog fixtures): **83 tests green** (was 55), lint 0 errors.
-  Native decode + the live download/switch remain device-only. Build note:
-  `docs/research/2026-07-23-android-lean-apk-design.md`.
+- Additive migration **3→4** (the `note_segments` table + its `noteId` index), DDL
+  copied from Room's generated schema; `exportSchema` is on and the schema history is
+  checked in under `app/schemas/`. Packaging excludes `assets/models`
+  (`ignoreAssetsPatterns`) so a build stays lean even on a dev box that ran
+  `fetch-android-model.sh`; the engine keeps the asset-load path for a deliberate
+  offline-demo build.
+- Model resolution, download state machine, catalog integrity (now the seven rungs +
+  the two q5 downloads), `ModelStore` (sha256/atomic install), the segmenter
+  (hysteresis, caps, contiguity, chunk-boundary carry), the rolling state machine
+  (progressive commit, never-replace, no-dupes/no-loss reconciliation, crash
+  recovery), the migration, and the ViewModels are all unit-tested on the JVM:
+  **108 tests green** (was 55), lint 0 errors. Native decode + the live download/
+  switch/dotprod remain device-only.
+- Lint tooling workaround: under AGP 8.9.0 the Compose-runtime
+  `MutableCollectionMutableStateDetector` crashes with a `NoClassDefFoundError`
+  mid-analysis (a bug in the lint library, not a finding); disabled per lint's own
+  recommendation so the run completes and reports genuine issues. Revisit on the next
+  AGP/Compose bump.
+- Version **1.0.0 (versionCode 6)**. Build/design notes:
+  `docs/research/2026-07-22-android-model-bench.md` (dotprod A/B),
+  `docs/research/2026-07-23-android-lean-apk-design.md`,
+  `docs/research/2026-07-23-android-rolling-transcript-design.md`.
 
 ## Sprint 34 — 2026-07-17 · Le dictaphone : repartir en Kotlin propre
 
