@@ -52,7 +52,10 @@ class TranscriptionManagerTest {
     }
 
     @Test
-    fun marks_unavailable_and_never_calls_engine_when_no_model() = runTest {
+    fun keeps_pending_and_never_calls_engine_when_no_model_yet() = runTest {
+        // Lean APK (#13): with no model downloaded, a note waits for one (PENDING /
+        // "en attente d'un modèle") rather than going terminal — retryPending sweeps it
+        // up once a download lands. The engine is never touched: graceful degrade.
         val repo = FakeNotesRepository()
         repo.emit(listOf(note(1)))
         val engine = FakeEngine(available = false)
@@ -61,9 +64,9 @@ class TranscriptionManagerTest {
         mgr.process(1)
 
         val out = repo.get(1)!!
-        assertEquals(TranscriptState.UNAVAILABLE, out.transcriptState)
+        assertEquals(TranscriptState.PENDING, out.transcriptState)
         assertNull(out.transcript)
-        assertEquals(0, engine.calls) // graceful degrade: engine untouched
+        assertEquals(0, engine.calls)
     }
 
     @Test
