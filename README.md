@@ -179,23 +179,35 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
 ## Mobile (in rebuild)
 
 TuParles runs on Android too — the same privacy story, on the phone in your
-pocket. Everything is local, and no `INTERNET` permission is declared; the OS
-itself denies any socket. As of 2026-07 the app is a **fresh Kotlin/Compose
-rebuild**, shipped in phases:
+pocket. The privacy invariant is exact: **your voice, recordings, and notes
+never leave the device.** The one thing that crosses the network is *inbound
+only* — downloading a speech model from huggingface.co so the app need not ship
+hundreds of megabytes. Nothing about you is ever uploaded. As of 2026-07 the app
+is a **fresh Kotlin/Compose rebuild**, shipped in phases:
 
-- **Phase A — the dictaphone (current)**: a single-activity Compose app that
-  records to a foreground service (a take survives screen-off / app-switch),
-  keeps every note in a Room database (date + duration), and shares a note's
-  WAV out via the system share sheet. Hilt DI, minSdk 26. No model, no network.
-- **Phase B — on-device STT**: bind the vendored native whisper.cpp engine
-  (`android/whisper`) behind the `TranscriptionEngine` interface; decode a note
+- **Phase A — the dictaphone**: a single-activity Compose app that records to a
+  foreground service (a take survives screen-off / app-switch), keeps every note
+  in a Room database (date + duration), and shares a note's WAV out via the
+  system share sheet. Hilt DI, minSdk 26.
+- **Phase B — on-device STT**: the vendored native whisper.cpp engine
+  (`android/whisper`) behind the `TranscriptionEngine` interface decodes a note
   after recording, `language=auto`, `-O3` native build.
+- **Lean APK + first-run model download (#13)**: the app installs at **~25 MB
+  and ships no model**. On first run it records straightaway; a dismissible card
+  offers the bench-recommended default (`small`, ~465 Mo) or the full picker in
+  *Réglages → Modèles* — five rungs on a speed↔quality ladder, each with its size
+  shown before you commit (no silent large downloads). A model is verified by
+  sha256 **before** it is ever activated, then any notes that were waiting decode
+  automatically. Downloads use the system `DownloadManager` (resumable, survives
+  process death). **Offline behavior**: with no model, the app is a pure
+  dictaphone — recording is never blocked; notes sit as *en attente d'un modèle*
+  and decode once one is present. Everything after the download runs on-device.
 - **Phase C — search**: Room FTS over transcripts.
 - **Live partials while recording**: a dim, ephemeral preview of the last ~15 s
   appears under the level meter as you speak — reassurance the mic hears you, not
   a running transcript (the durable text stays the post-hoc decode of the full
-  take). Self-paced, yields to committed decodes, and silently absent on a
-  no-model build.
+  take). Self-paced, yields to committed decodes, and silently absent until a
+  model is present.
 
 Build, architecture, and install notes are in
 [`android/README.md`](android/README.md); the design decision in

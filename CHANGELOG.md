@@ -1,5 +1,66 @@
 # Changelog
 
+## Sprint 35 — 2026-07-23 · APK léger, modèle à la demande
+
+"130mb is heavy!" — and ~95% of it was one bundled `ggml-base`. The fix reframes
+the moat: our privacy story is not the absence of a permission, it is that *your
+voice, recordings, and notes never leave the device*. So the app now ships lean
+and fetches a model on first run — INTERNET is declared, but strictly inbound
+(huggingface.co → your phone), never a byte about you outbound. Recording is
+never gated on any of this: no model, still a dictaphone.
+
+### Added
+- **Lean APK + on-device model download (#13, app-weight goal)**: the debug APK
+  drops from ~186 MB to **~45 MB** (release AAB target ≤25 MB) by no longer
+  packaging any model. A `ModelCatalog` (pure data, one editable list) offers five
+  rungs on a speed↔quality ladder — `tiny-q5_1` (31 Mo, "le plus rapide, le plus
+  brouillon"), `base-f16` (141 Mo, "léger, quasi temps réel, bute sur le
+  vocabulaire technique"), **`small-f16`** (465 Mo, recommended, "le meilleur
+  équilibre ~3.4x temps réel"), `medium-q5_0` (515 Mo, "le plus précis, lent"),
+  and `large-v3-turbo-q5_0` (547 Mo, "quasi parfait, le plus lent"). Each carries
+  its exact byte size and a sha256 (the git-LFS `oid`s from the whisper.cpp mirror;
+  four cross-checked against local files). Lineup and default are the bench's
+  (`docs/research/2026-07-22-android-model-bench.md`); a dotprod A/B may revise it,
+  so the catalog is trivially editable.
+- **First-run flow**: a fresh install records straightaway; un-decodable notes sit
+  as PENDING ("en attente d'un modèle") instead of a terminal state. A dismissible
+  card offers the recommended model with its size; when a model becomes ready the
+  waiting notes auto-transcribe (driven through the existing `TranscriptionManager`).
+- **Model manager in Réglages → Modèles**: the whole catalog with sizes,
+  downloaded/active state, per-model download/delete, active-model selection, and
+  total storage used. "Smart default, total override" — recommended is flagged,
+  every rung is one tap away. New two-screen navigation (recorder ⇄ Réglages), no
+  nav-library dependency.
+- **Downloader** on the system `DownloadManager` (resumable, survives process
+  death, no new deps): downloads to app-private staging, verifies size + sha256
+  **before** activation, atomic-renames into `filesDir/models/`, deletes corrupt
+  partials. State (idle / downloading+progress / verifying / ready / failed) via
+  `StateFlow`. Sizes are shown before download — no silent large fetch over cellular.
+
+### Changed
+- **`INTERNET` permission declared**, with the manifest comments rewritten honestly:
+  the privacy invariant is spelled out (voice/recordings/user data never leave the
+  device; the fetch is inbound-only from huggingface.co). README's Mobile section
+  updated to the new install story and offline behavior.
+- **Engine model resolution is now live and ordered**: active downloaded model →
+  recommended-if-downloaded → any downloaded → bundled asset (dev builds) →
+  unavailable. `WhisperTranscriptionEngine.available` tracks it dynamically, so the
+  app flips to ready the moment a model lands. A **runtime model switch** reloads
+  the non-thread-safe native context on the committed path (via `DecodeGate`);
+  live partials degrade gracefully during the swap.
+- No-model notes are PENDING, not UNAVAILABLE — a note genuinely *waiting for a
+  model*, swept up by `retryPending()` when one arrives.
+
+### Infra
+- Packaging excludes `assets/models` (`ignoreAssetsPatterns`), so a build stays
+  lean even on a dev box that ran `fetch-android-model.sh`; the engine keeps the
+  asset-load path for a deliberate offline-demo build. Model resolution, download
+  state machine, catalog integrity, `ModelStore` (sha256/atomic install), and the
+  new ViewModels are all unit-tested on the JVM (fake `DownloadManager`, temp-dir
+  store, sparse-file catalog fixtures): **83 tests green** (was 55), lint 0 errors.
+  Native decode + the live download/switch remain device-only. Build note:
+  `docs/research/2026-07-23-android-lean-apk-design.md`.
+
 ## Sprint 34 — 2026-07-17 · Le dictaphone : repartir en Kotlin propre
 
 The morning voice-note flow (record on the phone → transcribe on the PC) proved
