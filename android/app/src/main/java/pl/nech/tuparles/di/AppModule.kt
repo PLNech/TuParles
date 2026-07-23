@@ -22,6 +22,7 @@ import pl.nech.tuparles.data.MIGRATION_2_3
 import pl.nech.tuparles.data.MIGRATION_3_4
 import pl.nech.tuparles.data.NoteDao
 import pl.nech.tuparles.data.RoomNotesRepository
+import pl.nech.tuparles.model.DirectHttpFileDownloader
 import pl.nech.tuparles.model.DownloadManagerFileDownloader
 import pl.nech.tuparles.model.FileDownloader
 import pl.nech.tuparles.model.ModelCatalog
@@ -116,6 +117,7 @@ object ModelModule {
         @ApplicationContext ctx: Context,
         store: ModelStore,
         downloader: FileDownloader,
+        fallback: DirectHttpFileDownloader,
         prefs: ModelPreferences,
         @ApplicationScope scope: CoroutineScope,
         pending: Lazy<PendingWork>,
@@ -126,6 +128,13 @@ object ModelModule {
         scope = scope,
         bundledAssetPresent = bundledAssetPresent(ctx),
         pending = pending,
+        // The in-app HTTP fallback for a stalled system download (Android 15 scheduler
+        // deferral, #13), and a read-only metered check so allowMetered=false is honoured.
+        fallbackDownloader = fallback,
+        isMetered = {
+            val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+            cm.isActiveNetworkMetered
+        },
     )
 
     /** Whether this build shipped the dev asset (see [ModelCatalog.BUNDLED_ASSET_PATH]). */

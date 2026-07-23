@@ -17,6 +17,10 @@
     <!-- Inbound only: fetch a whisper model from huggingface.co via the system
          DownloadManager. No user data is ever sent out — see the invariant above. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Read-only network state: check whether the active network is metered before
+         the direct-HTTP download fallback runs, so allowMetered=false is honoured even
+         when the system DownloadManager stalls (Android 15 scheduler deferral, #13). -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <application
         android:name=".TuParlesApp"

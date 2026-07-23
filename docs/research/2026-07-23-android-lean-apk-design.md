@@ -35,6 +35,46 @@ to app-private *external* files, so we copy-and-atomic-rename into internal
 verify → install → wake pending notes) is pure Kotlin and unit-testable on the
 JVM with a fake; only the ~40-line `DownloadManagerFileDownloader` is Android.
 
+### The stall fallback — when `DownloadManager` never starts (Android 15)
+
+Device validation (Fairphone 6, Android 15) surfaced a hard blocker: after
+`DownloadManager.enqueue()`, the provider's JobScheduler job sat **RUNNABLE with
+every constraint satisfied** — "NET READY", Wi-Fi validated + unmetered, app
+standby bucket ACTIVE, netpolicy clean — yet was **never promoted to active**.
+Zero bytes, indefinitely. `cmd jobscheduler run -f com.android.providers.downloads
+<jobid>` unstuck it *instantly*, and the entire chain then ran perfectly
+(download → sha256 verify → atomic install → staging cleanup → pending-note
+retry, all confirmed on device). So the transfer and our state machine are
+correct; the **system scheduler simply may never start the job** — an Android 15
+flexibility-constraint *deferral*, not a policy or a permission problem (the
+bucket was ACTIVE).
+
+We cannot make the platform run its job. So the coordinator gets a bounded wait
+and an escape hatch:
+
+- A pure, fake-clock **`StallDetector`** watches byte progress. If the primary
+  makes **no forward progress for ~15 s** (`DEFAULT_STALL_MS`, one place), we stop
+  waiting on the scheduler.
+- We then fall back to a **`DirectHttpFileDownloader`** — a plain
+  `HttpURLConnection` (no new dependency, house rule) streaming straight to the
+  same app-private staging area, publishing the same `Downloading(soFar,total)`
+  states, honouring `cancel()`, and handing the finished file to the **same**
+  verify + atomic-install path unchanged. Redirects (HF `resolve` → CDN 302) are
+  followed manually and **https-only** (no downgrade); the byte-pump and redirect
+  resolution are pure and unit-tested (`HttpStreamCopier`, `HttpRedirect`).
+- **Metered semantics preserved.** If the user declined cellular
+  (`allowMetered = false`) and the active network is metered, a stall is *legitimate*
+  policy waiting (DownloadManager correctly holding for Wi-Fi), so we do **not**
+  force the fallback — we keep waiting on the primary.
+
+**Honest tradeoff (why primary stays primary):** the direct path lives in the app
+process — it dies with the process and cannot resume a partial. That is fine for a
+*fallback*; `DownloadManager` remains primary precisely for its
+background-survival and resume. We reach for the in-process transfer only when the
+scheduler never starts the job, where a download that actually moves bytes beats
+one that never does. `ACCESS_NETWORK_STATE` was added (read-only) for the metered
+check.
+
 ### Why verify sha256 *before* activation
 
 Consistent with the house line — *safety is structural, not statistical.* A
