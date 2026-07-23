@@ -1,15 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Structural privacy: no INTERNET permission is declared, by design. This is a
-     local dictaphone — nothing leaves the device except via the user's own share
-     sheet. RECORD_AUDIO is the only sensitive permission. -->
+<!-- Privacy invariant (the real moat is our outlook, not our permission set): voice,
+     recordings, and any user data NEVER leave this device. The one thing that crosses
+     the network is INBOUND ONLY — downloading a speech model from huggingface.co so the
+     lean APK need not bundle hundreds of MB (#13). Nothing about the user is ever
+     uploaded: mic audio, transcripts, and notes stay on-device; sharing a note is still
+     the user's own explicit share-sheet action to an app they choose. RECORD_AUDIO
+     remains the only sensitive permission. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- Hold the mic correctly while recording: a foreground service of type
-         microphone (Android 14+ requirement) + its notification. No INTERNET. -->
+         microphone (Android 14+ requirement) + its notification. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Inbound only: fetch a whisper model from huggingface.co via the system
+         DownloadManager. No user data is ever sent out — see the invariant above. -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <application
         android:name=".TuParlesApp"
@@ -37,8 +44,8 @@
             android:exported="false"
             android:foregroundServiceType="microphone" />
 
-        <!-- Shares a note's WAV to another app via a content:// URI. No INTERNET
-             for us — the receiving app does any sending, the user drives it. -->
+        <!-- Shares a note's WAV to another app via a content:// URI. We never send it
+             ourselves — the receiving app does any sending, the user drives it. -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="pl.nech.tuparles.fileprovider"

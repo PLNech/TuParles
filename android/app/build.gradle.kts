@@ -1,6 +1,7 @@
-// The dictaphone app: single-activity Compose, Hilt DI, Room storage.
-// Phase A (record / save / share). Deliberately does NOT depend on :whisper —
-// Phase B wires the native engine behind TranscriptionEngine. No INTERNET.
+// The dictaphone app: single-activity Compose, Hilt DI, Room storage. Records offline;
+// on-device STT via the vendored :whisper engine, with the speech model fetched at
+// runtime (lean APK, #13) rather than bundled. The one network use is inbound model
+// download from huggingface.co — no user data ever leaves the device.
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -51,11 +52,18 @@ android {
         compose = true
     }
 
-    // The whisper GGML model ships as an UNCOMPRESSED asset (POC lesson): the JNI
-    // loader mmaps/streams it straight from the APK instead of inflating ~142MB into
-    // heap. The model itself is fetched by scripts/fetch-android-model.sh and gitignored.
     androidResources {
+        // GGML weights stay UNCOMPRESSED (POC lesson): the JNI loader streams them
+        // straight instead of inflating hundreds of MB into heap. Applies to a
+        // downloaded model on disk and to any dev-bundled asset alike.
         noCompress += "bin"
+        // Lean APK (#13): never package the dev model directory. A clean checkout has
+        // nothing under assets/models (it is gitignored), and this guarantees the
+        // shipped app stays lean even on a dev box that ran fetch-android-model.sh —
+        // the model is downloaded at first run instead. A dev who genuinely wants a
+        // bundled build (offline demo) drops this one line. The engine keeps the
+        // asset-load path, so such a build still works.
+        ignoreAssetsPatterns += "models"
     }
 
     compileOptions {
