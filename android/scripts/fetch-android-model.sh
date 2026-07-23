@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
-# Fetch the GGML model bundled into the experimental APK. It's gitignored (>100MB,
-# over GitHub's file limit), so fetch it before building a self-contained APK.
+# Fetch a GGML model into app/src/main/assets/models/ for a DEV bundled build. It's
+# gitignored (>100MB, over GitHub's file limit).
 #
-#   ./scripts/fetch-android-model.sh         # base (142MB, fast, default bundle)
-#   ./scripts/fetch-android-model.sh large   # large-v3-turbo (547MB, flawless, slow)
+# NOTE (lean APK, #13): the app no longer bundles a model — it downloads one at first
+# run, and the build EXCLUDES assets/models from packaging (app/build.gradle.kts:
+# `ignoreAssetsPatterns += "models"`). So a plain build stays lean (~45MB) even if this
+# script has run. To make an offline demo APK that ships a model, fetch it here AND drop
+# that one exclusion line; the engine keeps the asset-load path. For everyday testing,
+# just run the app and download a model in Réglages.
+#
+#   ./scripts/fetch-android-model.sh         # base (fast, light)
+#   ./scripts/fetch-android-model.sh large   # large-v3-turbo (flawless, slow)
 set -euo pipefail
 
 variant="${1:-base}"
