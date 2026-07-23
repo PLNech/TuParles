@@ -1,0 +1,57 @@
+package pl.nech.tuparles.model
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+/** Catalog integrity — the data the whole download subsystem trusts. */
+class ModelCatalogTest {
+
+    private val hex64 = Regex("^[0-9a-f]{64}$")
+
+    @Test
+    fun urls_are_well_formed_hf_resolve_links_ending_in_the_file_name() {
+        for (m in ModelCatalog.models) {
+            assertTrue(
+                "url must be an HF resolve link: ${m.url}",
+                m.url.startsWith("https://huggingface.co/ggerganov/whisper.cpp/resolve/main/"),
+            )
+            assertTrue("url must end in the file name for ${m.id}", m.url.endsWith(m.fileName))
+            assertTrue("file name must be a .bin for ${m.id}", m.fileName.endsWith(".bin"))
+        }
+    }
+
+    @Test
+    fun every_sha256_is_lowercase_hex_of_the_right_length() {
+        for (m in ModelCatalog.models) {
+            assertTrue("bad sha256 for ${m.id}: ${m.sha256}", hex64.matches(m.sha256))
+        }
+    }
+
+    @Test
+    fun every_size_is_positive() {
+        for (m in ModelCatalog.models) {
+            assertTrue("size must be > 0 for ${m.id}", m.sizeBytes > 0L)
+        }
+    }
+
+    @Test
+    fun exactly_one_model_is_recommended() {
+        assertEquals(1, ModelCatalog.models.count { it.recommended })
+        assertEquals("small-f16", ModelCatalog.recommended.id)
+    }
+
+    @Test
+    fun ids_and_file_names_are_unique() {
+        assertEquals(ModelCatalog.models.size, ModelCatalog.models.map { it.id }.toSet().size)
+        assertEquals(ModelCatalog.models.size, ModelCatalog.models.map { it.fileName }.toSet().size)
+    }
+
+    @Test
+    fun lookup_helpers_resolve_and_reject_as_expected() {
+        assertEquals("small-f16", ModelCatalog.byId("small-f16")?.id)
+        assertEquals(null, ModelCatalog.byId("nope"))
+        assertEquals(null, ModelCatalog.byId(null))
+        assertEquals("base-f16", ModelCatalog.byFileName("ggml-base.bin")?.id)
+    }
+}
