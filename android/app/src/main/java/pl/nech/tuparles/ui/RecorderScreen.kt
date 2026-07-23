@@ -15,8 +15,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -54,8 +57,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -124,7 +130,7 @@ fun RecorderScreen(
                 .padding(padding),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            RecordControl(state.recorder, state.partial, onRecordTap)
+            RecordControl(state.recorder, state.committed, state.partial, onRecordTap)
 
             if (modelState.showFirstRunCard) {
                 FirstRunModelCard(
@@ -189,7 +195,7 @@ fun RecorderScreen(
 }
 
 @Composable
-private fun RecordControl(recorder: RecorderState, partial: String?, onTap: () -> Unit) {
+private fun RecordControl(recorder: RecorderState, committed: String?, partial: String?, onTap: () -> Unit) {
     val recording = recorder is RecorderState.Recording
     val saving = recorder is RecorderState.Saving
     val elapsed = (recorder as? RecorderState.Recording)?.elapsedMs ?: 0L
@@ -234,22 +240,53 @@ private fun RecordControl(recorder: RecorderState, partial: String?, onTap: () -
                     .fillMaxWidth()
                     .clip(CircleShape),
             )
-            // Live preview of the last ~15 s (#42). Deliberately dim + italic: it is
-            // provisional and only the recent tail, not the whole take — reassurance that
-            // the mic hears you, never the durable transcript. "Provisional" reads from the
-            // typography (secondary colour, italic), never a different hue.
-            if (!partial.isNullOrBlank()) {
-                Text(
-                    text = partial,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontStyle = FontStyle.Italic),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+            // The rolling transcript while recording: the committed (settled) text as normal
+            // body type, with the live tail preview (#42) appended in dim italic. The
+            // settled-vs-unsettled distinction reads from the typography (weight + italic +
+            // colour), never a different hue — what is upright is what you keep. Falls back to
+            // the tail-only preview when the rolling feature is off (no committed text).
+            if (!committed.isNullOrBlank() || !partial.isNullOrBlank()) {
+                LiveTranscript(committed, partial)
             }
         }
+    }
+}
+
+/**
+ * The live transcript shown while recording: [committed] settled text (upright body type)
+ * flowing into the [partial] tail preview (dim italic). One growing paragraph in a bounded,
+ * scrollable box so a minutes-long note keeps the record button in view.
+ */
+@Composable
+private fun LiveTranscript(committed: String?, partial: String?) {
+    val settled = committed?.trim().orEmpty()
+    val tail = partial?.trim().orEmpty()
+    val text = buildAnnotatedString {
+        if (settled.isNotEmpty()) {
+            withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurface)) { append(settled) }
+        }
+        if (tail.isNotEmpty()) {
+            if (settled.isNotEmpty()) append(" ")
+            withStyle(
+                SpanStyle(
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontStyle = FontStyle.Italic,
+                ),
+            ) { append(tail) }
+        }
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(max = 180.dp)
+            .verticalScroll(rememberScrollState()),
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 

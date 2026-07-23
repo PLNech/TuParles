@@ -192,6 +192,29 @@ class RecorderViewModelTest {
     }
 
     @Test
+    fun committed_and_partial_transcript_flow_into_uiState() = runTest(dispatcher) {
+        // The rolling transcript surfaces the settled (committed) text and the live tail
+        // separately, so the screen can render "what you keep" upright and the preview italic.
+        val holder = RecorderStateHolder()
+        val vm = RecorderViewModel(FakeNotesRepository(), holder)
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.uiState.collect {} }
+        advanceUntilIdle()
+
+        holder.set(RecorderState.Recording(1_000L, 0.5f))
+        holder.setCommitted("bonjour le monde")
+        holder.setPartial("et voici")
+        advanceUntilIdle()
+        assertEquals("bonjour le monde", vm.uiState.value.committed)
+        assertEquals("et voici", vm.uiState.value.partial)
+
+        // Leaving the recording state clears both the settled text and the preview.
+        holder.set(RecorderState.Saving)
+        advanceUntilIdle()
+        assertEquals(null, vm.uiState.value.committed)
+        assertEquals(null, vm.uiState.value.partial)
+    }
+
+    @Test
     fun delete_forwards_to_repository() = runTest(dispatcher) {
         val repo = FakeNotesRepository()
         val target = note(7)

@@ -20,6 +20,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -51,6 +52,7 @@ fun ModelsScreen(
     viewModel: ModelsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val rollingEnabled by viewModel.rollingEnabled.collectAsStateWithLifecycle()
     var confirmDownload by remember { mutableStateOf<ModelSpec?>(null) }
     var confirmDelete by remember { mutableStateOf<ModelSpec?>(null) }
 
@@ -73,6 +75,9 @@ fun ModelsScreen(
                 .padding(horizontal = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            item {
+                RollingTranscriptToggle(rollingEnabled, viewModel::setRollingEnabled)
+            }
             item {
                 Text(
                     text = storageLine(state.totalBytesUsed, state.anyInstalled),
@@ -130,6 +135,32 @@ fun ModelsScreen(
                 TextButton(onClick = { confirmDelete = null }) { Text("Annuler") }
             },
         )
+    }
+}
+
+/**
+ * The rolling committed transcript toggle (default on): decode + keep segments as you speak,
+ * so a long note is durable as it lands instead of one all-or-nothing decode after stop.
+ */
+@Composable
+private fun RollingTranscriptToggle(enabled: Boolean, onChange: (Boolean) -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Transcription en continu", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    text = "Transcrit et enregistre au fil de la parole — ce que vous voyez est " +
+                        "gardé. Sinon, une seule transcription après l'arrêt.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+            Switch(checked = enabled, onCheckedChange = onChange)
+        }
     }
 }
 

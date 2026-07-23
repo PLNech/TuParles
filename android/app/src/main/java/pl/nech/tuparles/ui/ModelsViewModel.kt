@@ -3,14 +3,17 @@ package pl.nech.tuparles.ui
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import pl.nech.tuparles.model.ModelCatalog
 import pl.nech.tuparles.model.ModelDownloadState
 import pl.nech.tuparles.model.ModelManager
 import pl.nech.tuparles.model.ModelSpec
+import pl.nech.tuparles.record.RecorderPreferences
 import javax.inject.Inject
 
 /** One catalog row as the Réglages model manager renders it. */
@@ -39,7 +42,17 @@ data class ModelsUiState(
 @HiltViewModel
 class ModelsViewModel @Inject constructor(
     private val manager: ModelManager,
+    private val recorderPrefs: RecorderPreferences,
 ) : ViewModel() {
+
+    // "It's a setting": the rolling committed transcript is on by default, toggleable here.
+    private val _rollingEnabled = MutableStateFlow(recorderPrefs.rollingTranscriptEnabled)
+    val rollingEnabled: StateFlow<Boolean> = _rollingEnabled.asStateFlow()
+
+    fun setRollingEnabled(enabled: Boolean) {
+        recorderPrefs.rollingTranscriptEnabled = enabled
+        _rollingEnabled.value = enabled
+    }
 
     val uiState: StateFlow<ModelsUiState> =
         combine(manager.installedIds, manager.downloads, manager.activeId) { installed, downloads, activeId ->

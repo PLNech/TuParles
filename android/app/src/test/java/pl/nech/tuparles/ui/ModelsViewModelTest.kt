@@ -28,7 +28,11 @@ import pl.nech.tuparles.model.ModelStore
 import pl.nech.tuparles.model.RawDownloadState
 import pl.nech.tuparles.model.RecordingPendingWork
 import pl.nech.tuparles.model.sparseFile
+import pl.nech.tuparles.record.RecorderPreferences
 import java.io.File
+
+/** In-memory recorder prefs for the ViewModel tests. */
+private class FakeRecorderPreferences(override var rollingTranscriptEnabled: Boolean = true) : RecorderPreferences
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ModelsViewModelTest {
@@ -58,7 +62,7 @@ class ModelsViewModelTest {
         sparseFile(File(dir, small.fileName), small.sizeBytes)
         val prefs = FakeModelPreferences()
         val mgr = manager(dir, prefs, CoroutineScope(UnconfinedTestDispatcher(testScheduler)))
-        val vm = ModelsViewModel(mgr)
+        val vm = ModelsViewModel(mgr, FakeRecorderPreferences())
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.uiState.collect {} }
         advanceUntilIdle()
 
@@ -82,7 +86,7 @@ class ModelsViewModelTest {
         sparseFile(File(dir, small.fileName), small.sizeBytes)
         val prefs = FakeModelPreferences()
         val mgr = manager(dir, prefs, CoroutineScope(UnconfinedTestDispatcher(testScheduler)))
-        val vm = ModelsViewModel(mgr)
+        val vm = ModelsViewModel(mgr, FakeRecorderPreferences())
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.uiState.collect {} }
         advanceUntilIdle()
 
@@ -96,5 +100,25 @@ class ModelsViewModelTest {
         assertTrue("total override honoured", rows.first { it.spec.id == "tiny-q5_1" }.active)
         assertFalse(rows.first { it.spec.id == "small-f16" }.active)
         assertEquals("tiny-q5_1", prefs.activeModelId)
+    }
+
+    @Test
+    fun rolling_toggle_reflects_and_persists_the_preference() = runTest(dispatcher) {
+        val dir = tmp.newFolder("m")
+        val prefs = FakeModelPreferences()
+        val recorderPrefs = FakeRecorderPreferences(rollingTranscriptEnabled = true)
+        val mgr = manager(dir, prefs, CoroutineScope(UnconfinedTestDispatcher(testScheduler)))
+        val vm = ModelsViewModel(mgr, recorderPrefs)
+
+        // Default on (the record-minutes-and-pray fix ships enabled).
+        assertTrue(vm.rollingEnabled.value)
+
+        vm.setRollingEnabled(false)
+        assertFalse(vm.rollingEnabled.value)
+        assertFalse("persisted to prefs", recorderPrefs.rollingTranscriptEnabled)
+
+        vm.setRollingEnabled(true)
+        assertTrue(vm.rollingEnabled.value)
+        assertTrue(recorderPrefs.rollingTranscriptEnabled)
     }
 }
