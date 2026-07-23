@@ -91,6 +91,7 @@ private class WhisperLib {
             Log.d(LOG_TAG, "Primary ABI: ${Build.SUPPORTED_ABIS[0]}")
             var loadVfpv4 = false
             var loadV8fp16 = false
+            var loadV8fp16Dotprod = false
             if (isArmEabiV7a()) {
                 // armeabi-v7a needs runtime detection support
                 val cpuInfo = cpuInfo()
@@ -110,12 +111,28 @@ private class WhisperLib {
                         Log.d(LOG_TAG, "CPU supports fp16 arithmetic")
                         loadV8fp16 = true
                     }
+                    // Third tier (bench 2026-07-22 dotprod A/B): `asimddp` is the
+                    // aarch64 HWCAP name for the int8 dot-product extension (sdot/udot).
+                    // When present, prefer the dotprod build — it speeds the q5 models
+                    // 1.1-1.4x with no quality change. Fallback chain: dotprod → fp16 →
+                    // baseline. NOTE: the compute kernels live in the SHARED libggml-cpu.so
+                    // (built once with the highest variant's -march), so a dotprod build
+                    // raises the effective CPU floor to asimddp; on the real Android
+                    // arm64 fleet every fp16-capable SoC also advertises asimddp
+                    // (dotprod is mandatory from ARMv8.4, present on Cortex-A55/A75+).
+                    if (cpuInfo.contains("asimddp")) {
+                        Log.d(LOG_TAG, "CPU supports int8 dot-product (asimddp)")
+                        loadV8fp16Dotprod = true
+                    }
                 }
             }
 
             if (loadVfpv4) {
                 Log.d(LOG_TAG, "Loading libwhisper_vfpv4.so")
                 System.loadLibrary("whisper_vfpv4")
+            } else if (loadV8fp16Dotprod) {
+                Log.d(LOG_TAG, "Loading libwhisper_v8fp16_va_dotprod.so")
+                System.loadLibrary("whisper_v8fp16_va_dotprod")
             } else if (loadV8fp16) {
                 Log.d(LOG_TAG, "Loading libwhisper_v8fp16_va.so")
                 System.loadLibrary("whisper_v8fp16_va")

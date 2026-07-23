@@ -47,7 +47,14 @@ function(build_library target_name)
     set(GGML_COMPILE_OPTIONS -O3)
     target_compile_options(${target_name} PRIVATE -O3)
 
-    if (${target_name} STREQUAL "whisper_v8fp16_va")
+    if (${target_name} STREQUAL "whisper_v8fp16_va_dotprod")
+        # Third tier (bench 2026-07-22 dotprod A/B): fp16 + the int8 dot-product kernel
+        # (sdot/udot). Speeds the q5 download rungs 1.1-1.4x with no quality change.
+        # Runtime-gated on the `asimddp` cpuinfo flag in LibWhisper.kt, so this object
+        # only ever loads on a CPU that advertises the extension — no SIGILL risk.
+        target_compile_options(${target_name} PRIVATE -march=armv8.2-a+fp16+dotprod)
+        list(APPEND GGML_COMPILE_OPTIONS -march=armv8.2-a+fp16+dotprod)
+    elseif (${target_name} STREQUAL "whisper_v8fp16_va")
         target_compile_options(${target_name} PRIVATE -march=armv8.2-a+fp16)
         list(APPEND GGML_COMPILE_OPTIONS -march=armv8.2-a+fp16)
     elseif (${target_name} STREQUAL "whisper_vfpv4")
@@ -77,6 +84,13 @@ endfunction()
 
 if (${ANDROID_ABI} STREQUAL "arm64-v8a")
     build_library("whisper_v8fp16_va")
+    # The dotprod variant is built LAST among the march-bearing arm64 targets on
+    # purpose: build_library appends its -march to the SHARED ggml-base/ggml-cpu
+    # targets (FetchContent creates them once), and the rightmost -march wins for
+    # Clang. Building dotprod last makes the shared ggml compute kernels carry
+    # armv8.2-a+fp16+dotprod (the sdot/udot int8 path). See LibWhisper.kt for the
+    # runtime gate and the shared-ggml floor note.
+    build_library("whisper_v8fp16_va_dotprod")
 elseif (${ANDROID_ABI} STREQUAL "armeabi-v7a")
     build_library("whisper_vfpv4")
 endif ()

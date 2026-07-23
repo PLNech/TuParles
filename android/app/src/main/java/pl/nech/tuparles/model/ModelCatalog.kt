@@ -37,10 +37,13 @@ data class ModelSpec(
 }
 
 /**
- * The download-picker lineup, dropping the dotprod-dominated q5 rungs the bench flagged.
- * Sizes are exact bytes; sha256 digests are the git-LFS pointer `oid`s from the mirror
- * (four cross-checked against local files during the build). Ordered fastest→most-accurate
- * so a list renders as a natural speed↔quality ladder.
+ * The download-picker lineup, ordered by footprint (≈ speed↔quality) so a list renders as a
+ * natural ladder. Sizes are exact bytes; sha256 digests are the git-LFS pointer `oid`s from
+ * the mirror (cross-checked against local files during the build). The two q5 rungs
+ * (`base-q5_1`, `small-q5_1`) earn their place now that the app ships the `+dotprod` native
+ * tier (bench 2026-07-22 A/B): dotprod makes the int8 q5 path fast enough that its ~2.5x
+ * smaller download is a real win for the app-weight goal. `small-f16` stays the single
+ * recommended default.
  */
 object ModelCatalog {
 
@@ -58,12 +61,28 @@ object ModelCatalog {
             sha256 = "818710568da3ca15689e31a743197b520007872ff9576237bda97bd1b469c3d7",
         ),
         ModelSpec(
+            id = "base-q5_1",
+            fileName = "ggml-base-q5_1.bin",
+            label = "Base Q5",
+            character = "quantifié : bien plus léger que Base, un peu plus lent",
+            sizeBytes = 59_707_625L,
+            sha256 = "422f1ae452ade6f30a004d7e5c6a43195e4433bc370bf23fac9cc591f01a8898",
+        ),
+        ModelSpec(
             id = "base-f16",
             fileName = "ggml-base.bin",
             label = "Base",
             character = "léger, quasi temps réel, bute sur le vocabulaire technique",
             sizeBytes = 147_951_465L,
             sha256 = "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe",
+        ),
+        ModelSpec(
+            id = "small-q5_1",
+            fileName = "ggml-small-q5_1.bin",
+            label = "Small Q5",
+            character = "presque la qualité de Small, 2.5x plus léger, un peu plus lent",
+            sizeBytes = 190_085_487L,
+            sha256 = "ae85e4a935d7a567bd102fe55afc16bb595bdb618e11b2fc7591bc08120411bb",
         ),
         ModelSpec(
             id = "small-f16",
