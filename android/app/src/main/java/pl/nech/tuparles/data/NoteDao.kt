@@ -9,7 +9,9 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface NoteDao {
-    @Query("SELECT * FROM notes ORDER BY createdAt DESC")
+    // A note being recorded (its rolling transcript still growing) is hidden from the list
+    // until it finalises; every finished/legacy note shows as before.
+    @Query("SELECT * FROM notes WHERE transcriptState != 'RECORDING' ORDER BY createdAt DESC")
     fun observeAll(): Flow<List<Note>>
 
     @Query("SELECT * FROM notes WHERE id = :id")
@@ -17,6 +19,19 @@ interface NoteDao {
 
     @Query("SELECT * FROM notes WHERE transcriptState IN ('PENDING', 'RUNNING') ORDER BY createdAt ASC")
     suspend fun pendingTranscripts(): List<Note>
+
+    /** Notes left mid-recording by a process death — recovered from their committed segments. */
+    @Query("SELECT * FROM notes WHERE transcriptState = 'RECORDING' ORDER BY createdAt ASC")
+    suspend fun recordingNotes(): List<Note>
+
+    @Insert
+    suspend fun insertSegment(segment: NoteSegment): Long
+
+    @Query("SELECT * FROM note_segments WHERE noteId = :noteId ORDER BY segmentIndex ASC")
+    suspend fun segmentsFor(noteId: Long): List<NoteSegment>
+
+    @Query("DELETE FROM note_segments WHERE noteId = :noteId")
+    suspend fun deleteSegmentsFor(noteId: Long)
 
     /**
      * Full-text search over transcripts (issue #40). [match] is an FTS4 MATCH

@@ -55,3 +55,27 @@ val MIGRATION_2_3: Migration = object : Migration(2, 3) {
         MIGRATION_2_3_SQL.forEach(db::execSQL)
     }
 }
+
+/**
+ * v3 → v4: the rolling-committed transcript (the record-minutes-and-pray fix).
+ *
+ * Adds the [NoteSegment] table — one row per silence-bounded segment committed *during*
+ * recording — plus its `noteId` index. The DDL is copied verbatim from Room's generated
+ * schema (see `app/schemas/.../4.json`) so open-time schema validation matches byte-for-byte.
+ *
+ * Purely additive: no existing `notes` row, transcript, or WAV is touched. The new
+ * [TranscriptState.RECORDING] value needs no DDL — it is just another string in the
+ * unchanged `transcriptState` column, and no legacy row ever holds it.
+ */
+val MIGRATION_3_4_SQL: List<String> = listOf(
+    "CREATE TABLE IF NOT EXISTS `note_segments` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+        "`noteId` INTEGER NOT NULL, `segmentIndex` INTEGER NOT NULL, `text` TEXT NOT NULL, " +
+        "`startSample` INTEGER NOT NULL, `endSample` INTEGER NOT NULL)",
+    "CREATE INDEX IF NOT EXISTS `index_note_segments_noteId` ON `note_segments` (`noteId`)",
+)
+
+val MIGRATION_3_4: Migration = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        MIGRATION_3_4_SQL.forEach(db::execSQL)
+    }
+}

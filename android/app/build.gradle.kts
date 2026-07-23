@@ -81,6 +81,12 @@ android {
     }
 }
 
+// Room exports its generated schema JSON so migrations can be written against the exact
+// DDL Room validates at open time, and the schema history is checked in.
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 dependencies {
     // Phase B: on-device STT engine (vendored whisper.cpp + JNI). Builds libwhisper.so
     // for arm64 via the NDK; the app degrades to Phase A if no model asset is present.
