@@ -142,3 +142,87 @@ def test_reset_partial_language_clears_both_backends_when_cpu_built():
     eng.reset_partial_language()
     assert gpu.resets == 1  # reset even though the GPU is still live
     assert cpu.resets == 1  # the already-built CPU is cleared too
+
+
+class _ClosableGpu(FakeGpu):
+    """A GPU rung that records its own release. `dies_after` still drives the
+    failure path, so one class covers both close-on-quit and close-on-rebuild."""
+
+    def __init__(self, dies_after=10**9, log=None):
+        super().__init__(dies_after=dies_after)
+        self.closed = 0
+        self._log = log
+
+    def close(self):
+        self.closed += 1
+        if self._log is not None:
+            self._log.append(self)
+
+
+def test_close_releases_the_gpu_context():
+    # Quitting hands the context back in-process; leaving it for the driver to
+    # reclaim from a dead process is what wedged the box on 2026-08-08.
+    gpu = _ClosableGpu()
+    eng = ResilientEngine(gpu_factory=lambda: gpu, cpu_factory=FakeCpu)
+    eng.close()
+    assert gpu.closed == 1
+
+
+def test_close_is_idempotent():
+    # aboutToQuit can fire alongside an explicit quit: no double-free, no raise.
+    gpu = _ClosableGpu()
+    eng = ResilientEngine(gpu_factory=lambda: gpu, cpu_factory=FakeCpu)
+    eng.close()
+    eng.close()
+    assert gpu.closed == 1
+
+
+def test_close_releases_a_built_cpu_rung_too():
+    # After a sticky fallback both rungs exist; both get released.
+    closed = []
+
+    class _ClosableCpu(FakeCpu):
+        def close(self):
+            closed.append("cpu")
+
+    eng = ResilientEngine(gpu_factory=lambda: _ClosableGpu(0), cpu_factory=_ClosableCpu)
+    eng.transcribe(AUDIO)  # dies, rebuilds, dies again → sticky CPU
+    eng.close()
+    assert closed == ["cpu"]
+
+
+def test_close_survives_a_backend_that_raises():
+    # One rung refusing to close must not strand the other.
+    class _AngryGpu(FakeGpu):
+        def close(self):
+            raise RuntimeError("CUDA driver is wedged")
+
+    closed = []
+
+    class _ClosableCpu(FakeCpu):
+        def close(self):
+            closed.append("cpu")
+
+    eng = ResilientEngine(gpu_factory=_AngryGpu, cpu_factory=_ClosableCpu)
+    eng._cpu_engine()
+    eng.close()  # must not propagate
+    assert closed == ["cpu"]
+
+
+def test_rebuild_closes_the_dead_context_first():
+    # Suspend/resume recovery: release the stale context before allocating a
+    # new one, or the orphans pile up for process death to reclaim at once.
+    order = []
+    built = []
+
+    def factory():
+        gpu = _ClosableGpu(dies_after=1, log=order)
+        built.append(gpu)
+        order.append("built")
+        return gpu
+
+    eng = ResilientEngine(gpu_factory=factory, cpu_factory=FakeCpu)
+    eng.transcribe(AUDIO)  # first decode succeeds (dies_after=1)
+    eng.transcribe(AUDIO)  # throws → close old, rebuild, retry
+    assert built[0].closed == 1  # the dead context was released...
+    assert order.index(built[0]) < order.index("built", 1)  # ...before the new one

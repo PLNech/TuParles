@@ -485,3 +485,47 @@ def test_finish_delivers_rescued_text(monkeypatch):
     c._finish(_take(partial=PARTIAL_8W, seq=3))
     assert delivered == [eng.second]  # the rescue's text landed
     assert bridge.final.emits == [(eng.second,)]
+
+
+# --- orderly shutdown: the precondition for releasing a CUDA context ---------
+# Freeing a model mid-decode segfaults; dying with the context live can wedge
+# the driver (2026-08-08). shutdown() is how run() tells the two cases apart.
+
+
+def test_shutdown_stops_partials_and_joins_the_worker():
+    """Partials barred, sentinel drained, worker gone → the engine is releasable."""
+    c = _controller(SimpleNamespace(), _Recorder(recording=False), _Bridge())
+    c.start()
+    assert c.shutdown(timeout=5.0) is True
+    assert c._stop_partials.is_set()  # no partial can enter the engine now
+    assert not c._worker.is_alive()
+
+
+def test_shutdown_without_start_is_a_noop_success():
+    """No worker to join means nothing can touch the engine: safe to release."""
+    c = _controller(SimpleNamespace(), _Recorder(recording=False), _Bridge())
+    assert c.shutdown(timeout=0.1) is True
+
+
+def test_shutdown_reports_false_when_a_decode_wont_finish(monkeypatch):
+    """A take still in flight past the timeout: say so, and let the caller leave
+    the context to the driver. Blocked at _finish, not in a fake engine, to pin
+    the join semantics without dragging real delivery in."""
+    import threading
+
+    started, release = threading.Event(), threading.Event()
+
+    def _blocking_finish(take):
+        started.set()
+        release.wait(10.0)  # still "decoding" when shutdown gives up
+
+    c = _controller(SimpleNamespace(), _Recorder(recording=False), _Bridge())
+    monkeypatch.setattr(c, "_finish", _blocking_finish)
+    c.start()
+    c._decode_q.put(_take())
+    assert started.wait(5.0), "worker never picked the take up"
+    try:
+        assert c.shutdown(timeout=0.2) is False  # honest: not quiet yet
+    finally:
+        release.set()  # let the worker drain the sentinel and exit
+        c._worker.join(5.0)  # never leak a live thread into the next test

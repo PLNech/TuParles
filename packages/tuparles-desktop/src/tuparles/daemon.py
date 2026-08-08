@@ -61,6 +61,26 @@ from tuparles.preprocess import compress_speech, trim_silence
 RESCUE_PARTIAL_RATIO = 0.6
 RESCUE_MIN_PARTIAL_WORDS = 5
 
+try:  # POSIX only. Linux-first tool, but the import must never be fatal.
+    import syslog
+except ImportError:  # pragma: no cover - Windows
+    syslog = None  # type: ignore[assignment]
+
+
+def _journal(msg: str) -> None:
+    """Print, and also log where a dying terminal can't take it along.
+
+    stdout reaches journald only under the desktop entry (it pipes us there);
+    from a terminal it dies with the tty — which is why the 2026-08-08 freeze
+    left no `hb:` line to date it with. Lines you read after a hard reboot go
+    to syslog too. A failed write is dropped, never raised."""
+    print(msg)
+    if syslog is not None:
+        try:
+            syslog.syslog(syslog.LOG_INFO, msg)
+        except Exception:
+            pass
+
 
 @dataclass
 class _QueuedTake:
@@ -139,6 +159,8 @@ class Controller(QObject):
         # "speak, send, speak again, never blocked" flow. Depth is bounded at
         # start time (queue_depth_cap) so a wedged engine can't pile up audio.
         self._decode_q: queue.Queue[_QueuedTake | None] = queue.Queue()
+        self._worker: threading.Thread | None = None  # set by start(), joined by
+        # shutdown() so the engine is provably idle before its context is freed
         self._seq = 0  # monotonic take id, the mini-bubble's identity (#15)
         self._pending = 0  # takes enqueued or in-flight, not yet delivered
         self._pending_lock = threading.Lock()
@@ -317,7 +339,21 @@ class Controller(QObject):
         """Spawn the persistent decode worker. Called once from run(); kept out
         of __init__ so a Controller built in a test never spawns a thread that
         would block on an empty queue."""
-        threading.Thread(target=self._decode_worker, daemon=True).start()
+        self._worker = threading.Thread(target=self._decode_worker, daemon=True)
+        self._worker.start()
+
+    def shutdown(self, timeout: float = 5.0) -> bool:
+        """Stop the pipeline; True only when no thread can still touch the
+        engine — the precondition for releasing a CUDA context. An in-flight
+        decode gets `timeout` to land (a long take is still worth delivering);
+        past that, False, and the caller leaves the context to the driver."""
+        self._stop_partials.set()  # no new partial may enter the engine
+        self._decode_q.put(None)  # sentinel: finish the queue, then exit
+        worker = getattr(self, "_worker", None)
+        if worker is None:
+            return True  # never started (tests, or a daemon that died early)
+        worker.join(timeout)
+        return not worker.is_alive()
 
     def _emit_state(self) -> None:
         """The tray glyph reflects the whole pipeline, not just one take:
@@ -730,6 +766,10 @@ def run() -> None:
     # buffers: the forensic prints below never flushed during the freeze
     # hunts. Line-buffer explicitly so the journal sees them as they happen.
     sys.stdout.reconfigure(line_buffering=True)  # type: ignore[union-attr]  # always a TextIO here
+    # Name the syslog leg of _journal: `journalctl -t tuparles` finds the beats
+    # whether the desktop entry or a terminal launched us.
+    if syslog is not None:
+        syslog.openlog("tuparles")
 
     # Single instance: two daemons mean two hotkey listeners — every take
     # double-toggles and double-delivers. The flock dies with the process,
@@ -850,9 +890,30 @@ def run() -> None:
     if onboarding.should_show():
         print("Première fois ? Personnalise avec : tuparles onboarding")
 
-    # Qt's loop won't run Python signal handlers unless the interpreter gets
-    # scheduled; the no-op timer keeps Ctrl-C responsive.
-    signal.signal(signal.SIGINT, lambda *_: app.quit())
+    # Ctrl-C, `pkill`/logout, and — the one that bit — a closed terminal, which
+    # HUPs its foreground process group. Python's default SIGHUP action dies on
+    # the spot: no aboutToQuit, no engine release, so the driver reclaims a live
+    # CUDA context and can wedge the desktop (see GpuEngine.close).
+    # Qt only runs Python signal handlers when the interpreter gets scheduled;
+    # the no-op timer below keeps all three responsive.
+    for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+        signal.signal(sig, lambda *_: app.quit())
+
+    def _release_engine() -> None:
+        """Quiesce the pipeline, then hand the GPU back ourselves. Nothing may
+        be decoding when the context is freed, so a worker that won't go quiet
+        means we leave it to the driver: a possible wedge beats a segfault."""
+        if not controller.shutdown():
+            _journal("shutdown: decode still in flight — leaving the GPU to the driver")
+            return
+        engine_close = getattr(engine, "close", None)
+        if callable(engine_close):
+            t0 = time.monotonic()
+            engine_close()
+            _journal(f"shutdown: engine released in {time.monotonic() - t0:.2f}s")
+
+    app.aboutToQuit.connect(_release_engine)
+
     waker = QTimer()
     waker.start(200)
     waker.timeout.connect(lambda: None)
@@ -866,7 +927,7 @@ def run() -> None:
         now = time.monotonic()
         gap = now - stall_last[0]
         if gap > 1.0:
-            print(f"GUI stall: main thread blocked ~{gap:.1f}s")
+            _journal(f"GUI stall: main thread blocked ~{gap:.1f}s")
         stall_last[0] = now
 
     watchdog = QTimer()
@@ -875,11 +936,11 @@ def run() -> None:
 
     # Persistent heartbeat: the stall_check above only logs once the GUI thread
     # *resumes*, so a whole-system freeze that ends in a reboot kills us before
-    # it ever fires. This beat — from a plain thread, into journald which
-    # survives reboots — leaves a timeline: after the next freeze, the last `hb:`
-    # line dates when we went silent. gui_lag (now − the GUI thread's last tick)
-    # tells the two apart: a big gui_lag with beats still flowing = OUR GUI hung;
-    # beats stopping cold until reboot = the whole box froze, not us (#10).
+    # it ever fires. This beat — from a plain thread, via _journal so it outlives
+    # the session either way — leaves a timeline: after the next freeze, the last
+    # `hb:` line dates when we went silent. gui_lag (now − the GUI thread's last
+    # tick) tells the two apart: a big gui_lag with beats still flowing = OUR GUI
+    # hung; beats stopping cold until reboot = the whole box froze, not us (#10).
     hb_stop = threading.Event()
 
     def _heartbeat() -> None:
@@ -896,7 +957,7 @@ def run() -> None:
             chars = delivery.injected_chars_total()
             cps = (chars - last_chars) / max(now - last_t, 1e-3)
             last_chars, last_t = chars, now
-            print(
+            _journal(
                 f"hb: up {now - boot:.0f}s "
                 f"rss {_rss_mb():.0f}MB gui_lag {gui_lag:.1f}s inject {cps:.0f}c/s"
             )
