@@ -1,5 +1,42 @@
 # Changelog
 
+## Sprint 37 — 2026-08-08 · Rendre le GPU proprement
+
+Quitting by closing the daemon's terminal killed the process with a live CUDA
+context and left the driver to reclaim it — which, on a laptop whose compositor
+renders on the same card, can wedge the NVIDIA RM lock and freeze the desktop.
+We can't fix the driver deadlock; we can stop handing it the worst teardown.
+
+### Fixed
+- **Closing the console could freeze the machine (`daemon.py`, `engine.py`, #10).**
+  A closed terminal HUPs its process group and Python's default SIGHUP action dies
+  on the spot — no `aboutToQuit`, no release. SIGHUP and SIGTERM now quit cleanly
+  alongside SIGINT, and the GPU is handed back rather than abandoned. Forensics:
+  `docs/research/2026-08-08-console-close-gpu-freeze.md`.
+- **The heartbeat only survived one launch method.** `hb:` claimed journald but was
+  a `print()` — true under the desktop entry, dead with the tty from a terminal, so
+  the freeze that most wanted dating left no beat. `_journal()` prints *and* writes
+  to syslog (stdlib, no new dep); `journalctl -t tuparles` finds them either way.
+
+### Added
+- **`GpuEngine.close()` / `ResilientEngine.close()`** — an explicit release path
+  where there was none, called from `aboutToQuit` while the GPU is quiet.
+- **`Controller.shutdown()`** — bars partials, drains the queue via its sentinel and
+  joins the worker, reporting whether the pipeline went quiet. The engine is released
+  only when it did: freeing a model mid-decode is a certain segfault. An in-flight
+  take gets 5 s to land first.
+
+### Changed
+- **`_rebuild_gpu()` closes the dead context before allocating a new one** — the
+  suspend/resume recovery used to leave every orphan for process death to collect.
+
+### Doctrine
+- **A forensic log that survives only one launch method is not a forensic log.** The
+  heartbeat promised durability it never had, and we believed it for two months.
+- **Teardown is a feature.** Degrading gracefully covered the GPU dying under us; it
+  now covers us dying on top of the GPU. Taking a scarce resource means owning how
+  it goes back, including on the exit paths nobody chose.
+
 ## Sprint 36 — 2026-07-23 · 1.0.0 — légère à installer, vive à l'écoute, fidèle à la parole
 
 The first public **1.0.0**. Three moats land together. The app ships **lean** and

@@ -14,6 +14,7 @@ faster-whisper for live partials (`_CpuPartialsMixin`). The chooser is
 """
 
 import ctypes
+import gc
 import os
 import subprocess
 import tempfile
@@ -171,6 +172,22 @@ class GpuEngine:
     def reset_partial_language(self) -> None:
         """Called by the daemon at take start: each take detects fresh."""
         self._partial_lang.reset()
+
+    def close(self) -> None:
+        """Drop the model, and with it the CUDA context. Idempotent.
+
+        Die with the context live and the *driver* reclaims it, holding the RM
+        API lock while it does — if that wedges, every GPU client on the box
+        blocks behind it, compositor included (the 2026-08-08 freeze, see
+        docs/research/2026-08-08-console-close-gpu-freeze.md). Releasing here
+        keeps the reclaim on our schedule, with the GPU quiet.
+
+        Caller's contract: no decode in flight. Freeing a CT2 model under a
+        live transcribe() segfaults — Controller.shutdown() quiesces first.
+        """
+        self._batched = None
+        self._model = None
+        gc.collect()  # the pipeline refs the model back; collect the cycle
 
     def transcribe(
         self, audio: np.ndarray, context: str | None = None
@@ -527,6 +544,17 @@ def _cpu_fallback_factory():
         return QwenCpuEngine()
 
 
+def _close_quietly(engine) -> None:
+    """Release `engine` if it knows how. The CPU rungs have nothing to wedge and
+    define no close(); a rung that raises must not strand the other one."""
+    close = getattr(engine, "close", None)
+    if callable(close):
+        try:
+            close()
+        except Exception as exc:
+            print(f"engine close failed ({str(exc)[:120]}); leaving it to the driver")
+
+
 class ResilientEngine:
     """GPU engine with mid-session recovery.
 
@@ -634,7 +662,17 @@ class ResilientEngine:
         except Exception:
             return ""
 
+    def close(self) -> None:
+        """Release every rung this session built. Best-effort per backend."""
+        for slot in ("_gpu", "_cpu"):
+            _close_quietly(getattr(self, slot, None))
+            setattr(self, slot, None)
+
     def _rebuild_gpu(self) -> bool:
+        # Release the dead context first: otherwise every recovery leaves an
+        # orphan for process death to reclaim all at once (see GpuEngine.close).
+        _close_quietly(self._gpu)
+        self._gpu = None
         try:
             self._gpu = self._gpu_factory()
             return True
