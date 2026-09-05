@@ -123,3 +123,10 @@ class Corpus:
     def candidates(self, min_count: int = 2) -> list[TermStats]:
         """Terms worth ranking: seen more than once (drop one-off noise/typos)."""
         return [t for t in self.stats.values() if t.count >= min_count]
+
+    def sources_for(self, key: str) -> set[str]:
+        """Which `Document.source` names (repo/corpus labels) this term appeared
+        in. Provenance, not a metafeature -- callers (e.g. the EDA's private-
+        corpus redaction guard) use it to tell where a term came from without
+        the corpus itself knowing anything about "public" vs "private"."""
+        return set(self._repos.get(key, ()))

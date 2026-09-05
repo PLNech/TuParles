@@ -40,5 +40,9 @@ tools/play.py
 .coverage
 htmlcov/
 
+# Local corpus config for scripts/nlp_eda.py — names/paths of any private
+# corpora you point the EDA at. Never committed; see the script's docstring.
+.eda-corpora.toml
+
 # Meeting QA reports — real names, real quotes: never public
 docs/reports/

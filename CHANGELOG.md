@@ -1,5 +1,38 @@
 # Changelog
 
+## Sprint 37 — 2026-09-05 · Scrubbing PrivateCorpusB out of history, for keeps
+
+Internal identifiers from a private work codebase (PrivateCorpusB, #54's first
+real corpus) had leaked into public git history through the EDA run. History is
+rewritten clean; the tooling that caused it now refuses to repeat the mistake.
+
+### Fixed
+- **Public history scrubbed of PrivateCorpusB's real identifiers** — a
+  `filter-repo` rewrite replaces every mined symbol with the stable pseudonyms
+  already used in the write-up (`RecordTypeA`, `idxBuilderB`, `fromEncodingA`,
+  `LOAD_DOC_CONFIG`, …).
+  `docs/research/2026-06-24-codebase-aware-dict-seeding-eda.md` gets a note
+  flagging every example string as a pseudonym, not verbatim — the aggregate
+  statistics (term counts, TF-IDF distributions, signal-independence
+  correlations, risk separation) are unchanged and still stand.
+
+### Changed
+- **`scripts/nlp_eda.py` corpora now come from config, not source (#54)**: no
+  more hardcoded absolute path into a private tree. Corpora load from a
+  gitignored `.eda-corpora.toml` and/or `TUPARLES_EDA_CORPORA`, each explicitly
+  marked public or private; TuParles itself stays the only public built-in
+  default. Any corpus discovered this way defaults to PRIVATE — "it's a
+  setting": a safe default, a total override.
+
+### Doctrine
+- **Redact by default, name by exception.** A term surface mined from a
+  non-public corpus is pseudonymized (stable, deterministic) before it is ever
+  printed or written to the metrics JSON; a private corpus's own name never
+  appears raw either. Aggregate numbers are computed over the real text and
+  never redacted — only the example strings are. The same asymmetry as "a
+  wrong autocorrect is worse than a visible mishear": when in doubt, hide the
+  string, keep the number.
+
 ## Sprint 36 — 2026-07-23 · 1.0.0 — légère à installer, vive à l'écoute, fidèle à la parole
 
 The first public **1.0.0**. Three moats land together. The app ships **lean** and

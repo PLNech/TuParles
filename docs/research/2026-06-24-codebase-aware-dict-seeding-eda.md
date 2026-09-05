@@ -14,6 +14,15 @@ model mangles. So: mine the codebase, find those words, and bias the decoder
 toward them (#54). This note is the first time the engine actually ran on real
 corpora - TuParles itself and PrivateCorpusB (a large C++/Python service).
 
+> **A note on PrivateCorpusB.** It's a private, third-party work codebase we
+> cannot name. Every term surface shown below and in the companion JSON
+> (`docs/research/data/2026-06-24-nlp-eda*.json`) is a STABLE PSEUDONYM, not
+> the real symbol - `PrivateCorpusB` itself is a placeholder, not its name.
+> The aggregate statistics - term counts, salience/TF-IDF distributions,
+> signal-independence correlations, whisper-risk separation - are computed
+> over the real corpus and are unmodified: every quantitative claim below
+> stands. Only the example strings are not verbatim.
+
 ## What we built (own the spine, rent the algorithms)
 
 No single NLP library fits, because our problem spans two worlds. Code, where
