@@ -22,9 +22,15 @@
          when the system DownloadManager stalls (Android 15 scheduler deferral, #13). -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- largeHeap: a take is held as PCM in RAM until stop, when its WAV is written once.
+         The 2 h safety cap is 115.2 M samples = 230 MB, peaking ~460 MB while stop() hands
+         over its contiguous copy — over the default heapgrowthlimit (~192-256 MB) that
+         capped useful takes at ~10 min. Not a leak allowance: the audio is genuinely that
+         big, and it is freed the moment the WAV lands. -->
     <application
         android:name=".TuParlesApp"
         android:allowBackup="false"
+        android:largeHeap="true"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"

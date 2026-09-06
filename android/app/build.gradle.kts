@@ -25,8 +25,8 @@ android {
         applicationId = "pl.nech.tuparles"
         minSdk = 26 // no more Chaquopy floor; covers ~95% of devices
         targetSdk = 36
-        versionCode = 6
-        versionName = "1.0.0" // First public 1.0: lean APK + model download, rolling transcript, dotprod tier
+        versionCode = 7
+        versionName = "1.0.1" // Long dictation takes: 2 h safety cap, unboxed PCM, streamed WAV write
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

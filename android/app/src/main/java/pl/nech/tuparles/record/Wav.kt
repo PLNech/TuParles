@@ -28,8 +28,19 @@ fun writeWav(file: File, pcm: ShortArray, sampleRate: Int = SAMPLE_RATE) {
         str("fmt "); le32(16); le16(1); le16(1)
         le32(sampleRate); le32(byteRate); le16(2); le16(16)
         str("data"); le32(dataBytes)
-        val buf = ByteBuffer.allocate(dataBytes).order(ByteOrder.LITTLE_ENDIAN)
-        for (s in pcm) buf.putShort(s)
-        out.write(buf.array())
+        // Streamed in fixed blocks rather than staged whole: a 2 h take's data section is
+        // ~230 MB, and one ByteBuffer that size doubled the take's peak heap for no gain.
+        val block = ByteBuffer.allocate(BLOCK_SAMPLES * 2).order(ByteOrder.LITTLE_ENDIAN)
+        var i = 0
+        while (i < pcm.size) {
+            val n = minOf(BLOCK_SAMPLES, pcm.size - i)
+            block.clear()
+            for (j in 0 until n) block.putShort(pcm[i + j])
+            out.write(block.array(), 0, n * 2)
+            i += n
+        }
     }
 }
+
+/** 64 Ki samples = a 128 KB staging block, whatever the take's length. */
+private const val BLOCK_SAMPLES = 64 * 1024

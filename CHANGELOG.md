@@ -32,6 +32,51 @@ rewritten clean; the tooling that caused it now refuses to repeat the mistake.
   never redacted — only the example strings are. The same asymmetry as "a
   wrong autocorrect is worse than a visible mishear": when in doubt, hide the
   string, keep the number.
+## Sprint 38 — 2026-09-06 · 1.0.1 — la longue prise
+
+A think-aloud walk is 30 to 90 minutes; the app auto-stopped at 10. The safety cap
+is now **2 hours**, and the reason it could not simply be raised is the interesting
+part: a take is held as PCM in RAM until stop, and it was held in an
+`ArrayList<Short>` — one boxed `java.lang.Short` per sample. The cap was not a
+policy, it was the heap wall in disguise.
+
+### Changed
+- **Recording safety cap 10 min → 2 h** (`RecordingService.MAX_RECORD_MS`). Still a
+  cap: a forgotten recording must not hold the mic forever. What changed is that the
+  number is now honest about what the memory can carry.
+- **Whole-take PCM is no longer boxed** — new `PcmAccumulator`, a chunked
+  `ShortArray` store, replaces `ArrayList<Short>` in `AudioRecorderSession`. The
+  boxed list cost ~13.6 B per sample (4 B for the backing reference, plus a 16 B
+  heap-allocated `Short` for every sample outside `Short.valueOf`'s -128..127 cache —
+  and at a 0.012 RMS speech threshold, voiced audio sits in the hundreds, so nearly
+  every sample missed it). 2 h cost ~2.5 GB that way; it costs ~230 MB now, an ~11x
+  reduction. Chunked on purpose: an append never copies what is already captured, so
+  the mic thread never faces a doubling transient or the GC storm behind it.
+- **The WAV data section is streamed**, not staged whole. `writeWav` wrote through a
+  single `ByteBuffer.allocate(pcm.size * 2)` — a 230 MB large-object allocation at
+  2 h, doubling the take's peak heap at exactly the wrong moment. Now 128 KB blocks,
+  byte-identical output, constant footprint whatever the length.
+- **`android:largeHeap="true"`**. The audio is genuinely that big: 230 MB resident,
+  peaking ~460 MB while `stop()` hands over its contiguous copy. The default
+  `heapgrowthlimit` (~192–256 MB) is what capped useful takes at ~10 min.
+
+### Infra
+- `PcmAccumulatorTest` (8 cases: ordering, chunk-boundary seams, ragged mic reads,
+  the `n`-argument contract, out-of-cache sample values) and a `WavDecoderTest`
+  round-trip across the 64 Ki-sample write-block seam. **132 unit tests**, lint 0
+  errors.
+
+### Doctrine
+- **A cap you did not choose is a bug wearing a constant's clothes.** `MAX_RECORD_MS`
+  read like a product decision and behaved like one, but 10 minutes was roughly where
+  a boxed `ArrayList<Short>` hits a default Android heap. Before raising a limit,
+  find out whether it is a limit or a symptom — the arithmetic took minutes and moved
+  the ceiling by an order of magnitude, where raising the number alone would have
+  turned a clean auto-stop into an OOM that loses the whole take.
+- **Integer width was never the risk; allocation was.** The 2 h PCM path is
+  comfortably Int-safe (115.2 M samples, 230 MB of WAV data — 9–18x under `Int.MAX`),
+  and `SilenceSegmenter`'s buffer is bounded by `maxSegmentMs`, not by take length.
+  Auditing an "overflow" worry surfaced a heap hazard two orders of magnitude closer.
 
 ## Sprint 36 — 2026-07-23 · 1.0.0 — légère à installer, vive à l'écoute, fidèle à la parole
 

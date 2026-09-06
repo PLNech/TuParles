@@ -257,7 +257,13 @@ class RecordingService : Service() {
         const val ACTION_TOGGLE = "pl.nech.tuparles.TOGGLE"
         const val ACTION_START = "pl.nech.tuparles.START"
         const val ACTION_STOP = "pl.nech.tuparles.STOP"
-        private const val MAX_RECORD_MS = 600_000L // 10 min cap
+        // 2 h cap — long dictation walks/rides, where 10 min auto-stopped mid-thought.
+        // Still a cap: a forgotten recording must not hold the mic forever. The take lives
+        // in RAM until stop (the WAV is written once, there), so the ceiling is heap, not
+        // time: 2 h @ 16 kHz mono PCM16 = 115.2 M samples, 230 MB in PcmAccumulator, and
+        // ~460 MB for the moment stop() hands over its contiguous copy. Comfortable to
+        // ~90 min against the largeHeap ceiling; see the manifest note.
+        private const val MAX_RECORD_MS = 7_200_000L
         private const val NOTIF_ID = 1001
         private const val CHANNEL = "recording"
 

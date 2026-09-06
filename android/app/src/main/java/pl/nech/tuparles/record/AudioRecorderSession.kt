@@ -19,7 +19,7 @@ class AudioRecorderSession @Inject constructor() : RecorderSession {
     private var record: AudioRecord? = null
     @Volatile private var recording = false
     private var thread: Thread? = null
-    private val samples = ArrayList<Short>(SAMPLE_RATE * 10)
+    private val samples = PcmAccumulator()
 
     // Most-recent audio kept alongside the full capture, for the live-partials preview (#42).
     // Reads never disturb the recording; if nothing ever snapshots it, it costs one array copy.
@@ -77,7 +77,7 @@ class AudioRecorderSession @Inject constructor() : RecorderSession {
                     break
                 }
                 // The WAV accumulation comes first and unconditionally — recording is sacred.
-                for (i in 0 until n) samples.add(chunk[i])
+                samples.append(chunk, n)
                 ring.append(chunk, n)
                 // Segmentation is a guarded observer: a fault here never breaks the recording.
                 if (segmentation != null && n > 0) {
@@ -113,7 +113,7 @@ class AudioRecorderSession @Inject constructor() : RecorderSession {
             release()
         }
         record = null
-        return ShortArray(samples.size) { samples[it] }
+        return samples.toShortArray()
     }
 
     private companion object {

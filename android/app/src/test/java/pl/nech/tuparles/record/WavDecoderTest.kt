@@ -44,6 +44,27 @@ class WavDecoderTest {
     }
 
     @Test
+    fun roundtrips_a_take_spanning_several_write_blocks() {
+        // writeWav streams in 64 Ki-sample blocks so a long take never stages the whole
+        // data section in one buffer. A take straddling that boundary must be byte-exact:
+        // no dropped, duplicated, or misaligned block seam.
+        val pcm = ShortArray(64 * 1024 * 2 + 777) { (((it * 31) % 60_000) - 30_000).toShort() }
+        val tmp = File.createTempFile("tuparles-blocks", ".wav")
+        try {
+            writeWav(tmp, pcm)
+            assertEquals(44L + pcm.size * 2L, tmp.length())
+
+            val floats = decodeWavToFloats(tmp)
+            assertEquals(pcm.size, floats.size)
+            for (i in pcm.indices) {
+                assertEquals(pcm[i] / 32768f, floats[i], 1e-6f)
+            }
+        } finally {
+            tmp.delete()
+        }
+    }
+
+    @Test
     fun preserves_sample_magnitude_ordering() {
         // A louder sample must decode to a larger magnitude — no sign/scale surprises.
         val pcm = shortArrayOf(100, 20000)

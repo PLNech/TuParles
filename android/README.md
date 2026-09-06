@@ -19,7 +19,7 @@ audio-only when it is not, and lets you search back through everything you have 
 
 | Feature | How |
 |---|---|
-| **Record** | A foreground `RecordingService` (type `microphone`) captures 16 kHz mono PCM16 via `AudioRecord`, saves a canonical WAV to app-private storage. A take survives screen-off and app-switch — the exact failure that motivated the rebuild. |
+| **Record** | A foreground `RecordingService` (type `microphone`) captures 16 kHz mono PCM16 via `AudioRecord`, saves a canonical WAV to app-private storage. A take survives screen-off and app-switch — the exact failure that motivated the rebuild. A **2 h safety cap** auto-stops a forgotten recording; long think-aloud takes (30–90 min) are the design point. |
 | **Notes** | Room database — `Note(id, wavPath, createdAt, durationS, transcript?, transcriptState, transcriptLang)`. Newest-first list with date + duration. |
 | **Transcribe** (Phase B) | After a recording is saved, `TranscriptionManager` decodes the WAV on-device via the `:whisper` module (`language=auto`), off the UI lifecycle. The row shows a `transcription…` hint, then the transcript preview; tapping a decoded note expands the full text. No model bundled → the engine reports unavailable and the app stays a pure dictaphone. |
 | **Search** (Phase C) | A search field filters the list live (250 ms debounce) via Room **FTS4** over the transcripts (`NoteFts` external-content table). Prefix matching as you type ("bon" → "bonjour"); each hit shows a snippet centred on the match. Notes with no transcript can't match — a hint says how many are hidden so the exclusion is never silent. |
@@ -61,7 +61,8 @@ app/src/main/java/pl/nech/tuparles/
   data/                       Note, NoteDao, AppDatabase, RoomNotesRepository,
                               TranscriptState, Converters, Migrations (1→2, 2→3),
                               NoteFts (FTS4 index), FtsQuery (safe MATCH builder)
-  record/                     AudioRecorderSession, Wav, WavDecoder, RecorderState(+Holder), RecordingService
+  record/                     AudioRecorderSession, PcmAccumulator, Wav, WavDecoder,
+                              RecorderState(+Holder), RecordingService
   transcribe/TranscriptionManager.kt  post-record decode + persisted state machine
   di/AppModule.kt             Hilt wiring (Room + migrations + contract binds + app scope)
   ui/                         MainActivity, RecorderViewModel, RecorderScreen, Share, theme/
@@ -140,7 +141,12 @@ ANDROID_SERIAL=<device> ./gradlew connectedDebugAndroidTest  # on-device (needs 
   counts the un-transcribed notes hidden from results, and restores the full list when
   cleared (fake repo, `StandardTestDispatcher`).
 - **`WavDecoderTest`** — the WAV round-trip (`writeWav` → `decodeWavToFloats`) that
-  feeds whisper: PCM16 recovers to normalised floats in `[-1, 1]`, empty-safe.
+  feeds whisper: PCM16 recovers to normalised floats in `[-1, 1]`, empty-safe, and
+  byte-exact across the 64 Ki-sample write-block seam a long take crosses.
+- **`PcmAccumulatorTest`** — the whole-take PCM store behind the 2 h cap: samples keep
+  their order across chunk boundaries, ragged mic reads reassemble exactly, only the
+  first `n` samples of a partly-filled buffer are taken, and values outside
+  `Short.valueOf`'s cache round-trip (the boxing this class exists to avoid).
 - **`TranscriptionManagerTest`** — the state machine: engine available → `DONE`,
   unavailable → `UNAVAILABLE` (engine never called), throws → `FAILED` (audio kept),
   already-`DONE` is idempotent, and `resumePending` re-decodes interrupted notes.
@@ -153,7 +159,7 @@ ANDROID_SERIAL=<device> ./gradlew connectedDebugAndroidTest  # on-device (needs 
 - **`TranscriptSnippetTest`** — the search excerpt centres on the match, adds ellipses
   only where trimmed, and never cuts mid-word.
 
-37 unit tests, all on the JVM. The native whisper decode and the FTS index build run
+132 unit tests, all on the JVM. The native whisper decode and the FTS index build run
 only on-device.
 
 ## Next
