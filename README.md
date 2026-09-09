@@ -31,13 +31,23 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
   preview shows spoken punctuation, slashes and known mishears *as they'll
   land* ("slash impeccable" reads "/impeccable" while you speak), not the raw
   decoder words the final would then quietly fix.
+- **Picks up the mic you're actually wearing** — the mic list is read from
+  the sound server (PipeWire/PulseAudio), not from PortAudio, which on a modern
+  desktop can only see `pulse` and `default` and never enumerates a Bluetooth
+  source at all. So your headset is in the list, under the name you know it by
+  ("Bose QC Ultra 2 HP") rather than
+  `alsa_input.pci-0000_00_1f.3-platform-sof_sdw.HiFi__hw_sofsoundwire_4__source`.
+  Queried live, so a headset paired thirty seconds ago is already there; the
+  chosen mic is stored by name, and a headset that walks out of range degrades
+  to the system default instead of killing the take. On a bare-ALSA box or in
+  CI, the old PortAudio list is still the fallback.
 - **Trims the silence for you** — if you leave the mic keyed after the last
   word, the dead lead/tail is trimmed off before decode, so a forgotten-mic
   take doesn't pay to decode empty seconds. The win is biggest without a GPU
   (the CPU engines decode every silent second — a 30 s tail can halve a qwen
   decode). Conservative by design: it only ever trims the ends, keeps a margin,
   and hands the engine the whole take at the least doubt. On by default; toggle
-  in *Réglages* (*« Couper les silences en début/fin de prise »*).
+  in *Réglages › Décodage* (*« Couper les silences en début/fin de prise »*).
 - **A bubble that tells you what's happening** — the waveform tracks your
   voice on a perceptual scale, so even quiet speech visibly moves the bars
   ("I hear you"); the bars are **green on GPU, blue on CPU**, so you always
@@ -113,18 +123,18 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
   cloud + keyphrases over your dictation history), and *Ton code* (the
   cached codebase analysis that seeds the decoder). Feature usage is
   tracked **locally and opt-out** — nothing leaves the machine; toggle it
-  off or wipe it in *Réglages › Confidentialité*.
+  off or wipe it in *Réglages › Vie privée*.
 - **PII firewall — minimize before persist** — what you dictate is always
   pasted verbatim, but the *stored* copy is cleaned first: secrets and
   checksum-validated identifiers (IBAN, n° de sécu, credit card, API keys)
   are masked with a `<KIND>` placeholder before they ever reach
   `history.db`. High-precision detection only, so it destroys ~zero real
-  text; on by default, a toggle in *Réglages › Confidentialité*. The
+  text; on by default, a toggle in *Réglages › Vie privée*. The
   analytics tag cloud also honours a frequency floor so a once-spoken name
   can be kept from surfacing. A *Pare-feu PII* editor adds your own terms
   in two tiers — **block** (masked, for confidential project/client names)
   and **alert** (surfaced, never auto-erased) — case- and accent-insensitive.
-  A **dev-capture** toggle (off by default, *Réglages › Confidentialité*) can
+  A **dev-capture** toggle (off by default, *Réglages › Dev*) can
   save each take's *raw, unredacted* audio locally for replaying a fix — and
   while it's on, the tray shows a **steady red dot** so it never records you
   silently (`TUPARLES_DEV` overrides the toggle either way).

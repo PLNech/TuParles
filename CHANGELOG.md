@@ -1,37 +1,82 @@
 # Changelog
 
-## Sprint 37 — 2026-09-05 · Scrubbing PrivateCorpusB out of history, for keeps
+## Sprint 39 — 2026-09-09 · le micro qu'on porte, la fenêtre qu'on lit
 
-Internal identifiers from a private work codebase (PrivateCorpusB, #54's first
-real corpus) had leaked into public git history through the EDA run. History is
-rewritten clean; the tooling that caused it now refuses to repeat the mistake.
+Two reports from one session on Bluetooth headphones: the mic picker did not
+list the headset that `pavucontrol` showed plainly, and *Réglages* rendered as
+overlapping text — "this feels 1996, not 2026". Neither cause was the one the
+symptom suggested. Full write-up:
+`docs/research/2026-09-09-mic-enumeration-and-settings-ui.md`.
 
 ### Fixed
-- **Public history scrubbed of PrivateCorpusB's real identifiers** — a
-  `filter-repo` rewrite replaces every mined symbol with the stable pseudonyms
-  already used in the write-up (`RecordTypeA`, `idxBuilderB`, `fromEncodingA`,
-  `LOAD_DOC_CONFIG`, …).
-  `docs/research/2026-06-24-codebase-aware-dict-seeding-eda.md` gets a note
-  flagging every example string as a pseudonym, not verbatim — the aggregate
-  statistics (term counts, TF-IDF distributions, signal-independence
-  correlations, risk separation) are unchanged and still stand.
+- **The mic list now comes from the sound server, not PortAudio** (new
+  `pulse.py`). PortAudio here has only the ALSA host API, and on a PipeWire
+  desktop that means it enumerates exactly `pulse` and `default` — before *and*
+  after the rescan the dialog was already doing. A Bluetooth mic is a PipeWire
+  node, never an ALSA card, so no amount of rescanning could ever surface it:
+  the picker was offering a choice between two aliases for "whatever the desktop
+  picked". Sources now come from `pactl` (JSON, with a text parser for pactl
+  < 15), monitors filtered out, which also buys human labels
+  (`Bose QC Ultra 2 HP` rather than
+  `alsa_input.pci-0000_00_1f.3-platform-sof_sdw.HiFi__hw_sofsoundwire_4__source`)
+  and hotplug with no rescan at all, since pactl is queried live.
+- **Réglages squashed instead of scrolling.** One flat `QVBoxLayout`,
+  thirty-five widgets, no scroll area, a natural height past 1000 px. The window
+  manager caps the window, Qt compresses every row below its minimum, and
+  word-wrapped labels — which need a definite width to know their height — print
+  one clipped line over the next. Now a sidebar of seven categories, each page
+  its own `QScrollArea(widgetResizable=True)`.
+
+### Added
+- **Réglages has a look of its own** (new `theme.py`). Nothing in the desktop
+  package set a stylesheet, and this box resolves no Qt6 platform theme at all
+  (it exports `QT_QPA_PLATFORMTHEME=qt5ct`, the Qt5 bridge, which Qt6 ignores) —
+  so the dialogs were bare Fusion. They now bring their own paint, in the
+  bubble's palette, derived for light and dark from the running `QPalette`.
+  Hand-rolled rather than a theme dependency: identical on every box, and scoped
+  per-window so it can never repaint the bubble or the ribbon, which paint
+  themselves.
+- **Settings re-homed by meaning.** The old "Microphone" section had accreted
+  eight checkboxes about decode behaviour, tray animation and the clipboard.
+  Now: Micro, Langues, Bulle, Écriture, Décodage, Vie privée, Dev.
 
 ### Changed
-- **`scripts/nlp_eda.py` corpora now come from config, not source (#54)**: no
-  more hardcoded absolute path into a private tree. Corpora load from a
-  gitignored `.eda-corpora.toml` and/or `TUPARLES_EDA_CORPORA`, each explicitly
-  marked public or private; TuParles itself stays the only public built-in
-  default. Any corpus discovered this way defaults to PRIVATE — "it's a
-  setting": a safe default, a total override.
+- A chosen PipeWire source is opened by pinning `PULSE_SOURCE` **and**
+  `PIPEWIRE_NODE` (libpulse honours the first; pipewire-alsa, which serves
+  `default`, only the second) around the `InputStream` **constructor** — that is
+  where the ALSA plugin connects; by `start()` the source is already chosen. The
+  pin is scoped and restored, because a leaked pin at a headset that just walked
+  out of range would break the fallback open too, turning one failure into two.
+- Stored mic names resolve pulse source → PortAudio name → system default, so
+  settings written before this keep working. No migration.
+- Resolving a mic at take start calls `pulse.source_names()`, not
+  `list_sources()`: marking which mic the desktop *would* have chosen costs a
+  second pactl call, and the take-start path does not need to know. Measured
+  ~19 ms → ~11 ms, of a ~54 ms `Recorder.start()` (n=5, 35–58 ms — small
+  sample, wide spread; the stream open itself dominates either way).
+
+### Infra
+- `tests/test_settings_layout.py` imposes the reported 738×578 and asserts no
+  visible widget on any page is laid out shorter than its `minimumSizeHint()`
+  (offscreen has no window manager, so the test inflicts the cramp itself),
+  plus mic id-vs-label round-tripping and cross-page save coverage. Pulse
+  parsing, monitor filtering, the PortAudio fallback and the env scoping are
+  covered from synthetic fixtures — a real Bluetooth address is
+  hardware-identifying and stays out of the repo. **990 tests**, ruff and mypy
+  clean.
 
 ### Doctrine
-- **Redact by default, name by exception.** A term surface mined from a
-  non-public corpus is pseudonymized (stable, deterministic) before it is ever
-  printed or written to the metrics JSON; a private corpus's own name never
-  appears raw either. Aggregate numbers are computed over the real text and
-  never redacted — only the example strings are. The same asymmetry as "a
-  wrong autocorrect is worse than a visible mishear": when in doubt, hide the
-  string, keep the number.
+- **"No devices found" is a question about who is doing the enumerating.** The
+  picker was not buggy; it was asking the wrong subsystem, and it had a rescan
+  bolted on that could never have helped. Before hardening a retry, check that
+  the thing you are retrying can ever return the answer.
+- **A missing icon is not a visible failure.** Qt stylesheet `url()` resolves
+  files and Qt resources only: a `data:` URI loads nothing, with no error, no
+  warning and no broken-image box. Measured both ways rather than assumed
+  (file SVG: 20 tick pixels; data URI: 0). When a declarative layer can fail
+  silently, verify it by rendering and counting pixels, not by reading it.
+
+
 ## Sprint 38 — 2026-09-06 · 1.0.1 — la longue prise
 
 A think-aloud walk is 30 to 90 minutes; the app auto-stopped at 10. The safety cap
@@ -78,6 +123,38 @@ policy, it was the heap wall in disguise.
   and `SilenceSegmenter`'s buffer is bounded by `maxSegmentMs`, not by take length.
   Auditing an "overflow" worry surfaced a heap hazard two orders of magnitude closer.
 
+## Sprint 37 — 2026-09-05 · Scrubbing PrivateCorpusB out of history, for keeps
+
+Internal identifiers from a private work codebase (PrivateCorpusB, #54's first
+real corpus) had leaked into public git history through the EDA run. History is
+rewritten clean; the tooling that caused it now refuses to repeat the mistake.
+
+### Fixed
+- **Public history scrubbed of PrivateCorpusB's real identifiers** — a
+  `filter-repo` rewrite replaces every mined symbol with the stable pseudonyms
+  already used in the write-up (`RecordTypeA`, `idxBuilderB`, `fromEncodingA`,
+  `LOAD_DOC_CONFIG`, …).
+  `docs/research/2026-06-24-codebase-aware-dict-seeding-eda.md` gets a note
+  flagging every example string as a pseudonym, not verbatim — the aggregate
+  statistics (term counts, TF-IDF distributions, signal-independence
+  correlations, risk separation) are unchanged and still stand.
+
+### Changed
+- **`scripts/nlp_eda.py` corpora now come from config, not source (#54)**: no
+  more hardcoded absolute path into a private tree. Corpora load from a
+  gitignored `.eda-corpora.toml` and/or `TUPARLES_EDA_CORPORA`, each explicitly
+  marked public or private; TuParles itself stays the only public built-in
+  default. Any corpus discovered this way defaults to PRIVATE — "it's a
+  setting": a safe default, a total override.
+
+### Doctrine
+- **Redact by default, name by exception.** A term surface mined from a
+  non-public corpus is pseudonymized (stable, deterministic) before it is ever
+  printed or written to the metrics JSON; a private corpus's own name never
+  appears raw either. Aggregate numbers are computed over the real text and
+  never redacted — only the example strings are. The same asymmetry as "a
+  wrong autocorrect is worse than a visible mishear": when in doubt, hide the
+  string, keep the number.
 ## Sprint 36 — 2026-07-23 · 1.0.0 — légère à installer, vive à l'écoute, fidèle à la parole
 
 The first public **1.0.0**. Three moats land together. The app ships **lean** and

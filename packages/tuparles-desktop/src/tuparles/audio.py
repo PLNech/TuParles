@@ -8,8 +8,22 @@ empty = system default). Names are stable where PortAudio indices are not —
 plug in a Bluetooth headset and every index after it shifts. We re-resolve
 the name to an index at each take, and if the device has vanished (headset
 disconnected mid-session) we fall back to the default rather than kill a take.
+
+Two worlds of names, in preference order (see `list_mics`):
+
+- **PipeWire/PulseAudio source names** (`pulse.list_sources()`) when a sound
+  server is running. This is the only way a Bluetooth mic is selectable at all
+  — PortAudio does not enumerate PipeWire sources. Routing to one is done by
+  opening PortAudio's `pulse`/`default` device with PULSE_SOURCE and
+  PIPEWIRE_NODE pinned to the source name for the duration of the open.
+- **PortAudio device names**, the original path, for a bare-ALSA box or CI.
+
+A stored name is looked up in that order, so settings written before the
+PipeWire path existed keep resolving. Unknown in both → system default.
 """
 
+import contextlib
+import os
 import threading
 import time
 
@@ -20,7 +34,7 @@ try:
 except (OSError, ImportError):  # no libportaudio (e.g. CI) — pure helpers still import
     sd = None
 
-from tuparles import settings
+from tuparles import pulse, settings
 from tuparles.config import (
     CHANNELS,
     LEVEL_FULL_SCALE,
@@ -71,6 +85,87 @@ def resolve_device_index(name, devices) -> int | None:
     return None
 
 
+def list_mics(refresh: bool = False) -> list[dict]:
+    """The picker's list: [{id, label, default, kind}], best source available.
+
+    Prefers PipeWire/Pulse sources — they include Bluetooth mics and carry
+    human labels ("Bose QC Ultra 2 HP"). Falls back to PortAudio devices, whose
+    name doubles as the label because that is all we have. `id` is what goes
+    into settings; `refresh` only means anything to the PortAudio path (pactl
+    is queried live and needs no rescan).
+    """
+    sources = pulse.list_sources()
+    if sources:
+        return [
+            {
+                "id": source["name"],
+                "label": source["label"],
+                "default": source.get("default", False),
+                "kind": "pulse",
+            }
+            for source in sources
+        ]
+    return [
+        {
+            "id": dev["name"],
+            "label": dev["name"],
+            "default": dev["default"],
+            "kind": "portaudio",
+        }
+        for dev in list_input_devices(refresh=refresh)
+    ]
+
+
+def pulse_env(source_name: str) -> dict:
+    """Env that pins a capture stream to one PipeWire/Pulse source.
+
+    PULSE_SOURCE is honoured by libpulse (the ALSA `pulse` plugin passes no
+    explicit source, so the env wins); PIPEWIRE_NODE covers pipewire-alsa,
+    which serves `default` and ignores PULSE_SOURCE. The source name is the
+    node name, so one value feeds both.
+    """
+    return {"PULSE_SOURCE": source_name, "PIPEWIRE_NODE": source_name}
+
+
+def _pulse_portaudio_index() -> int | None:
+    """Index of the PortAudio device that fronts the sound server, or None.
+
+    `pulse` first, `default` as the runner-up — never hardcoded, since which
+    of them exists varies by box.
+    """
+    devices = {dev["name"]: dev["index"] for dev in list_input_devices()}
+    for candidate in ("pulse", "default"):
+        if candidate in devices:
+            return devices[candidate]
+    return None
+
+
+@contextlib.contextmanager
+def _env_overrides(env: dict | None):
+    """Apply env vars for the block, then restore exactly what was there.
+
+    Scope matters twice over. The ALSA plugin connects to the sound server
+    inside the `InputStream` *constructor*, so the vars must be set around
+    construction, not around `start()`. And restoring them means the
+    fallback re-open can never inherit a PULSE_SOURCE pointing at a headset
+    that just walked out of range — which would turn "degrade to the default
+    mic" into a second failure.
+    """
+    if not env:
+        yield
+        return
+    saved = {key: os.environ.get(key) for key in env}
+    os.environ.update(env)
+    try:
+        yield
+    finally:
+        for key, previous in saved.items():
+            if previous is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = previous
+
+
 class Recorder:
     def __init__(self) -> None:
         self._stream: sd.InputStream | None = None
@@ -86,9 +181,9 @@ class Recorder:
         if self._stream is not None:
             return
         self._chunks = []
-        device = self._resolve_input_device()
+        device, env = self._resolve_input_device()
         try:
-            self._stream = self._open(device)
+            self._stream = self._open(device, env)
             self._stream.start()
         except Exception:
             # Chosen mic gone (Bluetooth dropped between takes?) — rescan and
@@ -101,27 +196,38 @@ class Recorder:
             self._stream.start()
             print("micro choisi indisponible — micro par défaut")
 
-    def _open(self, device):
-        return sd.InputStream(
-            device=device,
-            samplerate=SAMPLE_RATE,
-            channels=CHANNELS,
-            dtype="int16",
-            blocksize=SAMPLE_RATE // 30,  # ~33 ms blocks → 30 fps levels
-            callback=self._on_block,
-        )
+    def _open(self, device, env: dict | None = None):
+        with _env_overrides(env):
+            return sd.InputStream(
+                device=device,
+                samplerate=SAMPLE_RATE,
+                channels=CHANNELS,
+                dtype="int16",
+                blocksize=SAMPLE_RATE // 30,  # ~33 ms blocks → 30 fps levels
+                callback=self._on_block,
+            )
 
     def _resolve_input_device(self):
-        """Index for the configured mic name, or None (system default). Names
-        are stable across hotplug where indices are not; if the name isn't in
-        the current list it may have just been plugged in — rescan once."""
+        """(PortAudio device, env overrides) for the configured mic.
+
+        A PipeWire/Pulse source resolves to the server's PortAudio device plus
+        the env that pins it to that source. Otherwise we fall back to the
+        original PortAudio name lookup — names are stable across hotplug where
+        indices are not, and if the name isn't in the current list it may have
+        just been plugged in, so rescan once. (None, {}) = system default, the
+        answer for a mic that is no longer anywhere to be found.
+        """
         name = settings.get("input_device")
         if not name:
-            return None
+            return None, {}
+        if name in pulse.source_names():  # one pactl call, no default lookup
+            index = _pulse_portaudio_index()
+            if index is not None:
+                return index, pulse_env(name)
         idx = resolve_device_index(name, list_input_devices())
         if idx is None:
             idx = resolve_device_index(name, list_input_devices(refresh=True))
-        return idx
+        return idx, {}
 
     def _on_block(self, indata: np.ndarray, frames, time_info, status) -> None:
         with self._lock:

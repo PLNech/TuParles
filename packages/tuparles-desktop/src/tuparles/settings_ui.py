@@ -1,10 +1,23 @@
-"""Settings dialog: microphone + language selection.
+"""Réglages: a sidebar of categories, one scrollable page each.
 
-Mic: a picker over the input devices, rescanned each time the dialog opens
-(so a headset plugged in after launch shows up). The mic is stored by name,
-empty = system default. Languages: searchable checklist of Whisper's 100 —
-empty = auto-detect, one = forced, several = per-segment code-switching.
-Settings are read on the next take, no daemon restart.
+It used to be a single flat QVBoxLayout — thirty-odd widgets, no scroll area,
+`setMinimumSize(380, 480)`. The layout's natural height was well over a
+thousand pixels, so as soon as the window manager capped the window Qt
+compressed every row past its minimum and the word-wrapped hints printed on
+top of each other. A dialog you cannot read is a dialog whose settings do not
+exist, so: categories on the left, and every page inside a
+`QScrollArea(widgetResizable=True)` that scrolls instead of squashing.
+
+Paint comes from `theme.py` — scoped to these windows, never app-wide, because
+the bubble and the ribbon draw themselves.
+
+Mic: a picker over the real capture sources (see `audio.list_mics` — PipeWire
+sources where there is a sound server, which is the only way a Bluetooth mic
+is selectable at all, PortAudio devices otherwise), rescanned each time the
+dialog opens. Stored by id, empty = system default. Languages: searchable
+checklist of Whisper's 100 — empty = auto-detect, one = forced, several =
+per-segment code-switching. Settings are read on the next take, no daemon
+restart.
 """
 
 from PySide6.QtCore import Qt
@@ -15,6 +28,8 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
+    QFrame,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -22,13 +37,41 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
     QSpinBox,
+    QStackedWidget,
     QVBoxLayout,
+    QWidget,
 )
 
-from tuparles import privacy_policy, settings, telemetry
-from tuparles.audio import list_input_devices
+from tuparles import privacy_policy, settings, telemetry, theme
+from tuparles.audio import list_mics
 from tuparles.languages import LANGUAGES
+
+_NAV_WIDTH = 196
+
+
+def _hint(text: str) -> QLabel:
+    """Explanatory prose. Word-wrapped, which only behaves inside a resizable
+    scroll area — a wrapped label in an over-full fixed layout is exactly what
+    produced the overlapping text this dialog used to show."""
+    label = QLabel(text)
+    label.setObjectName("hint")
+    label.setWordWrap(True)
+    return label
+
+
+def _field_label(text: str) -> QLabel:
+    label = QLabel(text)
+    label.setObjectName("fieldLabel")
+    label.setWordWrap(True)
+    return label
+
+
+def _section(text: str) -> QLabel:
+    label = QLabel(text)
+    label.setObjectName("sectionTitle")
+    return label
 
 
 class PrivacyDialog(QDialog):
@@ -44,49 +87,57 @@ class PrivacyDialog(QDialog):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle("TuParles — Pare-feu PII")
-        self.setMinimumSize(420, 460)
+        self.setMinimumSize(460, 520)
+        self.setStyleSheet(theme.stylesheet())
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(22, 20, 22, 18)
+        layout.setSpacing(8)
 
-        layout.addWidget(QLabel("<b>Termes à masquer</b> (un par ligne)"))
-        block_hint = QLabel(
-            "Ces termes sont <b>retirés</b> de l'historique enregistré, comme "
-            "les secrets et identifiants. Idéal pour les noms de projet ou de "
-            "client confidentiels. La casse et les accents sont ignorés."
+        layout.addWidget(_section("Termes à masquer"))
+        layout.addWidget(
+            _hint(
+                "Ces termes sont <b>retirés</b> de l'historique enregistré, comme "
+                "les secrets et identifiants. Idéal pour les noms de projet ou de "
+                "client confidentiels. La casse et les accents sont ignorés. "
+                "Un terme par ligne."
+            )
         )
-        block_hint.setWordWrap(True)
-        layout.addWidget(block_hint)
         self._block = QPlainTextEdit()
         self._block.setPlainText(
             privacy_policy.terms_to_text(settings.get("pii_denylist_block"))
         )
         layout.addWidget(self._block)
 
-        layout.addWidget(QLabel("<b>Termes à signaler</b> (un par ligne)"))
-        alert_hint = QLabel(
-            "Ces termes sont <b>signalés</b> mais jamais masqués automatiquement "
-            "— tu gardes la main. Pour ce que tu veux surveiller sans l'effacer."
+        layout.addWidget(_section("Termes à signaler"))
+        layout.addWidget(
+            _hint(
+                "Ces termes sont <b>signalés</b> mais jamais masqués automatiquement "
+                "— tu gardes la main. Pour ce que tu veux surveiller sans l'effacer. "
+                "Un terme par ligne."
+            )
         )
-        alert_hint.setWordWrap(True)
-        layout.addWidget(alert_hint)
         self._alert = QPlainTextEdit()
         self._alert.setPlainText(
             privacy_policy.terms_to_text(settings.get("pii_denylist_alert"))
         )
         layout.addWidget(self._alert)
 
-        floor_hint = QLabel(
-            "<b>Plancher d'anonymat</b> pour le nuage de mots : un terme dit "
-            "moins de fois que ce seuil n'apparaît pas dans les analyses "
-            "(1 = aucun filtre)."
+        layout.addWidget(_section("Plancher d'anonymat"))
+        layout.addWidget(
+            _hint(
+                "Pour le nuage de mots : un terme dit moins de fois que ce seuil "
+                "n'apparaît pas dans les analyses (1 = aucun filtre)."
+            )
         )
-        floor_hint.setWordWrap(True)
-        layout.addWidget(floor_hint)
         self._floor = QSpinBox()
         self._floor.setRange(1, 50)
         self._floor.setValue(privacy_policy.analytics_min_count())
         layout.addWidget(self._floor)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        # Named explicitly: the standard-button text is French only when a Qt
+        # translation happens to be installed, and this is a French surface.
+        buttons.button(QDialogButtonBox.Cancel).setText("Annuler")
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -106,24 +157,93 @@ class SettingsDialog(QDialog):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle("TuParles — Réglages")
-        self.setMinimumSize(380, 480)
+        self.setMinimumSize(720, 480)
+        self.resize(860, 600)
+        self.setStyleSheet(theme.stylesheet())
 
-        layout = QVBoxLayout(self)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
 
-        layout.addWidget(QLabel("<b>Microphone</b>"))
-        mic_hint = QLabel(
-            "Le micro de la dictée. « Système » suit le réglage par défaut "
-            "du bureau. Un casque branché après le lancement apparaît à "
-            "l'ouverture de cette fenêtre."
+        body = QHBoxLayout()
+        body.setContentsMargins(0, 0, 0, 0)
+        body.setSpacing(0)
+        root.addLayout(body, 1)
+
+        self._nav = QListWidget()
+        self._nav.setObjectName("nav")
+        self._nav.setFixedWidth(_NAV_WIDTH)
+        self._pages = QStackedWidget()
+        body.addWidget(self._nav)
+        body.addWidget(self._pages, 1)
+        self._nav.currentRowChanged.connect(self._pages.setCurrentIndex)
+
+        self._build_mic_page()
+        self._build_language_page()
+        self._build_bubble_page()
+        self._build_writing_page()
+        self._build_decode_page()
+        self._build_privacy_page()
+        self._build_dev_page()
+        self._nav.setCurrentRow(0)
+
+        footer = QWidget()
+        footer.setObjectName("footer")
+        footer_layout = QHBoxLayout(footer)
+        footer_layout.setContentsMargins(22, 12, 22, 12)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        # Named explicitly: the standard-button text is French only when a Qt
+        # translation happens to be installed, and this is a French surface.
+        buttons.button(QDialogButtonBox.Cancel).setText("Annuler")
+        buttons.accepted.connect(self._save)
+        buttons.rejected.connect(self.reject)
+        footer_layout.addStretch(1)
+        footer_layout.addWidget(buttons)
+        root.addWidget(footer)
+
+    # ---- page scaffolding -------------------------------------------------
+
+    def _add_page(self, icon: str, title: str) -> QVBoxLayout:
+        """Register a nav entry; return the layout to fill for its page.
+
+        The scroll area is the whole point: `widgetResizable(True)` gives the
+        inner widget a definite width (so wrapped hints compute a real height)
+        and lets a tall page scroll rather than compress.
+        """
+        inner = QWidget()
+        inner.setObjectName("page")
+        layout = QVBoxLayout(inner)
+        layout.setContentsMargins(24, 22, 24, 22)
+        layout.setSpacing(7)
+        heading = QLabel(title)
+        heading.setObjectName("pageTitle")
+        layout.addWidget(heading)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setWidget(inner)
+        self._pages.addWidget(scroll)
+        self._nav.addItem(QListWidgetItem(f"{icon}   {title}"))
+        return layout
+
+    # ---- pages ------------------------------------------------------------
+
+    def _build_mic_page(self) -> None:
+        layout = self._add_page("🎤", "Micro")
+        layout.addWidget(
+            _hint(
+                "Le micro de la dictée. « Système » suit le réglage par défaut du "
+                "bureau. La liste est relue à chaque ouverture de cette fenêtre : "
+                "un casque appairé après le lancement y est déjà."
+            )
         )
-        mic_hint.setWordWrap(True)
-        layout.addWidget(mic_hint)
         self._mic = QComboBox()
         self._mic.addItem("Système (par défaut)", None)
         current_mic = settings.get("input_device")
-        for dev in list_input_devices(refresh=True):
-            label = dev["name"] + ("  ·  défaut système" if dev["default"] else "")
-            self._mic.addItem(label, dev["name"])
+        for mic in list_mics(refresh=True):
+            label = mic["label"] + ("  ·  défaut système" if mic["default"] else "")
+            self._mic.addItem(label, mic["id"])
         if current_mic:
             i = self._mic.findData(current_mic)
             if i >= 0:
@@ -133,6 +253,7 @@ class SettingsDialog(QDialog):
                 self._mic.setCurrentIndex(self._mic.count() - 1)
         layout.addWidget(self._mic)
 
+        layout.addWidget(_section("Repères de démarrage"))
         self._start_sound = QCheckBox("Bip au démarrage de la dictée")
         self._start_sound.setToolTip(
             "Un petit son confirme que la dictée a démarré — tu peux parler. "
@@ -140,87 +261,50 @@ class SettingsDialog(QDialog):
         )
         self._start_sound.setChecked(bool(settings.get("start_cue_sound")))
         layout.addWidget(self._start_sound)
+        layout.addStretch(1)
 
-        self._tray_anim = QCheckBox("Icône animée dans la barre des tâches")
-        self._tray_anim.setToolTip(
-            "L'icône respire doucement (et s'anime pendant la dictée). "
-            "Décoche si ton bureau rame avec les mises à jour d'icône."
+    def _build_language_page(self) -> None:
+        layout = self._add_page("🌍", "Langues")
+        layout.addWidget(
+            _hint(
+                "Aucune = détection automatique. Une seule = forcée. "
+                "Plusieurs = code-switching : la langue est détectée segment "
+                "par segment, pour passer de l'une à l'autre en cours de phrase."
+            )
         )
-        self._tray_anim.setChecked(bool(settings.get("tray_animation")))
-        layout.addWidget(self._tray_anim)
+        self._search = QLineEdit(placeholderText="Filtrer… (nom ou code)")
+        self._search.textChanged.connect(self._filter)
+        layout.addWidget(self._search)
 
-        self._cpu_partials = QCheckBox("Aperçu en direct sur CPU")
-        self._cpu_partials.setToolTip(
-            "Affiche le texte au fil de la parole même sans GPU, via un petit "
-            "modèle CPU (téléchargé une fois). Décoche sur une machine peu "
-            "puissante — la bulle garde alors l'onde sonore. (Le GPU n'est pas "
-            "concerné : il a toujours l'aperçu.)"
+        self._list = QListWidget()
+        selected = set(settings.get("languages") or [])
+        # Selected first, then the crowd alphabetically.
+        ordered = sorted(
+            LANGUAGES.items(), key=lambda kv: (kv[0] not in selected, kv[1])
         )
-        self._cpu_partials.setChecked(bool(settings.get("cpu_partials_enabled")))
-        layout.addWidget(self._cpu_partials)
+        for code, name in ordered:
+            item = QListWidgetItem(f"{name}  ({code})")
+            item.setData(Qt.UserRole, code)
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Checked if code in selected else Qt.Unchecked)
+            self._list.addItem(item)
+        layout.addWidget(self._list, 1)
 
-        self._backend_toast = QCheckBox("Prévenir au passage GPU → CPU")
-        self._backend_toast.setToolTip(
-            "Si le GPU lâche en cours de session, une note te le dit une fois "
-            "(« Passé sur CPU — un peu plus lent »). Les barres passent de vert "
-            "à bleu de toute façon ; ceci explique pourquoi."
-        )
-        self._backend_toast.setChecked(bool(settings.get("backend_toast")))
-        layout.addWidget(self._backend_toast)
+        clear = QPushButton("Tout décocher (auto)")
+        clear.clicked.connect(self._clear_all)
+        layout.addWidget(clear)
 
-        self._trim_silence = QCheckBox("Couper les silences en début/fin de prise")
-        self._trim_silence.setToolTip(
-            "Retire le silence avant le premier mot et après le dernier, pour "
-            "décoder plus vite — surtout sans GPU, où chaque seconde muette est "
-            "décodée pour rien. Prudent : garde une marge (0,2 s au début, 0,4 s "
-            "à la fin), ne touche jamais aux pauses internes, et conserve la prise "
-            "entière au moindre doute (résultat trop court ou trop rogné)."
+    def _build_bubble_page(self) -> None:
+        layout = self._add_page("💬", "Bulle")
+        layout.addWidget(_section("Écran"))
+        layout.addWidget(
+            _hint(
+                "Sur quel écran la bulle s'affiche. « Écran principal » par défaut ; "
+                "épingle-la à un moniteur précis, suis la souris ou la fenêtre "
+                "active, ou affiche-la sur tous les écrans à la fois. (Appliqué à "
+                "la dictée suivante.)"
+            )
         )
-        self._trim_silence.setChecked(bool(settings.get("trim_silence")))
-        layout.addWidget(self._trim_silence)
-
-        self._quiet_rescue = QCheckBox("Rattraper les prises parlées trop bas")
-        self._quiet_rescue.setToolTip(
-            "Quand la transcription finale perd des morceaux que l'aperçu en "
-            "direct avait pourtant captés (voix basse + un clac de clavier qui "
-            "fausse la normalisation), redécode automatiquement une copie au "
-            "niveau corrigé et garde le résultat le plus complet. Se déclenche "
-            "rarement, ne rend jamais une prise pire."
-        )
-        self._quiet_rescue.setChecked(bool(settings.get("quiet_rescue")))
-        layout.addWidget(self._quiet_rescue)
-
-        self._speech_leveler = QCheckBox("Égaliser le niveau de la voix")
-        self._speech_leveler.setToolTip(
-            "Compense une voix basse même quand un bruit fort (clac de clavier, "
-            "souffle) fausserait la normalisation classique : le niveau est "
-            "égalisé image par image avant chaque décodage, aperçus comme "
-            "transcription finale. Vérifié sur les prises réelles : aucun effet "
-            "sur les prises normales, nette amélioration sur les prises faibles."
-        )
-        self._speech_leveler.setChecked(bool(settings.get("speech_leveler")))
-        layout.addWidget(self._speech_leveler)
-
-        self._clipboard_restore = QCheckBox("Préserver le presse-papiers")
-        self._clipboard_restore.setToolTip(
-            "TuParles colle via le presse-papiers, ce qui écrase ce que tu avais "
-            "copié. Coché, on le sauvegarde et on le remet après le collage — "
-            "uniquement s'il s'agit de texte (jamais une image ou des fichiers, "
-            "qu'un retour en texte détruirait). Contrepartie : le texte dicté "
-            "n'est plus laissé dans le presse-papiers pour un re-collage manuel."
-        )
-        self._clipboard_restore.setChecked(bool(settings.get("clipboard_restore")))
-        layout.addWidget(self._clipboard_restore)
-
-        layout.addWidget(QLabel("<b>Écran de la bulle</b>"))
-        screen_hint = QLabel(
-            "Sur quel écran la bulle s'affiche. « Écran principal » par défaut ; "
-            "épingle-la à un moniteur précis, suis la souris ou la fenêtre active, "
-            "ou affiche-la sur tous les écrans à la fois. (Appliqué à la dictée "
-            "suivante.)"
-        )
-        screen_hint.setWordWrap(True)
-        layout.addWidget(screen_hint)
         self._screen = QComboBox()
         self._screen.addItem("Écran principal", "primary")
         self._screen.addItem("Suivre la souris", "cursor")
@@ -240,18 +324,15 @@ class SettingsDialog(QDialog):
             self._screen.setCurrentIndex(self._screen.count() - 1)
         layout.addWidget(self._screen)
 
-        layout.addWidget(QLabel("<b>Bandeau d'aperçu</b>"))
-        ribbon_hint = QLabel(
-            "La vue complète s'étale en <b>largeur</b> le long du bas de l'écran "
-            "avant d'ajouter une ligne, pour voir toute la prise (début compris) "
-            "sans une tour qui recouvre le code. « Largeur » = part de l'écran "
-            "occupée (0 % = petite pastille fixe de 460 px) ; « Lignes » plafonne "
-            "la hauteur (1 = une seule ligne, sans historique compressé)."
+        layout.addWidget(_section("Bandeau d'aperçu"))
+        layout.addWidget(
+            _hint(
+                "La vue complète s'étale en <b>largeur</b> le long du bas de l'écran "
+                "avant d'ajouter une ligne, pour voir toute la prise (début compris) "
+                "sans une tour qui recouvre le code."
+            )
         )
-        ribbon_hint.setWordWrap(True)
-        layout.addWidget(ribbon_hint)
-
-        layout.addWidget(QLabel("Largeur du bandeau (% de l'écran, 0 = pastille)"))
+        layout.addWidget(_field_label("Largeur (% de l'écran, 0 = pastille de 460 px)"))
         self._ribbon_width = QSpinBox()
         self._ribbon_width.setRange(0, 100)
         self._ribbon_width.setSuffix(" %")
@@ -261,59 +342,43 @@ class SettingsDialog(QDialog):
         )
         layout.addWidget(self._ribbon_width)
 
-        layout.addWidget(QLabel("Lignes du bandeau"))
+        layout.addWidget(
+            _field_label("Lignes (1 = une seule ligne, sans historique compressé)")
+        )
         self._ribbon_lines = QSpinBox()
         self._ribbon_lines.setRange(1, 3)
         self._ribbon_lines.setValue(int(settings.get("bubble_lines")))
         layout.addWidget(self._ribbon_lines)
 
-        layout.addWidget(QLabel("Taille du texte (pt)"))
+        layout.addWidget(_field_label("Taille du texte (pt)"))
         self._ribbon_font = QDoubleSpinBox()
         self._ribbon_font.setRange(8.0, 24.0)
         self._ribbon_font.setSingleStep(0.5)
         self._ribbon_font.setValue(float(settings.get("bubble_font_pt")))
         layout.addWidget(self._ribbon_font)
 
-        layout.addWidget(QLabel("<b>Langues de dictée</b>"))
-        hint = QLabel(
-            "Aucune = détection automatique. Une seule = forcée. "
-            "Plusieurs = code-switching : la langue est détectée segment "
-            "par segment, pour passer de l'une à l'autre en cours de phrase."
+        layout.addWidget(_section("Barre des tâches"))
+        self._tray_anim = QCheckBox("Icône animée dans la barre des tâches")
+        self._tray_anim.setToolTip(
+            "L'icône respire doucement (et s'anime pendant la dictée). "
+            "Décoche si ton bureau rame avec les mises à jour d'icône."
         )
-        hint.setWordWrap(True)
-        layout.addWidget(hint)
+        self._tray_anim.setChecked(bool(settings.get("tray_animation")))
+        layout.addWidget(self._tray_anim)
+        layout.addStretch(1)
 
-        self._search = QLineEdit(placeholderText="Filtrer… (nom ou code)")
-        self._search.textChanged.connect(self._filter)
-        layout.addWidget(self._search)
-
-        self._list = QListWidget()
-        selected = set(settings.get("languages") or [])
-        # Selected first, then the crowd alphabetically.
-        ordered = sorted(
-            LANGUAGES.items(), key=lambda kv: (kv[0] not in selected, kv[1])
+    def _build_writing_page(self) -> None:
+        layout = self._add_page("✍️", "Écriture")
+        layout.addWidget(_section("Style d'écriture"))
+        layout.addWidget(
+            _hint(
+                "Comment la casse de ta dictée est rendue. <b>Préservé</b> respecte "
+                "ce que tu dis (par défaut) ; <b>minuscules</b> met tout en bas de "
+                "casse (sigles et identifiants protégés) ; <b>Phrase</b> met une "
+                "majuscule en début de phrase. Réglage repris de « Comment tu "
+                "parles ? »."
+            )
         )
-        for code, name in ordered:
-            item = QListWidgetItem(f"{name}  ({code})")
-            item.setData(Qt.UserRole, code)
-            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-            item.setCheckState(Qt.Checked if code in selected else Qt.Unchecked)
-            self._list.addItem(item)
-        layout.addWidget(self._list)
-
-        clear = QPushButton("Tout décocher (auto)")
-        clear.clicked.connect(self._clear_all)
-        layout.addWidget(clear)
-
-        layout.addWidget(QLabel("<b>Style d'écriture</b>"))
-        casing_hint = QLabel(
-            "Comment la casse de ta dictée est rendue. <b>Préservé</b> respecte "
-            "ce que tu dis (par défaut) ; <b>minuscules</b> met tout en bas de "
-            "casse (sigles et identifiants protégés) ; <b>Phrase</b> met une "
-            "majuscule en début de phrase. Réglage repris de « Comment tu parles ? »."
-        )
-        casing_hint.setWordWrap(True)
-        layout.addWidget(casing_hint)
         self._casing = QComboBox()
         # Same axis the onboarding card writes — share its labels so the two
         # surfaces can never disagree about what a style is called.
@@ -328,14 +393,96 @@ class SettingsDialog(QDialog):
             self._casing.setCurrentIndex(i)
         layout.addWidget(self._casing)
 
-        layout.addWidget(QLabel("<b>Confidentialité</b>"))
-        privacy_hint = QLabel(
-            "Le suivi d'usage est <b>100 % local</b> : il sert à voir quelles "
-            "fonctions tu utilises vraiment, et ne quitte jamais ta machine. "
-            "Décoche pour tout désactiver."
+        layout.addWidget(_section("Livraison"))
+        layout.addWidget(
+            _hint(
+                "TuParles colle via le presse-papiers, ce qui écrase ce que tu avais "
+                "copié. Coché, on le sauvegarde et on le remet après le collage — "
+                "uniquement s'il s'agit de texte (jamais une image ou des fichiers, "
+                "qu'un retour en texte détruirait). Contrepartie : le texte dicté "
+                "n'est plus laissé dans le presse-papiers pour un re-collage manuel."
+            )
         )
-        privacy_hint.setWordWrap(True)
-        layout.addWidget(privacy_hint)
+        self._clipboard_restore = QCheckBox("Préserver le presse-papiers")
+        self._clipboard_restore.setChecked(bool(settings.get("clipboard_restore")))
+        layout.addWidget(self._clipboard_restore)
+        layout.addStretch(1)
+
+    def _build_decode_page(self) -> None:
+        layout = self._add_page("⚡", "Décodage")
+        layout.addWidget(
+            _hint(
+                "Comment la parole est transformée en texte. Tout tourne en local ; "
+                "ces réglages arbitrent vitesse, qualité et charge machine."
+            )
+        )
+
+        layout.addWidget(_section("Aperçu en direct"))
+        self._cpu_partials = QCheckBox("Aperçu en direct sur CPU")
+        self._cpu_partials.setToolTip(
+            "Affiche le texte au fil de la parole même sans GPU, via un petit "
+            "modèle CPU (téléchargé une fois). Décoche sur une machine peu "
+            "puissante — la bulle garde alors l'onde sonore. (Le GPU n'est pas "
+            "concerné : il a toujours l'aperçu.)"
+        )
+        self._cpu_partials.setChecked(bool(settings.get("cpu_partials_enabled")))
+        layout.addWidget(self._cpu_partials)
+
+        self._backend_toast = QCheckBox("Prévenir au passage GPU → CPU")
+        self._backend_toast.setToolTip(
+            "Si le GPU lâche en cours de session, une note te le dit une fois "
+            "(« Passé sur CPU — un peu plus lent »). Les barres passent de vert "
+            "à bleu de toute façon ; ceci explique pourquoi."
+        )
+        self._backend_toast.setChecked(bool(settings.get("backend_toast")))
+        layout.addWidget(self._backend_toast)
+
+        layout.addWidget(_section("Audio avant décodage"))
+        self._trim_silence = QCheckBox("Couper les silences en début/fin de prise")
+        self._trim_silence.setToolTip(
+            "Retire le silence avant le premier mot et après le dernier, pour "
+            "décoder plus vite — surtout sans GPU, où chaque seconde muette est "
+            "décodée pour rien. Prudent : garde une marge (0,2 s au début, 0,4 s "
+            "à la fin), ne touche jamais aux pauses internes, et conserve la prise "
+            "entière au moindre doute (résultat trop court ou trop rogné)."
+        )
+        self._trim_silence.setChecked(bool(settings.get("trim_silence")))
+        layout.addWidget(self._trim_silence)
+
+        self._speech_leveler = QCheckBox("Égaliser le niveau de la voix")
+        self._speech_leveler.setToolTip(
+            "Compense une voix basse même quand un bruit fort (clac de clavier, "
+            "souffle) fausserait la normalisation classique : le niveau est "
+            "égalisé image par image avant chaque décodage, aperçus comme "
+            "transcription finale. Vérifié sur les prises réelles : aucun effet "
+            "sur les prises normales, nette amélioration sur les prises faibles."
+        )
+        self._speech_leveler.setChecked(bool(settings.get("speech_leveler")))
+        layout.addWidget(self._speech_leveler)
+
+        layout.addWidget(_section("Rattrapage"))
+        self._quiet_rescue = QCheckBox("Rattraper les prises parlées trop bas")
+        self._quiet_rescue.setToolTip(
+            "Quand la transcription finale perd des morceaux que l'aperçu en "
+            "direct avait pourtant captés (voix basse + un clac de clavier qui "
+            "fausse la normalisation), redécode automatiquement une copie au "
+            "niveau corrigé et garde le résultat le plus complet. Se déclenche "
+            "rarement, ne rend jamais une prise pire."
+        )
+        self._quiet_rescue.setChecked(bool(settings.get("quiet_rescue")))
+        layout.addWidget(self._quiet_rescue)
+        layout.addStretch(1)
+
+    def _build_privacy_page(self) -> None:
+        layout = self._add_page("🔒", "Vie privée")
+        layout.addWidget(_section("Suivi d'usage"))
+        layout.addWidget(
+            _hint(
+                "Le suivi d'usage est <b>100 % local</b> : il sert à voir quelles "
+                "fonctions tu utilises vraiment, et ne quitte jamais ta machine. "
+                "Décoche pour tout désactiver."
+            )
+        )
         self._telemetry = QCheckBox("Suivi d'usage local")
         self._telemetry.setChecked(telemetry.enabled())
         layout.addWidget(self._telemetry)
@@ -343,31 +490,35 @@ class SettingsDialog(QDialog):
         forget.clicked.connect(self._forget_telemetry)
         layout.addWidget(forget)
 
-        redact_hint = QLabel(
-            "Le <b>pare-feu PII</b> masque les secrets et identifiants vérifiés "
-            "(IBAN, n° de sécu, carte, clés d'API) <b>avant l'enregistrement</b> "
-            "dans l'historique. Le texte dicté est toujours collé tel quel : "
-            "seule la <i>copie conservée</i> est nettoyée. Attention, c'est "
-            "<b>irréversible</b> — la donnée masquée n'est pas gardée."
+        layout.addWidget(_section("Pare-feu PII"))
+        layout.addWidget(
+            _hint(
+                "Le <b>pare-feu PII</b> masque les secrets et identifiants vérifiés "
+                "(IBAN, n° de sécu, carte, clés d'API) <b>avant l'enregistrement</b> "
+                "dans l'historique. Le texte dicté est toujours collé tel quel : "
+                "seule la <i>copie conservée</i> est nettoyée. Attention, c'est "
+                "<b>irréversible</b> — la donnée masquée n'est pas gardée."
+            )
         )
-        redact_hint.setWordWrap(True)
-        layout.addWidget(redact_hint)
         self._redact = QCheckBox("Masquer les PII dans l'historique")
         self._redact.setChecked(bool(settings.get("pii_redact_history")))
         layout.addWidget(self._redact)
         denylist_btn = QPushButton("Termes à masquer / signaler…")
         denylist_btn.clicked.connect(self._open_privacy)
         layout.addWidget(denylist_btn)
+        layout.addStretch(1)
 
-        dev_hint = QLabel(
-            "Le <b>mode dev</b> enregistre l'<b>audio brut non masqué</b> de "
-            "chaque dictée sur le disque (local, jamais synchronisé) pour rejouer "
-            "un correctif. C'est ta <b>voix réelle</b>, pas le texte nettoyé — "
-            "laisse décoché sauf si tu déboggues. Quand c'est actif, un point "
-            "rouge reste affiché dans la barre des tâches."
+    def _build_dev_page(self) -> None:
+        layout = self._add_page("🛠", "Dev")
+        layout.addWidget(
+            _hint(
+                "Le <b>mode dev</b> enregistre l'<b>audio brut non masqué</b> de "
+                "chaque dictée sur le disque (local, jamais synchronisé) pour rejouer "
+                "un correctif. C'est ta <b>voix réelle</b>, pas le texte nettoyé — "
+                "laisse décoché sauf si tu déboggues. Quand c'est actif, un point "
+                "rouge reste affiché dans la barre des tâches."
+            )
         )
-        dev_hint.setWordWrap(True)
-        layout.addWidget(dev_hint)
         self._dev_recording = QCheckBox("Mode dev — enregistrer l'audio brut")
         self._dev_recording.setToolTip(
             "Enregistre ta voix non masquée localement (takes/<id>.wav), pour "
@@ -379,11 +530,9 @@ class SettingsDialog(QDialog):
 
         self._dev_recording.setChecked(takes.dev_recording_enabled())
         layout.addWidget(self._dev_recording)
+        layout.addStretch(1)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self._save)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
+    # ---- behaviour --------------------------------------------------------
 
     def _filter(self, text: str) -> None:
         needle = text.strip().casefold()
