@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.5.1 — 2026-09-09 · la version qui dit vrai
+
+A patch for one wrong string, which had been wrong for two releases.
+
+### Fixed
+- **The tray reported 0.3.0 while running 0.5.0.** `bugreport.app_version()` reads
+  `importlib.metadata.version("tuparles")`, and `poetry install` resolves path-dep
+  versions from **poetry.lock** — not from the packages' `pyproject.toml`. Bumping
+  the pyproject was therefore never enough: without a `poetry lock`, every install
+  re-stamped the old dist-info, and the label had been stale since v0.3.0. The lock
+  now tracks the real version, and `v0.5.0`'s own tag shipped with the stale one —
+  hence this patch rather than a moved tag.
+
+### Doctrine
+- **A version lives in as many places as your tooling reads it from.** Two
+  `pyproject.toml`s said 0.5.0, the lockfile said 0.4.0, and the installed
+  metadata — the only copy the UI actually reads — said 0.3.0. Bump the source,
+  re-lock, reinstall, then *look at the surface that displays it*.
+
+
 ## Sprint 39 — 2026-09-09 · 0.5.0 — le micro qu'on porte, la fenêtre qu'on lit, la carte qu'on prête
 
 Two reports from one session on Bluetooth headphones: the mic picker did not
