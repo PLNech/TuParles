@@ -72,3 +72,40 @@ already yields to any pre-set value.
   first, confirm the look, then decide whether to widen it.
 - `qt6-style-kvantum` has no candidate in this machine's configured repos —
   don't chase it; gtk3 already solves the immediate problem.
+
+## Correction (applied 2026-09-09): the right file is `~/.xsessionrc`, not `~/.zshenv`
+
+`~/.zshenv` only reaches processes started by a zsh shell. TuParles is launched
+by gnome-shell from `~/.local/share/applications/tuparles.desktop`, so it never
+sources a zsh rc and the export would have had no effect on the app it was
+meant to fix.
+
+The right hook is `~/.xsessionrc`, because of ordering:
+
+| Xsession.d script | priority | what it does |
+|---|---|---|
+| `40x11-common_xsessionrc` | 40 | sources `~/.xsessionrc` |
+| `99qt5ct` | 99 | `export QT_QPA_PLATFORMTHEME=qt5ct` **if unset** |
+
+Exporting at priority 40 means the `-z` guard at 99 finds the variable already
+set and stands down, so `gtk3` wins for the whole session — every GUI app, and
+terminals too, since they inherit from the session. No file needs editing.
+
+Applied:
+
+```sh
+# ~/.xsessionrc
+export QT_QPA_PLATFORMTHEME=gtk3
+```
+
+Takes effect at the next login. For the session already running,
+`systemctl --user set-environment QT_QPA_PLATFORMTHEME=gtk3` covers anything
+systemd launches from then on — but *not* apps launched by gnome-shell, which
+inherit gnome-shell's own login-time environment. Verified after the change:
+`QApplication` reports window colour `#2a2a2a` (the Adwaita dark palette)
+where it previously had none, and the style stays Fusion — correct, since a
+platform theme supplies the palette, not the style.
+
+**On Wayland this would be the wrong file too**: Xsession.d is not consulted,
+and the equivalent is `~/.config/environment.d/*.conf`. This box is
+`XDG_SESSION_TYPE=x11`, so `~/.xsessionrc` is right here.
