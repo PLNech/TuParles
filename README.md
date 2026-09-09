@@ -15,9 +15,13 @@ text lands in whatever window has focus. Everything runs on-device.
   <img src=".github/bubble-recording.png" alt="Recording: live waveform, transcript streaming in, freshest words kept visible"/>
 </p>
 
-| Vue complète (toggle dans le menu) | Le perchoir | Réglages |
-|:---:|:---:|:---:|
-| <img src=".github/bubble-full.png" alt="Full view: the whole take, word-wrapped, growing as you speak"/> | <img src=".github/tray-menu.png" alt="Tray menu: start/stop, copy last, history, settings, view toggle, about, quit"/> | <img src=".github/settings-langues.png" alt="Settings: searchable checklist of 100 languages, selected first"/> |
+| Vue complète (toggle dans le menu) | Le perchoir |
+|:---:|:---:|
+| <img src=".github/bubble-full.png" alt="Full view: the whole take, word-wrapped, growing as you speak"/> | <img src=".github/tray-menu.png" alt="Tray menu: start/stop, copy last, history, settings, view toggle, about, quit"/> |
+
+| Réglages › Langues | Réglages › Décodage |
+|:---:|:---:|
+| <img src=".github/settings-langues.png" alt="Settings, Languages page: searchable checklist of 100 languages, selected first"/> | <img src=".github/settings-decodage.png" alt="Settings, Decoding page: prefer-CPU toggle to leave the GPU free, live preview, pre-decode audio, quiet-take rescue"/> |
 
 *(screens rendered from the actual widgets by `scripts/readme_screens.py` —
 regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_screens.py`)*
@@ -180,6 +184,17 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
   qwen final decode still rules; partials just paint provisional text as you
   speak. Opt-out in *Réglages* (« Aperçu en direct sur CPU ») on a low-power
   box, where the bubble falls back to waveform-only.
+- **Lend the card back**: *Réglages › Décodage › « Préférer le CPU »* keeps
+  dictation off the GPU entirely, for when someone else wants it — training a
+  model, a game, a render. It is a choice, not a fallback, and the difference
+  matters: with it on the CUDA engine is never *constructed*, so no context and
+  no VRAM, rather than allocating and then standing down. Set before launch,
+  TuParles holds **0 MiB** and never even maps `libcudart`; toggled mid-session
+  it returns the ~2.3 GB of model weights from the next take, leaving ~190 MB of
+  CUDA context that only a restart can reclaim. `tuparles transcribe` honours it
+  too on `--device auto`, while an explicit `--device cuda` still wins. The
+  trade-off is stated plainly in the dialog: slower, and the CPU rung can't
+  follow code-switching segment by segment.
 - **Self-healing GPU**: if the CUDA context dies mid-session — a laptop
   suspend/resume is the classic culprit, leaving `nvidia-smi` happy but
   CUDA unusable — the engine rebuilds the context on the next take, and

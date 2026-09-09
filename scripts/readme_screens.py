@@ -54,6 +54,19 @@ def _dark_palette(app: QApplication) -> None:
     app.setPalette(pal)
 
 
+def _nav_row(dialog, label: str) -> int:
+    """Row index of the sidebar entry whose text contains `label`.
+
+    By name, not by number: a reordered sidebar would otherwise snapshot the
+    wrong page under the right filename, and nobody re-reads their own
+    screenshots closely enough to catch that.
+    """
+    for row in range(dialog._nav.count()):
+        if label in dialog._nav.item(row).text():
+            return row
+    raise SystemExit(f"no sidebar page matching {label!r}")
+
+
 def main() -> None:
     app = QApplication(sys.argv)
     _dark_palette(app)
@@ -94,9 +107,20 @@ def main() -> None:
         from tuparles.settings_ui import SettingsDialog
 
         dlg = SettingsDialog()
+        # The sidebar makes the page an explicit choice: this shot is captioned
+        # as the language checklist, so select that page rather than whichever
+        # one happens to be first. A fixed size instead of adjustSize(), which
+        # would resolve to the tallest page's size hint and leave the shot
+        # mostly empty.
+        dlg.resize(880, 600)
+        dlg._nav.setCurrentRow(_nav_row(dlg, "Langues"))
         dlg.show()
-        dlg.adjustSize()
+        QApplication.processEvents()
         _snap(dlg, OUT / "settings-langues.png")
+
+        dlg._nav.setCurrentRow(_nav_row(dlg, "Décodage"))
+        QApplication.processEvents()
+        _snap(dlg, OUT / "settings-decodage.png")
 
     print("Done.")
 

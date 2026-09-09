@@ -417,6 +417,28 @@ class SettingsDialog(QDialog):
             )
         )
 
+        layout.addWidget(_section("Silicium"))
+        layout.addWidget(
+            _hint(
+                "Quand quelqu'un d'autre veut la carte — entraînement d'un modèle, "
+                "jeu, rendu — la dictée peut tourner sur le CPU et ne réserver "
+                "<b>aucune VRAM</b> : le moteur CUDA n'est alors même pas construit. "
+                "Plus lent, et le CPU ne suit pas le code-switching segment par "
+                "segment (le GPU reste le plafond de qualité). S'applique à la prise "
+                "suivante, sans redémarrer : les ~2,3 Go du modèle sont rendus "
+                "aussitôt. Coché avant le lancement, TuParles ne touche pas la "
+                "carte du tout."
+            )
+        )
+        self._prefer_cpu = QCheckBox("Préférer le CPU — laisser le GPU libre")
+        self._prefer_cpu.setToolTip(
+            "Décoche pour reprendre le GPU dès la prise suivante. Si le GPU a "
+            "réellement lâché en cours de session, on reste sur CPU : la "
+            "préférence ne ressuscite pas une carte morte."
+        )
+        self._prefer_cpu.setChecked(bool(settings.get("prefer_cpu")))
+        layout.addWidget(self._prefer_cpu)
+
         layout.addWidget(_section("Aperçu en direct"))
         self._cpu_partials = QCheckBox("Aperçu en direct sur CPU")
         self._cpu_partials.setToolTip(
@@ -573,6 +595,7 @@ class SettingsDialog(QDialog):
         settings.put("casing_style", self._casing.currentData())
         settings.put("start_cue_sound", self._start_sound.isChecked())
         settings.put("tray_animation", self._tray_anim.isChecked())
+        settings.put("prefer_cpu", self._prefer_cpu.isChecked())
         settings.put("cpu_partials_enabled", self._cpu_partials.isChecked())
         settings.put("backend_toast", self._backend_toast.isChecked())
         settings.put("trim_silence", self._trim_silence.isChecked())

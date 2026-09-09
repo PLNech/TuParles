@@ -1,6 +1,6 @@
 # Changelog
 
-## Sprint 39 — 2026-09-09 · le micro qu'on porte, la fenêtre qu'on lit
+## Sprint 39 — 2026-09-09 · 0.5.0 — le micro qu'on porte, la fenêtre qu'on lit, la carte qu'on prête
 
 Two reports from one session on Bluetooth headphones: the mic picker did not
 list the headset that `pavucontrol` showed plainly, and *Réglages* rendered as
@@ -28,6 +28,34 @@ symptom suggested. Full write-up:
   its own `QScrollArea(widgetResizable=True)`.
 
 ### Added
+- **« Préférer le CPU » — leave the GPU to whoever else needs it** (#137). Not a
+  fallback, a *choice*: when someone wants the card for training a model, a game
+  or a render, dictation should step aside rather than compete for VRAM. The
+  daemon was holding **2316 MiB** while idle.
+
+  The distinction that makes it work: with the preference on, the CUDA engine is
+  never **constructed**. `GpuEngine()` preloads the CUDA libs and allocates VRAM
+  *in its constructor*, so "build it, then fall back" would still take the memory
+  the user is trying to free. Measured:
+
+  | when the preference is set | VRAM held by TuParles |
+  |---|---|
+  | before launch | **0 MiB** — `libcudart`/`libcublas` never even mapped |
+  | toggled mid-session | 2266 → **186 MiB** |
+
+  The 186 MiB is the CUDA *primary context*, which no library call can destroy
+  short of exiting the process; the ~2.1 GB of model weights are genuinely
+  returned. So the honest claim is "the weights come back immediately, the last
+  ~190 MB at the next restart" — not "it frees the card".
+
+  Lives in `ResilientEngine`, deliberately, rather than `load_engine()` returning
+  a bare CPU engine: a bare engine has nowhere to notice the setting changing
+  back, so the toggle would have been one-way until a restart. It also tracks
+  *why* it is on CPU — `"preference"` vs `"failure"` — because un-falling-back a
+  card that actually died would break every take after. `tuparles transcribe`
+  honours it too on `--device auto`, ahead of the ctranslate2 probe (so the
+  preferred path never imports it); an explicit `--device cuda` still wins,
+  because a flag you just typed beats a preference you once set.
 - **Réglages has a look of its own** (new `theme.py`). Nothing in the desktop
   package set a stylesheet, and this box resolves no Qt6 platform theme at all
   (it exports `QT_QPA_PLATFORMTHEME=qt5ct`, the Qt5 bridge, which Qt6 ignores) —
@@ -56,6 +84,16 @@ symptom suggested. Full write-up:
   sample, wide spread; the stream open itself dominates either way).
 
 ### Infra
+- **`tests/conftest.py`, at last**: an autouse fixture points `XDG_CONFIG_HOME`
+  and `XDG_CACHE_HOME` at a tmp dir for every test. The suite had been reading
+  whatever box it ran on — survivable while no engine consulted a setting at
+  construction, and not survivable the moment `prefer_cpu` reached
+  `ResilientEngine.__init__`: ticking a box in Réglages could have turned a green
+  suite red, the worst kind of flake because it looks like a code failure.
+- `ResilientEngine.engine_name` now names the rung that actually decoded
+  (whisper.cpp or qwen) instead of hardcoding `QwenCpuEngine`. That was a rare
+  white lie while CPU meant "the GPU died"; with CPU as a deliberate choice it
+  would have been the common case. One test asserted the lie and was corrected.
 - `tests/test_settings_layout.py` imposes the reported 738×578 and asserts no
   visible widget on any page is laid out shorter than its `minimumSizeHint()`
   (offscreen has no window manager, so the test inflicts the cramp itself),
@@ -66,6 +104,14 @@ symptom suggested. Full write-up:
   clean.
 
 ### Doctrine
+- **"Free the resource" and "don't take the resource" are different features.**
+  A fallback path already existed and was useless here: falling back happens
+  *after* the constructor has taken the VRAM. The lever was never the decode, it
+  was construction — and the discriminating test is "the factory was never
+  called", not "it decoded on CPU", which a built-then-abandoned GPU also passes.
+- **State the residue.** ~190 MB of CUDA context survives a mid-session release
+  and no API can reclaim it. Measuring it turned a clean marketing sentence into
+  a true one, and the true one is still a good feature.
 - **"No devices found" is a question about who is doing the enumerating.** The
   picker was not buggy; it was asking the wrong subsystem, and it had a rescan
   bolted on that could never have helped. Before hardening a retry, check that

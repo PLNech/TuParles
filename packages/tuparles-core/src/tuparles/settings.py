@@ -98,6 +98,16 @@ _DEFAULTS: dict[str, object] = {
     # can't load, the CPU bubble degrades to waveform-only.
     "cpu_partials_enabled": True,
     "cpu_partials_model": "base",
+    # Leave the GPU alone (#137). Not a fallback — a *choice*: when someone else
+    # wants the card (training a model, a game, a render), dictation should run
+    # on CPU rather than compete for VRAM. Default off, because the GPU is the
+    # better decode when it's free. On, the daemon never constructs the CUDA
+    # engine at all — no context, no VRAM — instead of allocating and then
+    # standing down. Read per take, so toggling it frees or reclaims the card
+    # from the next take onward without restarting the daemon. `tuparles
+    # transcribe` honours it too on `--device auto`; an explicit `--device cuda`
+    # still wins, because a flag you just typed beats a preference you once set.
+    "prefer_cpu": False,
     # Which whisper.cpp weight the promptable CPU rung loads for its FINAL decode
     # (#4) — distinct from cpu_partials_model (the small *preview* model). "base"
     # is the interactive default; "small"/"medium-q5" trade latency for accuracy

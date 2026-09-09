@@ -14,6 +14,7 @@ faster-whisper for live partials (`_CpuPartialsMixin`). The chooser is
 """
 
 import ctypes
+import gc
 import os
 import subprocess
 import tempfile
@@ -551,14 +552,30 @@ class ResilientEngine:
     ) -> None:
         self._gpu_factory = gpu_factory
         self._cpu_factory = cpu_factory
-        self._gpu = gpu_factory()  # may raise — load_engine() handles it
-        self._cpu = None  # built lazily, only if the GPU truly dies
-        self._on_cpu = False
+        self._cpu = None  # built lazily, only when CPU actually serves a take
+        self._on_cpu = bool(settings.get("prefer_cpu"))
+        # WHY we are on CPU, not just that we are: a preference can be undone,
+        # a dead card cannot. Without this, toggling "prefer CPU" off would try
+        # to resurrect a GPU that genuinely died and break every take after.
+        self._on_cpu_reason = "preference" if self._on_cpu else None
+        # Never construct the CUDA engine when asked to stay off the card:
+        # GpuEngine() preloads the CUDA libs and allocates VRAM *in its
+        # constructor*, so "build it, then fall back" would still take the
+        # memory the user is trying to leave free. Lazy is the whole feature.
+        self._gpu = None if self._on_cpu else gpu_factory()
 
     @property
     def engine_name(self) -> str:
-        """Backend that actually served the last decode (for telemetry)."""
-        return "QwenCpuEngine" if self._on_cpu else "GpuEngine"
+        """Backend that actually served the last decode (for telemetry).
+
+        Names the rung that really decoded — whisper.cpp or qwen, whichever
+        `_cpu_fallback_factory` picked. This used to hardcode qwen, which was a
+        rare white lie when CPU meant "the GPU died"; now that CPU can be the
+        deliberate choice, it would be the common case.
+        """
+        if not self._on_cpu:
+            return "GpuEngine"
+        return type(self._cpu).__name__ if self._cpu is not None else "CpuEngine"
 
     @property
     def active_backend(self) -> str:
@@ -569,6 +586,11 @@ class ResilientEngine:
 
     @property
     def supports_partials(self) -> bool:
+        # The daemon probes this once at take start, which makes it the natural
+        # place to honour a freshly flipped preference — otherwise the take you
+        # toggle on would still run its live previews against the card you just
+        # asked us to release.
+        self._sync_cpu_preference()
         # On GPU: whenever a live context exists. After a sticky fallback: defer
         # to the CPU engine, which now streams via its own small model (#127).
         if self._on_cpu:
@@ -587,18 +609,24 @@ class ResilientEngine:
     def transcribe(
         self, audio: np.ndarray, context: str | None = None
     ) -> Transcription:
-        if self._on_cpu:
+        self._sync_cpu_preference()
+        # `_gpu is None` is now reachable without a fallback having happened —
+        # the preference leaves it unbuilt — so belt-and-braces it here rather
+        # than trusting the two flags to stay in step.
+        if self._on_cpu or self._gpu is None:
             return self._cpu_engine().transcribe(audio, context)
+        gpu = self._gpu
         try:
-            return self._gpu.transcribe(audio, context)
+            return gpu.transcribe(audio, context)
         except Exception as exc:
             print(f"GPU decode failed ({str(exc)[:120]}); rebuilding CUDA context")
-            if self._rebuild_gpu():
+            if self._rebuild_gpu() and self._gpu is not None:
                 try:
                     return self._gpu.transcribe(audio, context)
                 except Exception as exc2:
                     print(f"GPU still failing ({str(exc2)[:120]}); CPU fallback")
             self._on_cpu = True
+            self._on_cpu_reason = "failure"
             return self._cpu_engine().transcribe(audio, context)
 
     def reset_partial_language(self) -> None:
@@ -634,6 +662,47 @@ class ResilientEngine:
         except Exception:
             return ""
 
+    def _sync_cpu_preference(self) -> None:
+        """Apply the "prefer CPU" setting, from the next take onward.
+
+        Turning it **on** drops the CUDA engine so the card is genuinely
+        released rather than merely idle — someone else wants the VRAM. It
+        rides the same sticky-fallback state a suspend/resume death uses, so
+        the bubble colour, telemetry and partials all follow with no second
+        mechanism to keep in sync.
+
+        Turning it **off** rebuilds the GPU only if the preference is what put
+        us here. If that rebuild fails the card is really gone, so we record
+        it as a failure and stop retrying — otherwise every take would pay
+        ~1.6 s to rediscover the same dead GPU.
+        """
+        prefer_cpu = bool(settings.get("prefer_cpu"))
+        if prefer_cpu and not self._on_cpu:
+            self._release_gpu()
+            self._on_cpu = True
+            self._on_cpu_reason = "preference"
+            print("CPU préféré (Réglages) — le GPU est libéré")
+        elif not prefer_cpu and self._on_cpu_reason == "preference":
+            if self._rebuild_gpu():
+                self._on_cpu = False
+                self._on_cpu_reason = None
+                print("Préférence CPU levée — retour au GPU")
+            else:
+                self._on_cpu_reason = "failure"
+                print("Préférence CPU levée mais le GPU ne répond pas — on reste CPU")
+
+    def _release_gpu(self) -> None:
+        """Drop the CUDA engine and the VRAM with it.
+
+        ctranslate2 frees the model on destruction, which only happens while
+        nothing else holds a reference — `self._gpu` is the only one the daemon
+        keeps. The explicit collect is because that reference may be the last
+        of a cycle, and "later" is not good enough when the point is to hand
+        the card to another process now.
+        """
+        self._gpu = None
+        gc.collect()
+
     def _rebuild_gpu(self) -> bool:
         try:
             self._gpu = self._gpu_factory()
@@ -652,7 +721,14 @@ def load_engine():
     """GPU (self-healing) if it answers, CPU fallback otherwise. Never crash
     at startup, and never get stuck with no STT after a suspend/resume. The CPU
     rung is whisper.cpp when installed (promptable, portable), else qwen —
-    chosen by `_cpu_fallback_factory`, here and inside ResilientEngine."""
+    chosen by `_cpu_fallback_factory`, here and inside ResilientEngine.
+
+    Note that "prefer CPU" is handled *inside* ResilientEngine, not by
+    returning a bare CPU engine here. A bare engine has nowhere to notice the
+    setting changing back, so the toggle would be one-way: off the GPU forever,
+    until a restart. ResilientEngine with a lazily-unbuilt GPU gives us both
+    directions and still never touches CUDA while the preference holds.
+    """
     try:
         return ResilientEngine()
     except Exception as exc:

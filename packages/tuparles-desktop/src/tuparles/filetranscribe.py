@@ -129,7 +129,11 @@ def pick_device(prefer: str = "auto") -> tuple[str, str, str]:
     """(device, compute_type, default_model) for the requested preference.
 
     `auto` uses the GPU when a CUDA device answers, else CPU — the same
-    "GPU if it answers, CPU otherwise" rule the daemon follows.
+    "GPU if it answers, CPU otherwise" rule the daemon follows, and it honours
+    the same `prefer_cpu` setting: a batch transcription is precisely when
+    you'd notice the card being taken out from under whoever else wants it. An
+    explicit `--device cuda` still wins, because a flag you just typed beats a
+    preference you once set.
 
     We probe via ctranslate2, not torch: ct2 is what actually decodes here, and
     torch was pulling in ~2 GB of wheels for a single boolean — a lean-install /
@@ -140,6 +144,10 @@ def pick_device(prefer: str = "auto") -> tuple[str, str, str]:
         return "cpu", "int8", CPU_FILE_MODEL
     want_gpu = prefer == "cuda"
     if prefer == "auto":
+        # Ahead of the probe on purpose: the preferred path then never imports
+        # ctranslate2 at all, which is also a faster start.
+        if settings.get("prefer_cpu"):
+            return "cpu", "int8", CPU_FILE_MODEL
         try:
             import ctranslate2
 

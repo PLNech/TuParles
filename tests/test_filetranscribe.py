@@ -603,3 +603,52 @@ def test_cli_force_overwrites_existing_json(tmp_path, monkeypatch):
     data = json.loads(js.read_text(encoding="utf-8"))
     assert data["schema_version"] == 1  # regenerated, not the stub
     assert "mine" not in data
+
+
+class TestPreferCpuSetting:
+    """Batch transcription honours « Préférer le CPU » too — it is exactly when
+    you'd notice the card being taken from whoever else is using it."""
+
+    def test_auto_respects_the_preference_without_probing(self, monkeypatch):
+        from tuparles import settings
+
+        settings.put("prefer_cpu", True)
+
+        def explode():
+            raise AssertionError("probed CUDA despite the CPU preference")
+
+        # If the preference is honoured before the probe, ctranslate2 is never
+        # imported at all — which is also a faster start.
+        import sys
+
+        class Boom:
+            def __getattr__(self, _name):
+                explode()
+
+        monkeypatch.setitem(sys.modules, "ctranslate2", Boom())
+        assert ft.pick_device("auto") == ("cpu", "int8", ft.CPU_FILE_MODEL)
+
+    def test_an_explicit_cuda_flag_beats_the_stored_preference(self):
+        """A flag you just typed beats a preference you once set."""
+        from tuparles import settings
+
+        settings.put("prefer_cpu", True)
+        assert ft.pick_device("cuda") == ("cuda", "float16", "large-v3-turbo")
+
+    def test_preference_off_falls_through_to_the_probe(self, monkeypatch):
+        from tuparles import settings
+
+        settings.put("prefer_cpu", False)
+        probed = []
+
+        class FakeCt2:
+            @staticmethod
+            def get_cuda_device_count():
+                probed.append(1)
+                return 1
+
+        import sys
+
+        monkeypatch.setitem(sys.modules, "ctranslate2", FakeCt2())
+        assert ft.pick_device("auto") == ("cuda", "float16", "large-v3-turbo")
+        assert probed == [1]
