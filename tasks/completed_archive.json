@@ -820,5 +820,10 @@
     "subject": "0.5.1 — the tray reported 0.3.0 while running 0.5.0",
     "completedAt": "2026-09-09",
     "learnings": "A version lives in as many places as your tooling reads it from, and the one the UI reads is the last to update. Two pyproject.toml said 0.5.0, poetry.lock said 0.4.0, installed dist-info said 0.3.0 — and the tray reads importlib.metadata, i.e. the dist-info. The non-obvious link: `poetry install` resolves PATH-dep versions from the LOCK, not from the path package's own pyproject, so bumping pyproject alone re-stamps stale metadata forever (silently, for two whole releases). Sequence is bump -> `poetry lock` -> `poetry install` -> then LOOK at the surface that displays it. `poetry check --lock` says 'All set!' even when the lock's path-dep version is stale, so it is not a guard for this. `poetry lock` on Poetry 2.x refreshes without updating deps (verified: 2 lines changed, identical content-hash, zero transitive drift) — no --no-update flag needed, that's 1.x. Release ops: a tag push fires release.yml which auto-creates the GitHub release from the FIRST '## ' CHANGELOG section but leaves the TITLE EMPTY — always `gh release edit --title` after. And a published tag that shipped a bug gets a patch release, not a moved tag: rewriting a ref someone may have fetched is not worth saving a version number."
+  },
+  {
+    "task": "Ship the 2026-09-29 performance/responsiveness sprint to main",
+    "date": "2026-09-29",
+    "learnings": "A foreign repo checked out INSIDE your tree poisons every tool that walks the tree: ruff flags its files, and 'lint passed' silently depends on which paths you scoped. The catch: CI's contract (`ruff check packages tests scripts`) already ignored it — the poison only shows in a bare `ruff check .`, so local and CI can disagree without either being wrong. Fix is one line of extend-exclude + a gitignore entry, not a lint chase. Also: verify `git ls-files` before renaming a 'missing' file — the installer already existed as install.sh; the untracked `install` was a byte-identical stray duplicate."
   }
 ]
