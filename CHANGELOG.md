@@ -22,6 +22,12 @@
   dismisses the keyboard, and starting recording clears search focus. The record
   button now changes color along with its recording label.
 
+### Shipped
+- Android **1.0.1 (vc7)** uploaded to Play `internal` (2026-09-29): the 2 h
+  safety cap, the direct-HTTP download fallback, and the mic-denial/retry/copy
+  fixes above, in one 21.5 MB signed AAB. First Console rollout still un-drafts
+  the app before alpha/production promotion can be API-driven.
+
 ### Developer checks
 - The responsiveness harness can exercise real GPU previews/finals alongside
   Analytics using public audio and isolated synthetic history. Language-switch
