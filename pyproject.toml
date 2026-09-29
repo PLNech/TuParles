@@ -89,6 +89,10 @@ target-version = "py311"
 # The two distributions' source roots, so ruff classifies `tuparles` as
 # first-party for import-sorting despite the packages/*/src layout.
 src = ["packages/tuparles-core/src", "packages/tuparles-desktop/src", "tests"]
+# CI lints only `packages tests scripts`; notebooks and the nechdroid checkout
+# (shared pl.nech.* commons, its own repo) sit outside that contract — exclude
+# them here too so a local `ruff check .` agrees with CI.
+extend-exclude = ["nechdroid", "notebooks"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["tuparles"]

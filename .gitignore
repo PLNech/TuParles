@@ -46,3 +46,9 @@ htmlcov/
 
 # Meeting QA reports — real names, real quotes: never public
 docs/reports/
+
+# Session-local Claude state
+.claude/
+
+# Foreign checkout: shared pl.nech.* commons, its own repo — never ours to ship
+nechdroid/
