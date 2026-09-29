@@ -240,16 +240,35 @@ class Recorder:
         )
         self.level = min(1.0, norm**LEVEL_GAMMA)
 
-    def snapshot(self) -> np.ndarray:
-        """Copy of everything captured so far, without stopping.
+    def snapshot(self, max_samples: int | None = None) -> np.ndarray:
+        """Copy the capture, optionally limited to its latest mono samples.
 
-        Feeds the live-partials loop: the GPU re-decodes this growing
-        buffer ~1x/s while the user keeps talking.
+        Only references to the callback-owned chunks are gathered under the
+        lock. The potentially expensive concatenation happens after the
+        callback can resume. A bounded snapshot walks backward from the newest
+        chunk, so its work depends on the requested window rather than the
+        length of the take.
         """
+        if max_samples is not None and max_samples < 0:
+            raise ValueError("max_samples must be non-negative")
+        if max_samples == 0:
+            return np.zeros(0, dtype=np.int16)
         with self._lock:
             if not self._chunks:
                 return np.zeros(0, dtype=np.int16)
-            return np.concatenate(self._chunks).reshape(-1)
+            if max_samples is None:
+                chunks = self._chunks.copy()
+            else:
+                chunks = []
+                remaining = max_samples
+                for chunk in reversed(self._chunks):
+                    chunks.append(chunk)
+                    remaining -= chunk.size
+                    if remaining <= 0:
+                        break
+                chunks.reverse()
+        audio = np.concatenate(chunks).reshape(-1)
+        return audio if max_samples is None else audio[-max_samples:]
 
     def stop(self) -> np.ndarray:
         """Stop capture and return the whole take as int16 mono.

@@ -1,11 +1,11 @@
 """The Analytics dashboard: a local mirror of what you say, do, and code.
 
-Three tabs, all rendered synchronously — they are cheap by construction:
+Three tabs, rendered on demand in a worker so opening the dialog stays responsive:
 
 * **Ton usage** — feature-usage counts + the discovery gap (which spoken-syntax
   features you have never reached). Pure sqlite, instant.
 * **Ta voix** — a tag cloud + keyphrases over your dictation history, via the
-  nlp engine at personal scale (sub-second).
+  nlp engine at personal scale.
 * **Ton code** — the last cached codebase EDA (read from disk, never computed
   live: a corpus build on the GUI thread would freeze the desktop, and the
   watchdog at daemon.py would say so).
@@ -16,6 +16,9 @@ surface for "which features earn their place?".
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterator
+
+from PySide6.QtCore import QObject, QRunnable, QThreadPool, QTimer, Signal, Slot
 from PySide6.QtWidgets import (
     QDialog,
     QLabel,
@@ -65,25 +68,29 @@ def _usage_html() -> str:
     return "".join(out)
 
 
-def _voice_html() -> str:
+def _voice_html() -> Iterator[str]:
+    """Show the cloud before the slower keyphrase pass completes."""
     if not introspect.nlp_available():
-        return (
+        yield (
             "<p>L'analyse de la voix a besoin des extras <code>nlp</code>. "
             "Installe-les avec <code>poetry install --with nlp</code>.</p>"
         )
+        return
     tags = introspect.utterance_tags(top=40)
     if not tags:
-        return "<p>Pas encore de dictées à analyser.</p>"
-    phrases = introspect.utterance_keyphrases(top=12)
+        yield "<p>Pas encore de dictées à analyser.</p>"
+        return
     cloud = " ".join(
         f"<span style='font-size:{8 + round(w * 22)}px'>{surface}</span>"
         for surface, w in tags
     )
     out = [f"<h3>Ta voix</h3><p>{cloud}</p>"]
+    yield "".join(out) + "<p>Chargement des expressions clés…</p>"
+    phrases = introspect.utterance_keyphrases(top=12)
     if phrases:
         items = "".join(f"<li>{p}</li>" for p, _score in phrases)
         out.append(f"<p><b>Expressions clés</b></p><ul>{items}</ul>")
-    return "".join(out)
+    yield "".join(out)
 
 
 def _code_html() -> str:
@@ -120,6 +127,36 @@ def _code_html() -> str:
     return "".join(out)
 
 
+class _RenderSignals(QObject):
+    progress = Signal(int, str)
+    finished = Signal(int, str, bool)
+
+
+class _RenderTab(QRunnable):
+    """Compute HTML without touching a widget from the worker thread."""
+
+    def __init__(self, index: int, render: Callable[[], str | Iterator[str]]) -> None:
+        super().__init__()
+        self.setAutoDelete(False)
+        self.index = index
+        self.render = render
+        self.signals = _RenderSignals()
+
+    def run(self) -> None:
+        html = ""
+        try:
+            result = self.render()
+            if isinstance(result, str):
+                html = result
+            else:
+                for html in result:
+                    self.signals.progress.emit(self.index, html)
+            failed = False
+        except Exception:
+            failed = True
+        self.signals.finished.emit(self.index, html, failed)
+
+
 class AnalyticsDialog(QDialog):
     """Local introspection in one window. Opened from the tray (#101)."""
 
@@ -135,14 +172,59 @@ class AnalyticsDialog(QDialog):
             )
             banner.setWordWrap(True)
             layout.addWidget(banner)
-        tabs = QTabWidget()
-        for title, html in (
-            ("Ton usage", _usage_html()),
-            ("Ta voix", _voice_html()),
-            ("Ton code", _code_html()),
-        ):
+        self._tabs = QTabWidget()
+        self._views = []
+        self._loaded: set[int] = set()
+        self._workers: dict[int, _RenderTab] = {}
+        self._closed = False
+        self._renderers = (_usage_html, _voice_html, _code_html)
+        for title in ("Ton usage", "Ta voix", "Ton code"):
             view = QTextBrowser()
             view.setOpenExternalLinks(True)
-            view.setHtml(html)
-            tabs.addTab(view, title)
-        layout.addWidget(tabs)
+            view.setHtml("<p>Chargement…</p>")
+            self._tabs.addTab(view, title)
+            self._views.append(view)
+        self._tabs.currentChanged.connect(self._load_tab)
+        layout.addWidget(self._tabs)
+        QTimer.singleShot(0, self._load_current_tab)
+
+    def _load_current_tab(self) -> None:
+        if not self._closed:
+            self._load_tab(self._tabs.currentIndex())
+
+    @Slot(int)
+    def _load_tab(self, index: int) -> None:
+        if self._closed or index < 0 or index in self._loaded or index in self._workers:
+            return
+        worker = _RenderTab(index, self._renderers[index])
+        self._workers[index] = worker  # keep the signal sender alive through delivery
+        worker.signals.progress.connect(self._render_progress)
+        worker.signals.finished.connect(self._render_finished)
+        QThreadPool.globalInstance().start(worker)
+
+    @Slot(int, str)
+    def _render_progress(self, index: int, html: str) -> None:
+        if not self._closed:
+            self._views[index].setHtml(html)
+
+    @Slot(int, str, bool)
+    def _render_finished(self, index: int, html: str, failed: bool) -> None:
+        self._workers.pop(index, None)
+        if self._closed:
+            return
+        if failed:
+            self._views[index].setHtml(
+                html.replace("<p>Chargement des expressions clés…</p>", "")
+                + "<p>Impossible de terminer cette analyse. Réessaie en rouvrant Analytics.</p>"
+            )
+        else:
+            self._views[index].setHtml(html)
+            self._loaded.add(index)
+
+    def closeEvent(self, event) -> None:
+        self._closed = True
+        super().closeEvent(event)
+
+    def done(self, result: int) -> None:
+        self._closed = True
+        super().done(result)

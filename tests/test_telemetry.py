@@ -218,6 +218,226 @@ class TestDashboardHtml:
         assert "Ton code" in html or "Aucune analyse" in html
 
 
+class TestDashboardAsync:
+    @pytest.fixture(autouse=True)
+    def _qt(self, monkeypatch):
+        pytest.importorskip("PySide6")
+        monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+        from PySide6.QtWidgets import QApplication
+
+        self.app = QApplication.instance() or QApplication([])
+
+    def _until(self, condition):
+        import time
+
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            self.app.processEvents()
+            if condition():
+                return
+            time.sleep(0.01)
+        pytest.fail("dashboard worker did not finish")
+
+    def test_lazy_render_keeps_dialog_responsive(self, monkeypatch):
+        from threading import Event
+
+        from tuparles import telemetry_dashboard as dashboard
+
+        started, release = Event(), Event()
+        calls = []
+
+        def slow_usage():
+            calls.append("usage")
+            started.set()
+            assert release.wait(3)
+            return "<p>Usage loaded</p>"
+
+        monkeypatch.setattr(dashboard, "enabled", lambda: True)
+        monkeypatch.setattr(dashboard, "_usage_html", slow_usage)
+        monkeypatch.setattr(dashboard, "_voice_html", lambda: "<p>Voice loaded</p>")
+        monkeypatch.setattr(dashboard, "_code_html", lambda: "<p>Code loaded</p>")
+        dialog = dashboard.AnalyticsDialog()
+        try:
+            assert "Chargement" in dialog._views[0].toPlainText()
+            assert calls == []  # construction did not run any renderer
+            self._until(started.is_set)
+            assert "Chargement" in dialog._views[0].toPlainText()
+            assert 1 not in dialog._workers  # inactive tabs are lazy
+            dialog._tabs.setCurrentIndex(1)
+            self._until(lambda: "Voice loaded" in dialog._views[1].toPlainText())
+            dialog._tabs.setCurrentIndex(0)
+            release.set()
+            self._until(lambda: "Usage loaded" in dialog._views[0].toPlainText())
+            assert calls == ["usage"]
+        finally:
+            release.set()
+            dialog.close()
+
+    @pytest.mark.parametrize("outcome", ["success", "failure", "close"])
+    def test_voice_cloud_visible_while_keyphrases_pending(self, monkeypatch, outcome):
+        from threading import Event
+
+        from tuparles import telemetry_dashboard as dashboard
+
+        started, release = Event(), Event()
+
+        def slow_phrases(**kwargs):
+            started.set()
+            assert release.wait(3)
+            if outcome == "failure":
+                raise RuntimeError("private exception detail")
+            return [("phrase complète", 0.1)]
+
+        monkeypatch.setattr(dashboard, "enabled", lambda: True)
+        monkeypatch.setattr(introspect, "nlp_available", lambda: True)
+        monkeypatch.setattr(introspect, "utterance_tags", lambda **kw: [("bonjour", 1)])
+        monkeypatch.setattr(introspect, "utterance_keyphrases", slow_phrases)
+        dialog = dashboard.AnalyticsDialog()
+        dialog._tabs.setCurrentIndex(1)
+        try:
+            self._until(
+                lambda: started.is_set() and "bonjour" in dialog._views[1].toPlainText()
+            )
+            assert 1 not in dialog._loaded
+            assert "Chargement des expressions" in dialog._views[1].toPlainText()
+            if outcome == "close":
+                dialog.close()
+            release.set()
+            self._until(lambda: 1 not in dialog._workers)
+            content = dialog._views[1].toPlainText()
+            assert "bonjour" in content
+            if outcome == "success":
+                assert "phrase complète" in content
+                assert "Chargement" not in content
+                assert 1 in dialog._loaded
+            elif outcome == "failure":
+                assert "Impossible" in content
+                assert "Chargement" not in content
+                assert "private exception" not in content
+            else:
+                assert "phrase complète" not in content
+                assert 1 not in dialog._loaded
+        finally:
+            release.set()
+            self._until(lambda: 1 not in dialog._workers)
+            dialog.close()
+
+    def test_late_result_after_close_is_ignored(self, monkeypatch):
+        from threading import Event
+
+        from tuparles import telemetry_dashboard as dashboard
+
+        started, release = Event(), Event()
+
+        def slow_usage():
+            started.set()
+            assert release.wait(3)
+            return "<p>Late result</p>"
+
+        monkeypatch.setattr(dashboard, "enabled", lambda: True)
+        monkeypatch.setattr(dashboard, "_usage_html", slow_usage)
+        dialog = dashboard.AnalyticsDialog()
+        try:
+            self._until(started.is_set)
+            dialog.close()
+            release.set()
+            self._until(lambda: not dialog._workers)
+            assert "Late result" not in dialog._views[0].toPlainText()
+            assert dialog._loaded == set()
+        finally:
+            release.set()
+            dialog.close()
+
+    def test_late_result_after_reject_is_ignored(self, monkeypatch):
+        from threading import Event
+
+        from tuparles import telemetry_dashboard as dashboard
+
+        started, release = Event(), Event()
+
+        def slow_usage():
+            started.set()
+            assert release.wait(3)
+            return "<p>Late result</p>"
+
+        monkeypatch.setattr(dashboard, "enabled", lambda: True)
+        monkeypatch.setattr(dashboard, "_usage_html", slow_usage)
+        dialog = dashboard.AnalyticsDialog()
+        try:
+            self._until(started.is_set)
+            dialog.reject()  # Escape uses QDialog's reject/done path
+            assert dialog._closed
+            release.set()
+            self._until(lambda: not dialog._workers)
+            assert "Late result" not in dialog._views[0].toPlainText()
+        finally:
+            release.set()
+            dialog.close()
+
+    def test_deleted_dialog_during_render(self, monkeypatch):
+        from threading import Event
+
+        from PySide6.QtCore import QCoreApplication, QEvent, QThreadPool
+        from shiboken6 import isValid
+
+        from tuparles import telemetry_dashboard as dashboard
+
+        started, release = Event(), Event()
+
+        def slow_usage():
+            started.set()
+            assert release.wait(3)
+            return "<p>Late result</p>"
+
+        monkeypatch.setattr(dashboard, "enabled", lambda: True)
+        monkeypatch.setattr(dashboard, "_usage_html", slow_usage)
+        dialog = dashboard.AnalyticsDialog()
+        try:
+            self._until(started.is_set)
+            dialog.deleteLater()
+            QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+            assert not isValid(dialog)
+        finally:
+            release.set()
+            assert QThreadPool.globalInstance().waitForDone(3000)
+            self.app.processEvents()  # queued signal cannot call a deleted receiver
+
+    def test_reopen_reads_new_events(self, tmp_path, monkeypatch):
+        from tuparles import telemetry_dashboard as dashboard
+
+        _isolate(tmp_path, monkeypatch)
+        first = dashboard.AnalyticsDialog()
+        self._until(lambda: 0 in first._loaded)
+        assert "Aucune donnée" in first._views[0].toPlainText()
+        first.close()
+
+        telemetry.event("command.fired", name="undo")
+        second = dashboard.AnalyticsDialog()
+        try:
+            self._until(lambda: 0 in second._loaded)
+            assert "undo" in second._views[0].toPlainText()
+        finally:
+            second.close()
+
+    def test_render_failure_replaces_loading_state(self, monkeypatch):
+        from tuparles import telemetry_dashboard as dashboard
+
+        def broken_usage():
+            raise RuntimeError("private detail must stay out of the UI")
+
+        monkeypatch.setattr(dashboard, "enabled", lambda: True)
+        monkeypatch.setattr(dashboard, "_usage_html", broken_usage)
+        dialog = dashboard.AnalyticsDialog()
+        try:
+            self._until(
+                lambda: not dialog._workers
+                and "Impossible" in dialog._views[0].toPlainText()
+            )
+            assert "private detail" not in dialog._views[0].toPlainText()
+        finally:
+            dialog.close()
+
+
 class _Recorder:
     recording = False
 

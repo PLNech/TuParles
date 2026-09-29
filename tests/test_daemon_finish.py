@@ -7,6 +7,8 @@ next one starts immediately while this one decodes. These pin that wiring with
 fakes — no Qt event loop, no real audio, no engine.
 """
 
+import threading
+import time
 from types import SimpleNamespace
 
 import numpy as np
@@ -37,14 +39,17 @@ class _Sig:
 
     def __init__(self):
         self.emits = []
+        self.emitted = threading.Event()
 
     def emit(self, *args):
         self.emits.append(args)
+        self.emitted.set()
 
 
 class _Bridge:
     def __init__(self):
         for name in (
+            "preview_candidate",
             "partial",
             "final",
             "command",
@@ -77,6 +82,9 @@ class _Recorder:
     def start(self):
         self.start_calls += 1
         self._recording = True
+
+    def snapshot(self, max_samples=None):
+        return self._audio[-max_samples:] if max_samples is not None else self._audio
 
 
 class _Bubble:
@@ -152,6 +160,105 @@ def test_combo_release_marks_hold_then_stops(monkeypatch):
     c.on_combo_release(HOTKEY_HOLD_S + 0.1)  # held long enough → release ends it
     assert captured["mode"] == "hold"
     assert c._ending_via_hold is False  # consumed, not left armed for the next
+
+
+def _preview_controller(monkeypatch):
+    class _Engine:
+        supports_partials = True
+        partial_window_s = 1
+
+        def __init__(self):
+            self.entered = threading.Event()
+            self.release = threading.Event()
+            self.calls = 0
+            self.resets = 0
+
+        def reset_partial_language(self):
+            self.resets += 1
+
+        def transcribe_partial(self, audio):
+            self.calls += 1
+            if self.calls == 1:
+                self.entered.set()
+                assert self.release.wait(3), "test failed to release first decode"
+                return "old preview"
+            return "new preview"
+
+    monkeypatch.setattr(daemon_mod, "capture_target", DeliveryTarget)
+    monkeypatch.setattr(daemon_mod.cue, "play_start", lambda: None)
+    monkeypatch.setattr(daemon_mod.telemetry, "event", lambda *a, **k: None)
+    monkeypatch.setattr(
+        daemon_mod.settings,
+        "get",
+        lambda key: 3 if key == "queue_depth_cap" else False,
+    )
+    engine = _Engine()
+    recorder = _Recorder(recording=False)
+    bridge = _Bridge()
+    controller = _controller(engine, recorder, bridge)
+    return controller, engine, recorder, bridge
+
+
+def _wait_for(predicate):
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline:
+        if predicate():
+            return
+        time.sleep(0.005)
+    pytest.fail("timed out waiting for preview worker")
+
+
+def test_rapid_stop_start_drops_inflight_preview(monkeypatch):
+    """A blocked old decode cannot paint into the next recording or reset its
+    language state after the next worker starts."""
+    c, engine, rec, bridge = _preview_controller(monkeypatch)
+
+    # Drain the recorder off-thread, as production does, without starting a
+    # decode worker (which this lifecycle test does not need).
+    def drain(*_args):
+        rec.stop()
+        c._stopping = False
+
+    monkeypatch.setattr(c, "_stop_and_enqueue", drain)
+    c.toggle()
+    old_generation = c._preview_generation
+    assert engine.entered.wait(3)
+    c.toggle()
+    _wait_for(lambda: not c._stopping)
+    c.toggle()
+    new_generation = c._preview_generation
+    assert new_generation != old_generation
+    engine.release.set()
+    _wait_for(lambda: bridge.preview_candidate.emitted.is_set())
+    assert engine.calls >= 2
+    assert engine.resets == 2  # each take reset under the model lock
+    assert all(args[0] == new_generation for args in bridge.preview_candidate.emits)
+
+    # A candidate already queued to the GUI before stop is also rejected when
+    # it finally dispatches after the next take begins.
+    c._publish_partial(old_generation, "queued old", "Queued old")
+    assert bridge.partial.emits == []
+    assert c._last_partial == ""
+    c._publish_partial(*bridge.preview_candidate.emits[0])
+    assert bridge.partial.emits == [("New preview",)]
+    assert c._last_partial == "new preview"
+    c._partial_stop.set()
+
+
+def test_cancel_drops_inflight_and_queued_preview(monkeypatch):
+    c, engine, rec, bridge = _preview_controller(monkeypatch)
+    c.toggle()
+    generation = c._preview_generation
+    assert engine.entered.wait(3)
+    c.cancel()
+    _wait_for(lambda: not c._stopping)
+    assert not rec.recording
+    engine.release.set()
+    _wait_for(lambda: not c._engine_lock.locked())
+    assert bridge.preview_candidate.emits == []
+    c._publish_partial(generation, "queued old", "Queued old")
+    assert bridge.partial.emits == []
+    assert c._last_partial == ""
 
 
 def test_depth_cap_refuses_new_take_with_toast(monkeypatch):

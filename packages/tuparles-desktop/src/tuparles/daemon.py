@@ -85,6 +85,7 @@ class Bridge(QObject):
     toggled = Signal()
     combo_released = Signal(float)  # hotkey combo let go after N seconds
     cancelled = Signal()  # Esc — abort an in-flight take
+    preview_candidate = Signal(int, str, str)  # generation, raw, display text
     partial = Signal(str)
     final = Signal(str)
     command = Signal(str)  # a voice edit ran — short label for the toast
@@ -118,7 +119,8 @@ class Controller(QObject):
         self._bridge = bridge
         self._recorder = recorder
         self._engine_lock = threading.Lock()  # partials vs final decode
-        self._stop_partials = threading.Event()
+        self._partial_stop: threading.Event | None = None
+        self._preview_generation = 0
         self._press_started_take = False  # hold-to-talk: release only stops
         # a recording the same press started, never an ongoing toggled take
         self._target = DeliveryTarget()  # window snapshotted when a take starts
@@ -171,7 +173,8 @@ class Controller(QObject):
         if self._recorder.recording:
             self._press_started_take = False
             self._stopping = True
-            self._stop_partials.set()
+            if self._partial_stop is not None:
+                self._partial_stop.set()
             # stop() drains/closes the PortAudio stream and once stalled 65 s
             # (id 162). It used to run HERE on the GUI thread → whole-UI freeze.
             # Now stop() runs on a worker and ENQUEUES the take for decode; the
@@ -200,6 +203,7 @@ class Controller(QObject):
                 return
             self._press_started_take = True
             self._last_partial = ""  # fresh take, no preview shown yet (#10)
+            self._preview_generation += 1
             # Snapshot the destination window NOW, while it still has focus and
             # gnome-shell is calm — before the bubble shows and (on Wayland)
             # steals focus. Captures class + (X11) window id, so a take can paste
@@ -219,13 +223,17 @@ class Controller(QObject):
             self._bubble.start_recording()
             self._bridge.state.emit("recording")
             if getattr(self._engine, "supports_partials", False):
-                # Fresh sticky-language state per take (translation-flip guard):
-                # the previous take's language must not pre-condition this one.
-                reset_lang = getattr(self._engine, "reset_partial_language", None)
-                if callable(reset_lang):
-                    reset_lang()
-                self._stop_partials.clear()
-                threading.Thread(target=self._partials_loop, daemon=True).start()
+                # This event belongs only to this take. A later start never
+                # clears it, even if the old worker is still decoding.
+                stop_event = threading.Event()
+                self._partial_stop = stop_event
+                threading.Thread(
+                    target=self._partials_loop,
+                    args=(stop_event, self._preview_generation),
+                    daemon=True,
+                ).start()
+            else:
+                self._partial_stop = None
 
     @Slot()
     def cancel(self) -> None:
@@ -236,7 +244,8 @@ class Controller(QObject):
             return
         self._press_started_take = False
         self._stopping = True  # block re-entry while the stream tears down
-        self._stop_partials.set()
+        if self._partial_stop is not None:
+            self._partial_stop.set()
         self._bubble.cancel()
         self._emit_state()
         print("take cancelled (Esc)")
@@ -276,9 +285,18 @@ class Controller(QObject):
             self._bubble, "hide", Qt.ConnectionType.BlockingQueuedConnection
         )
 
-    def _partials_loop(self) -> None:
-        """~1 Hz greedy re-decode of the whole growing buffer (≤1 s on GPU)."""
-        while not self._stop_partials.is_set():
+    def _partials_loop(self, stop_event: threading.Event, generation: int) -> None:
+        """Self-paced greedy preview of this recording's bounded audio tail."""
+        # Reset the engine's language state under the same lock as every
+        # decode. The prior take may still be finishing a partial when this
+        # worker starts; waiting here keeps that work off the GUI thread.
+        with self._engine_lock:
+            if stop_event.is_set():
+                return
+            reset_lang = getattr(self._engine, "reset_partial_language", None)
+            if callable(reset_lang):
+                reset_lang()
+        while not stop_event.is_set():
             started = time.monotonic()
             # Tail window only: the bubble elides left so older audio is
             # invisible anyway, and a bounded window bounds decode latency
@@ -288,16 +306,16 @@ class Controller(QObject):
             # detection tracks the current language (#3 follow-up). Hot-read so
             # a setting change applies to the next tick, no restart.
             window_s = getattr(self._engine, "partial_window_s", PARTIAL_WINDOW_S)
-            audio = self._recorder.snapshot()[-SAMPLE_RATE * window_s :]
+            audio = self._recorder.snapshot(max_samples=SAMPLE_RATE * window_s)
             if audio.size >= SAMPLE_RATE * PARTIAL_MIN_AUDIO_S:
                 with self._engine_lock:
-                    if self._stop_partials.is_set():
+                    if stop_event.is_set():
                         return
                     try:
                         text = self._engine.transcribe_partial(audio)
                     except Exception:
                         text = ""  # a dropped partial is invisible; final decode rules
-                if text and not self._stop_partials.is_set():
+                if text and not stop_event.is_set():
                     # Cap what reaches the UI: a hallucination loop can emit
                     # thousands of chars and text layout is O(length) per
                     # frame. The bubble shows ~600 chars at most anyway.
@@ -308,10 +326,23 @@ class Controller(QObject):
                     # what you watch matches what will land — punctuation,
                     # slashes, lexicon fixes live, no repeat-collapse, no command
                     # parsing (#132). The two stay separate on purpose.
-                    self._last_partial = text
-                    self._bridge.partial.emit(preview(text))
+                    self._bridge.preview_candidate.emit(generation, text, preview(text))
             elapsed = time.monotonic() - started
-            self._stop_partials.wait(max(0.1, PARTIAL_PERIOD_S - elapsed))
+            stop_event.wait(max(0.1, PARTIAL_PERIOD_S - elapsed))
+
+    @Slot(int, str, str)
+    def _publish_partial(self, generation: int, raw: str, display: str) -> None:
+        """Discard queued previews after stop/cancel or a later take starts."""
+        if (
+            generation != self._preview_generation
+            or self._stopping
+            or not self._recorder.recording
+            or self._partial_stop is None
+            or self._partial_stop.is_set()
+        ):
+            return
+        self._last_partial = raw  # only text that actually reached the bubble
+        self._bridge.partial.emit(display)
 
     def start(self) -> None:
         """Spawn the persistent decode worker. Called once from run(); kept out
@@ -787,6 +818,7 @@ def run() -> None:
     bridge.toggled.connect(controller.toggle_from_hotkey)
     bridge.combo_released.connect(controller.on_combo_release)
     bridge.cancelled.connect(controller.cancel)
+    bridge.preview_candidate.connect(controller._publish_partial)
     bridge.partial.connect(bubble.set_partial)
     bridge.final.connect(bubble.show_final)
     bridge.command.connect(bubble.show_final)  # edit confirmation toast
