@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased — performance and responsiveness
+
+### Fixed
+- Rapid stop/start no longer lets an old live-preview worker resume on the next
+  take. Cancellation belongs to each recording, and queued preview results are
+  checked against the active recording before reaching the bubble.
+- Analytics tabs load on demand in background workers, with loading/error states.
+  Closing or dismissing the dialog discards late results; reopening reads fresh
+  data rather than retaining an application-wide history cache.
+- Analytics displays the voice tag cloud while keyphrases are still loading;
+  a keyphrase failure keeps the cloud visible with a retry explanation.
+- Android microphone denial now explains how to enable recording in app settings.
+  Failed first-run model downloads show the same error reason as the model picker
+  and offer Retry; download controls fit on narrow screens.
+
+### Changed
+- Live previews copy only their configured audio window. Audio concatenation runs
+  outside the recorder callback lock, so copy cost stays bounded on long takes.
+- Android transcripts support text selection/copy, the Search keyboard action
+  dismisses the keyboard, and starting recording clears search focus. The record
+  button now changes color along with its recording label.
+
+### Developer checks
+- The responsiveness harness can exercise real GPU previews/finals alongside
+  Analytics using public audio and isolated synthetic history. Language-switch
+  scoring records unobserved switches as censored, with GPU performance and
+  quality findings documented in the September 29 performance audit.
+
 ## 0.5.1 — 2026-09-09 · la version qui dit vrai
 
 A patch for one wrong string, which had been wrong for two releases.

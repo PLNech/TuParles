@@ -35,6 +35,8 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
   preview shows spoken punctuation, slashes and known mishears *as they'll
   land* ("slash impeccable" reads "/impeccable" while you speak), not the raw
   decoder words the final would then quietly fix.
+  Preview audio copies stay bounded to that window even on long recordings,
+  and starting a new take cannot revive the previous take's preview worker.
 - **Picks up the mic you're actually wearing** — the mic list is read from
   the sound server (PipeWire/PulseAudio), not from PortAudio, which on a modern
   desktop can only see `pulse` and `default` and never enumerates a Bluetooth
@@ -128,6 +130,8 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
   cached codebase analysis that seeds the decoder). Feature usage is
   tracked **locally and opt-out** — nothing leaves the machine; toggle it
   off or wipe it in *Réglages › Vie privée*.
+  Tabs load on demand in the background, so opening Analytics keeps the
+  interface responsive; reopening it picks up fresh data.
 - **PII firewall — minimize before persist** — what you dictate is always
   pasted verbatim, but the *stored* copy is cleaned first: secrets and
   checksum-validated identifiers (IBAN, n° de sécu, credit card, API keys)
