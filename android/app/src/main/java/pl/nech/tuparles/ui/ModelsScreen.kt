@@ -291,7 +291,7 @@ private fun ModelActions(
     }
 }
 
-private fun failLine(reason: FailReason): String = when (reason) {
+internal fun failLine(reason: FailReason): String = when (reason) {
     FailReason.NETWORK -> "Échec réseau — vérifiez la connexion."
     FailReason.CHECKSUM -> "Fichier corrompu (empreinte invalide) — non installé."
     FailReason.STORAGE -> "Espace de stockage insuffisant."

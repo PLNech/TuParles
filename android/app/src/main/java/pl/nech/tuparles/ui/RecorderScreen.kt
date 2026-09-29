@@ -1,8 +1,11 @@
 package pl.nech.tuparles.ui
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
@@ -23,6 +26,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -40,6 +46,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -51,15 +58,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextOverflow
@@ -83,20 +92,27 @@ fun RecorderScreen(
     homeModel: HomeModelViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val modelState by homeModel.state.collectAsStateWithLifecycle()
     // The field echoes the raw query synchronously; only search execution is debounced (#41).
     val queryText by viewModel.queryText.collectAsStateWithLifecycle()
 
     var pendingDelete by remember { mutableStateOf<Note?>(null) }
+    var micPermissionDenied by rememberSaveable { mutableStateOf(false) }
 
     // A single toggle: request the mic (and notifications on 33+) on first use.
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { grants ->
-        if (grants[Manifest.permission.RECORD_AUDIO] == true) RecordingService.toggle(context)
+        if (grants[Manifest.permission.RECORD_AUDIO] == true) {
+            RecordingService.toggle(context)
+        } else {
+            micPermissionDenied = true
+        }
     }
     val onRecordTap: () -> Unit = {
+        focusManager.clearFocus()
         val micGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
         if (micGranted) {
@@ -110,6 +126,26 @@ fun RecorderScreen(
             }
             permissionLauncher.launch(perms.toTypedArray())
         }
+    }
+
+    if (micPermissionDenied) {
+        AlertDialog(
+            onDismissRequest = { micPermissionDenied = false },
+            title = { Text("Autoriser le microphone") },
+            text = { Text("Pour enregistrer, autorisez le microphone dans les paramètres de l'application, puis appuyez à nouveau sur le micro.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    micPermissionDenied = false
+                    context.startActivity(Intent(
+                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:${context.packageName}"),
+                    ))
+                }) { Text("Ouvrir les paramètres") }
+            },
+            dismissButton = {
+                TextButton(onClick = { micPermissionDenied = false }) { Text("Plus tard") }
+            },
+        )
     }
 
     Scaffold(
@@ -222,12 +258,15 @@ private fun RecordControl(
         FilledIconButton(
             onClick = onTap,
             enabled = !transcribing,
+            colors = IconButtonDefaults.filledIconButtonColors(
+                containerColor = buttonColor,
+                contentColor = if (recording) MaterialTheme.colorScheme.onError else MaterialTheme.colorScheme.onPrimary,
+            ),
             modifier = Modifier.size(96.dp),
         ) {
             Icon(
                 imageVector = if (recording) Icons.Filled.Stop else Icons.Filled.Mic,
                 contentDescription = if (recording) "Arrêter" else "Enregistrer",
-                tint = Color.Unspecified,
                 modifier = Modifier.size(44.dp),
             )
         }
@@ -312,6 +351,7 @@ private fun LiveTranscript(committed: String?, partial: String?) {
 
 @Composable
 private fun SearchField(query: String, onQueryChange: (String) -> Unit) {
+    val focusManager = LocalFocusManager.current
     OutlinedTextField(
         value = query,
         onValueChange = onQueryChange,
@@ -319,6 +359,8 @@ private fun SearchField(query: String, onQueryChange: (String) -> Unit) {
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 4.dp),
         singleLine = true,
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
         placeholder = { Text("Chercher dans les transcriptions") },
         leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
         trailingIcon = {
@@ -387,13 +429,15 @@ private fun NoteRow(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(Format.timestamp(note.createdAt), style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    text = subtitle(note, hasTranscript, query, expanded, modelReady),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = if (expanded) Int.MAX_VALUE else 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
+                SelectionContainer {
+                    Text(
+                        text = subtitle(note, hasTranscript, query, expanded, modelReady),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = if (expanded) Int.MAX_VALUE else 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
             ShareButton(hasTranscript, onShareAudio, onShareText)
             IconButton(onClick = onDelete) {
@@ -513,15 +557,27 @@ private fun FirstRunModelCard(
                     )
                 }
                 else -> {
+                    if (download is ModelDownloadState.Failed) {
+                        Text(
+                            text = failLine(download.reason),
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                    }
+                    Button(
+                        onClick = onDownload,
+                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                    ) {
+                        val action = if (download is ModelDownloadState.Failed) "Réessayer" else "Télécharger"
+                        Text("$action (${Format.megabytes(recommended.sizeBytes)})")
+                    }
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 12.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Button(onClick = onDownload) {
-                            Text("Télécharger (${Format.megabytes(recommended.sizeBytes)})")
-                        }
                         TextButton(onClick = onOpenSettings) { Text("Choisir") }
                         Spacer(Modifier.weight(1f))
                         TextButton(onClick = onDismiss) { Text("Plus tard") }

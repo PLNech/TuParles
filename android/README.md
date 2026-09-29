@@ -17,6 +17,11 @@ audio-only when it is not, and lets you search back through everything you have 
 
 ## What it does
 
+The recorder explains denied microphone access and links to app settings. The
+first-run model card shows download failures with a retry action, with controls
+stacked to fit narrow screens. Note text supports selection/copy; the keyboard's
+Search action dismisses the keyboard, and tapping Record clears search focus.
+
 | Feature | How |
 |---|---|
 | **Record** | A foreground `RecordingService` (type `microphone`) captures 16 kHz mono PCM16 via `AudioRecord`, saves a canonical WAV to app-private storage. A take survives screen-off and app-switch — the exact failure that motivated the rebuild. A **2 h safety cap** auto-stops a forgotten recording; long think-aloud takes (30–90 min) are the design point. |
