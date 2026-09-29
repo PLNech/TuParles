@@ -1,0 +1,317 @@
+{
+  "backend": "gpu_large_v3_turbo_float16",
+  "case_count": 4,
+  "cases": [
+    {
+      "direction": "fr-en",
+      "label": "case_1",
+      "lead_s": 10,
+      "observation_horizon_s": 24.0,
+      "scores": {
+        "baseline": {
+          "confirmed": 1,
+          "events": [
+            {
+              "boundary_s": 10.0,
+              "confirmed": true,
+              "lag_s": 21.0,
+              "observed_horizon_s": 24.0,
+              "target_already_selected_before_boundary": false,
+              "target_language": "en",
+              "unknown_windows": 0,
+              "windows": 25
+            }
+          ],
+          "median_confirmed_lag_s": 21.0,
+          "stable_windows": 1,
+          "switches": 1,
+          "unconfirmed_within_horizon": 0
+        },
+        "prototype": {
+          "confirmed": 0,
+          "events": [
+            {
+              "boundary_s": 10.0,
+              "confirmed": false,
+              "lag_s": null,
+              "observed_horizon_s": 24.0,
+              "target_already_selected_before_boundary": false,
+              "target_language": "en",
+              "unknown_windows": 0,
+              "windows": 25
+            }
+          ],
+          "median_confirmed_lag_s": null,
+          "stable_windows": 1,
+          "switches": 1,
+          "unconfirmed_within_horizon": 1
+        }
+      },
+      "screen_confidence_bucket": "both_ge_0_90",
+      "splice_s": 10.0,
+      "target_s": 24
+    },
+    {
+      "direction": "en-fr",
+      "label": "case_2",
+      "lead_s": 10,
+      "observation_horizon_s": 24.0,
+      "scores": {
+        "baseline": {
+          "confirmed": 1,
+          "events": [
+            {
+              "boundary_s": 10.0,
+              "confirmed": true,
+              "lag_s": 4.0,
+              "observed_horizon_s": 24.0,
+              "target_already_selected_before_boundary": false,
+              "target_language": "fr",
+              "unknown_windows": 0,
+              "windows": 25
+            }
+          ],
+          "median_confirmed_lag_s": 4.0,
+          "stable_windows": 1,
+          "switches": 1,
+          "unconfirmed_within_horizon": 0
+        },
+        "prototype": {
+          "confirmed": 1,
+          "events": [
+            {
+              "boundary_s": 10.0,
+              "confirmed": true,
+              "lag_s": 6.0,
+              "observed_horizon_s": 24.0,
+              "target_already_selected_before_boundary": false,
+              "target_language": "fr",
+              "unknown_windows": 0,
+              "windows": 25
+            }
+          ],
+          "median_confirmed_lag_s": 6.0,
+          "stable_windows": 1,
+          "switches": 1,
+          "unconfirmed_within_horizon": 0
+        }
+      },
+      "screen_confidence_bucket": "both_ge_0_90",
+      "splice_s": 10.0,
+      "target_s": 24
+    },
+    {
+      "direction": "fr-en",
+      "label": "case_3",
+      "lead_s": 10,
+      "observation_horizon_s": 24.0,
+      "scores": {
+        "baseline": {
+          "confirmed": 1,
+          "events": [
+            {
+              "boundary_s": 10.0,
+              "confirmed": true,
+              "lag_s": 21.0,
+              "observed_horizon_s": 24.0,
+              "target_already_selected_before_boundary": false,
+              "target_language": "en",
+              "unknown_windows": 0,
+              "windows": 25
+            }
+          ],
+          "median_confirmed_lag_s": 21.0,
+          "stable_windows": 1,
+          "switches": 1,
+          "unconfirmed_within_horizon": 0
+        },
+        "prototype": {
+          "confirmed": 1,
+          "events": [
+            {
+              "boundary_s": 10.0,
+              "confirmed": true,
+              "lag_s": 24.0,
+              "observed_horizon_s": 24.0,
+              "target_already_selected_before_boundary": false,
+              "target_language": "en",
+              "unknown_windows": 0,
+              "windows": 25
+            }
+          ],
+          "median_confirmed_lag_s": 24.0,
+          "stable_windows": 1,
+          "switches": 1,
+          "unconfirmed_within_horizon": 0
+        }
+      },
+      "screen_confidence_bucket": "both_ge_0_90",
+      "splice_s": 10.0,
+      "target_s": 24
+    },
+    {
+      "direction": "en-fr",
+      "label": "case_4",
+      "lead_s": 10,
+      "observation_horizon_s": 24.0,
+      "scores": {
+        "baseline": {
+          "confirmed": 1,
+          "events": [
+            {
+              "boundary_s": 10.0,
+              "confirmed": true,
+              "lag_s": 9.0,
+              "observed_horizon_s": 24.0,
+              "target_already_selected_before_boundary": false,
+              "target_language": "fr",
+              "unknown_windows": 0,
+              "windows": 25
+            }
+          ],
+          "median_confirmed_lag_s": 9.0,
+          "stable_windows": 1,
+          "switches": 1,
+          "unconfirmed_within_horizon": 0
+        },
+        "prototype": {
+          "confirmed": 1,
+          "events": [
+            {
+              "boundary_s": 10.0,
+              "confirmed": true,
+              "lag_s": 13.0,
+              "observed_horizon_s": 24.0,
+              "target_already_selected_before_boundary": false,
+              "target_language": "fr",
+              "unknown_windows": 0,
+              "windows": 25
+            }
+          ],
+          "median_confirmed_lag_s": 13.0,
+          "stable_windows": 1,
+          "switches": 1,
+          "unconfirmed_within_horizon": 0
+        }
+      },
+      "screen_confidence_bucket": "both_ge_0_90",
+      "splice_s": 10.0,
+      "target_s": 24
+    }
+  ],
+  "cases_by_direction": {
+    "en-fr": 2,
+    "fr-en": 2
+  },
+  "compute_type": "float16",
+  "donor_reuse": {
+    "appearances_beyond_first_use": 1,
+    "distinct_donors_used": 7,
+    "donor_appearances": 8,
+    "maximum_uses_of_one_donor": 2
+  },
+  "donor_screening": {
+    "accepted_en": 3,
+    "accepted_fr": 11,
+    "confidence_floor": 0.85,
+    "screen_outcomes": {
+      "accepted": 14,
+      "language_disagreement": 2,
+      "language_or_duration": 36,
+      "low_confidence": 4
+    },
+    "screened_donors": 56,
+    "subwindow_seconds": 3,
+    "subwindows_per_donor": 3
+  },
+  "filters": {
+    "consented_rows": 62,
+    "duration_filtered": 6,
+    "eligible": 56,
+    "selected": 56
+  },
+  "gpu_authorization_marker_present_at_model_initialization": true,
+  "limitations": {
+    "constructed_splices_not_natural_switches": true,
+    "labels_automatically_screened_not_human_validated": true,
+    "no_whole_recording_reference_comparisons": true,
+    "splice_is_target_onset_not_human_annotated_first_phoneme": true,
+    "transcript_mismatch_does_not_establish_translation_error": true,
+    "unconfirmed_switches_are_censored_not_zero_lag": true
+  },
+  "method": {
+    "audio": "consented donor clips concatenated in memory; exact splice at lead duration; no gap; no audio persisted",
+    "baseline": "fresh FR/EN detection each 1 Hz window, production StickyLanguage hysteresis, greedy partial decode",
+    "prototype": "fresh detection until tracker locks, then fresh detection every third window, greedy partial decode",
+    "score": "tracker conditioning language confirmed at one post-boundary window; tracker itself retains production two-consecutive-detection hysteresis",
+    "synthetic_scorer_validation_passed": true
+  },
+  "model": "large-v3-turbo",
+  "offline_model_loading": true,
+  "output_agreement": {
+    "exact_match_rate": 0.8309,
+    "language_comparisons": 134,
+    "language_disagreements": 13,
+    "paired_decode_delta_candidate_minus_baseline_ms_median": 0.306,
+    "paired_decode_delta_candidate_minus_baseline_ms_p90": 91.413,
+    "paired_total_delta_candidate_minus_baseline_ms_median": -172.234,
+    "paired_total_delta_candidate_minus_baseline_ms_p90": 38.752,
+    "prototype_vs_baseline_token_edit_rate": 0.2132
+  },
+  "regime_order": [
+    "baseline_first",
+    "prototype_first",
+    "baseline_first",
+    "prototype_first"
+  ],
+  "sampling_seconds": 1,
+  "shared_lock_wait_seconds": 11.645,
+  "switch_timing": {
+    "baseline": {
+      "cases": 4,
+      "confirmed": 4,
+      "confirmed_lag_s_median": 15.0,
+      "confirmed_lag_s_p90": 21.0,
+      "unconfirmed_within_horizon": 0
+    },
+    "prototype": {
+      "cases": 4,
+      "confirmed": 3,
+      "confirmed_lag_s_median": 13.0,
+      "confirmed_lag_s_p90": 21.8,
+      "unconfirmed_within_horizon": 1
+    }
+  },
+  "timings": {
+    "baseline": {
+      "decode_errors": 0,
+      "decode_ms_median": 401.887,
+      "decode_ms_p90": 553.055,
+      "detection_call_ms_median": 223.039,
+      "detection_call_ms_p90": 265.03,
+      "detection_errors": 0,
+      "detection_per_window_ms_median": 223.039,
+      "detection_per_window_ms_p90": 265.03,
+      "fresh_detection_calls": 136,
+      "total_ms_median": 632.845,
+      "total_ms_p90": 816.312,
+      "windows": 136
+    },
+    "prototype": {
+      "decode_errors": 0,
+      "decode_ms_median": 416.38,
+      "decode_ms_p90": 603.711,
+      "detection_call_ms_median": 225.365,
+      "detection_call_ms_p90": 266.963,
+      "detection_errors": 0,
+      "detection_per_window_ms_median": 0.0,
+      "detection_per_window_ms_p90": 243.489,
+      "fresh_detection_calls": 48,
+      "total_ms_median": 477.739,
+      "total_ms_p90": 727.616,
+      "windows": 136
+    }
+  },
+  "window_seconds": 20,
+  "windows_compared": 136
+}

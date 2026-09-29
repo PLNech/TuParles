@@ -1,0 +1,42 @@
+{
+  "controller": {
+    "analytics_first_content_ms": 2933.9,
+    "analytics_voice_load_ms": 3672.5,
+    "delivered_order": [
+      1,
+      2
+    ],
+    "errors": [],
+    "heartbeat": {
+      "max_ms": 109.4,
+      "over_100ms": 1,
+      "p99_ms": 91.2,
+      "ticks": 111
+    },
+    "queued_order": [
+      1,
+      2
+    ],
+    "restarted_before_first_delivery": true,
+    "stop_to_delivered_ms": {
+      "1": 591.2,
+      "2": 993.7
+    },
+    "stop_to_queued_ms": {
+      "1": 51.8,
+      "2": 56.3
+    },
+    "stop_to_restart_ms": 55.6,
+    "synthetic_preview_intervals_ms": [
+      999.2,
+      1000.9
+    ]
+  },
+  "scope": {
+    "history": "2000 synthetic rows in isolated temporary storage",
+    "engine": "fake delayed engine; no inference or private audio",
+    "runs": 1,
+    "concurrency": "Android build and desktop regression suite finished before run",
+    "interpretation": "Time to first cloud vs full result within the same run; not extraction speedup or GPU comparison"
+  }
+}

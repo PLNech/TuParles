@@ -1,0 +1,376 @@
+{
+  "method": "local espeak-ng; independently specified French/English phrases and splice times; current GpuEngine 20-second sticky-language partial preview",
+  "backend": "large-v3-turbo CUDA float16",
+  "window_s": 20,
+  "lock_wait_s": 0.0,
+  "cases": [
+    {
+      "id": "fr_to_en",
+      "source_language": "fr",
+      "target_language": "en",
+      "source_phrase": "Le cahier rouge est ici. Ferme la petite porte.",
+      "target_phrase": "The blue folder is ready. Please open the green window.",
+      "expected_target_anchors": [
+        "blue folder",
+        "green window"
+      ],
+      "forbidden_translation_anchors": [
+        "dossier bleu",
+        "fenetre verte"
+      ],
+      "source_duration_s": 11.021,
+      "target_duration_s": 38.972,
+      "splice_s": 11.021,
+      "duration_s": 49.992,
+      "switch_score": {
+        "switches": 1,
+        "confirmed": 1,
+        "unconfirmed_within_horizon": 0,
+        "median_confirmed_lag_s": 5.000000000000002,
+        "stable_windows": 1,
+        "events": [
+          {
+            "boundary_s": 11.0206875,
+            "target_language": "en",
+            "observed_horizon_s": 38.9718125,
+            "windows": 10,
+            "unknown_windows": 0,
+            "target_already_selected_before_boundary": false,
+            "confirmed": true,
+            "lag_s": 5.000000000000002
+          }
+        ]
+      },
+      "after_source_flush_windows": 5,
+      "after_source_flush_empty_outputs": 1,
+      "after_source_flush_normalized_token_counts": [
+        20,
+        0,
+        10,
+        15,
+        10
+      ],
+      "after_source_flush_target_anchor_hits": 8,
+      "after_source_flush_forbidden_translation_hits": 0,
+      "rows": [
+        {
+          "end_s": 7.021,
+          "window_start_s": 0.0,
+          "language": "fr",
+          "runtime_ms": 1151.0,
+          "normalized_token_count": 11,
+          "empty_output": false,
+          "target_anchor_hits": 0,
+          "forbidden_translation_hits": 0,
+          "after_source_flush": false
+        },
+        {
+          "end_s": 10.021,
+          "window_start_s": 0.0,
+          "language": "fr",
+          "runtime_ms": 532.9,
+          "normalized_token_count": 11,
+          "empty_output": false,
+          "target_anchor_hits": 0,
+          "forbidden_translation_hits": 0,
+          "after_source_flush": false
+        },
+        {
+          "end_s": 13.021,
+          "window_start_s": 0.0,
+          "language": "fr",
+          "runtime_ms": 702.5,
+          "normalized_token_count": 35,
+          "empty_output": false,
+          "target_anchor_hits": 1,
+          "forbidden_translation_hits": 0,
+          "after_source_flush": false
+        },
+        {
+          "end_s": 16.021,
+          "window_start_s": 0.0,
+          "language": "en",
+          "runtime_ms": 769.7,
+          "normalized_token_count": 43,
+          "empty_output": false,
+          "target_anchor_hits": 2,
+          "forbidden_translation_hits": 0,
+          "after_source_flush": false
+        },
+        {
+          "end_s": 19.021,
+          "window_start_s": 0.0,
+          "language": "en",
+          "runtime_ms": 726.7,
+          "normalized_token_count": 50,
+          "empty_output": false,
+          "target_anchor_hits": 2,
+          "forbidden_translation_hits": 0,
+          "after_source_flush": false
+        },
+        {
+          "end_s": 23.021,
+          "window_start_s": 3.021,
+          "language": "en",
+          "runtime_ms": 661.9,
+          "normalized_token_count": 10,
+          "empty_output": false,
+          "target_anchor_hits": 2,
+          "forbidden_translation_hits": 0,
+          "after_source_flush": false
+        },
+        {
+          "end_s": 27.021,
+          "window_start_s": 7.021,
+          "language": "en",
+          "runtime_ms": 1428.0,
+          "normalized_token_count": 22,
+          "empty_output": false,
+          "target_anchor_hits": 2,
+          "forbidden_translation_hits": 0,
+          "after_source_flush": false
+        },
+        {
+          "end_s": 31.021,
+          "window_start_s": 11.021,
+          "language": "en",
+          "runtime_ms": 1271.1,
+          "normalized_token_count": 20,
+          "empty_output": false,
+          "target_anchor_hits": 2,
+          "forbidden_translation_hits": 0,
+          "after_source_flush": true
+        },
+        {
+          "end_s": 33.021,
+          "window_start_s": 13.021,
+          "language": "en",
+          "runtime_ms": 1640.9,
+          "normalized_token_count": 0,
+          "empty_output": true,
+          "target_anchor_hits": 0,
+          "forbidden_translation_hits": 0,
+          "after_source_flush": true
+        },
+        {
+          "end_s": 37.021,
+          "window_start_s": 17.021,
+          "language": "en",
+          "runtime_ms": 750.6,
+          "normalized_token_count": 10,
+          "empty_output": false,
+          "target_anchor_hits": 2,
+          "forbidden_translation_hits": 0,
+          "after_source_flush": true
+        },
+        {
+          "end_s": 41.021,
+          "window_start_s": 21.021,
+          "language": "en",
+          "runtime_ms": 710.8,
+          "normalized_token_count": 15,
+          "empty_output": false,
+          "target_anchor_hits": 2,
+          "forbidden_translation_hits": 0,
+          "after_source_flush": true
+        },
+        {
+          "end_s": 49.992,
+          "window_start_s": 29.992,
+          "language": "en",
+          "runtime_ms": 964.7,
+          "normalized_token_count": 10,
+          "empty_output": false,
+          "target_anchor_hits": 2,
+          "forbidden_translation_hits": 0,
+          "after_source_flush": true
+        }
+      ]
+    },
+    {
+      "id": "en_to_fr",
+      "source_language": "en",
+      "target_language": "fr",
+      "source_phrase": "The blue folder is ready. Please open the green window.",
+      "target_phrase": "Le cahier rouge est ici. Ferme la petite porte.",
+      "expected_target_anchors": [
+        "cahier rouge",
+        "petite porte"
+      ],
+      "forbidden_translation_anchors": [
+        "red notebook",
+        "little door",
+        "small door"
+      ],
+      "source_duration_s": 12.989,
+      "target_duration_s": 33.167,
+      "splice_s": 12.989,
+      "duration_s": 46.157,
+      "switch_score": {
+        "switches": 1,
+        "confirmed": 1,
+        "unconfirmed_within_horizon": 0,
+        "median_confirmed_lag_s": 22.0,
+        "stable_windows": 1,
+        "events": [
+          {
+            "boundary_s": 12.98925,
+            "target_language": "fr",
+            "observed_horizon_s": 33.167500000000004,
+            "windows": 10,
+            "unknown_windows": 0,
+            "target_already_selected_before_boundary": false,
+            "confirmed": true,
+            "lag_s": 22.0
+          }
+        ]
+      },
+      "after_source_flush_windows": 5,
+      "after_source_flush_empty_outputs": 0,
+      "after_source_flush_normalized_token_counts": [
+        11,
+        15,
+        4,
+        11,
+        4
+      ],
+      "after_source_flush_target_anchor_hits": 0,
+      "after_source_flush_forbidden_translation_hits": 0,
+      "rows": [
+        {
+          "end_s": 8.989,
+          "window_start_s": 0.0,
+          "language": "en",
+          "runtime_ms": 763.3,
+          "normalized_token_count": 22,
+          "empty_output": false,
+          "target_anchor_hits": 0,
+          "forbidden_translation_hits": 0,
+          "after_source_flush": false
+        },
+        {
+          "end_s": 11.989,
+          "window_start_s": 0.0,
+          "language": "en",
+          "runtime_ms": 759.9,
+          "normalized_token_count": 29,
+          "empty_output": false,
+          "target_anchor_hits": 0,
+          "forbidden_translation_hits": 0,
+          "after_source_flush": false
+        },
+        {
+          "end_s": 14.989,
+          "window_start_s": 0.0,
+          "language": "en",
+          "runtime_ms": 722.7,
+          "normalized_token_count": 31,
+          "empty_output": false,
+          "target_anchor_hits": 0,
+          "forbidden_translation_hits": 0,
+          "after_source_flush": false
+        },
+        {
+          "end_s": 17.989,
+          "window_start_s": 0.0,
+          "language": "en",
+          "runtime_ms": 793.1,
+          "normalized_token_count": 48,
+          "empty_output": false,
+          "target_anchor_hits": 0,
+          "forbidden_translation_hits": 0,
+          "after_source_flush": false
+        },
+        {
+          "end_s": 20.989,
+          "window_start_s": 0.989,
+          "language": "en",
+          "runtime_ms": 688.6,
+          "normalized_token_count": 5,
+          "empty_output": false,
+          "target_anchor_hits": 0,
+          "forbidden_translation_hits": 0,
+          "after_source_flush": false
+        },
+        {
+          "end_s": 24.989,
+          "window_start_s": 4.989,
+          "language": "en",
+          "runtime_ms": 751.5,
+          "normalized_token_count": 10,
+          "empty_output": false,
+          "target_anchor_hits": 0,
+          "forbidden_translation_hits": 0,
+          "after_source_flush": false
+        },
+        {
+          "end_s": 28.989,
+          "window_start_s": 8.989,
+          "language": "en",
+          "runtime_ms": 723.7,
+          "normalized_token_count": 10,
+          "empty_output": false,
+          "target_anchor_hits": 0,
+          "forbidden_translation_hits": 0,
+          "after_source_flush": false
+        },
+        {
+          "end_s": 32.989,
+          "window_start_s": 12.989,
+          "language": "en",
+          "runtime_ms": 776.8,
+          "normalized_token_count": 11,
+          "empty_output": false,
+          "target_anchor_hits": 0,
+          "forbidden_translation_hits": 0,
+          "after_source_flush": true
+        },
+        {
+          "end_s": 34.989,
+          "window_start_s": 14.989,
+          "language": "fr",
+          "runtime_ms": 766.5,
+          "normalized_token_count": 15,
+          "empty_output": false,
+          "target_anchor_hits": 0,
+          "forbidden_translation_hits": 0,
+          "after_source_flush": true
+        },
+        {
+          "end_s": 38.989,
+          "window_start_s": 18.989,
+          "language": "fr",
+          "runtime_ms": 795.0,
+          "normalized_token_count": 4,
+          "empty_output": false,
+          "target_anchor_hits": 0,
+          "forbidden_translation_hits": 0,
+          "after_source_flush": true
+        },
+        {
+          "end_s": 42.989,
+          "window_start_s": 22.989,
+          "language": "fr",
+          "runtime_ms": 671.4,
+          "normalized_token_count": 11,
+          "empty_output": false,
+          "target_anchor_hits": 0,
+          "forbidden_translation_hits": 0,
+          "after_source_flush": true
+        },
+        {
+          "end_s": 46.157,
+          "window_start_s": 26.157,
+          "language": "fr",
+          "runtime_ms": 709.6,
+          "normalized_token_count": 4,
+          "empty_output": false,
+          "target_anchor_hits": 0,
+          "forbidden_translation_hits": 0,
+          "after_source_flush": true
+        }
+      ]
+    }
+  ],
+  "limitations": "Robotic synthetic speech and phrase-level anchors test discrete known controls; they do not establish general translation accuracy or natural code-switch behavior. Sparse ticks provide coarse observed switch lag and update sticky-language hysteresis less often than the production roughly 1 Hz loop."
+}

@@ -41,6 +41,9 @@ listens → you get notes). Five orthogonal dimensions:
   (see §5). Where Granola is the meeting-notes foil, this is the dictation foil.
 
 ### Build notes (decisions as we ship)
+- [Performance audit and implementation](2026-09-29-performance-audit.md) —
+  preview worker cancellation, asynchronous analytics, bounded audio snapshots,
+  and consent-filtered local inference benchmarks.
 - [Voice commands, the local way](2026-06-23-voice-commands-design.md) — the
   design record for the voice command meta-language (#41): the cloud "agent
   mode" foil, the command-vs-dictation problem, why the safety is *structural*

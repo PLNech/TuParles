@@ -1,0 +1,70 @@
+{
+  "backend": "cpu_base_int8",
+  "compute_type": "int8",
+  "filters": {
+    "consented_rows": 62,
+    "duration_filtered": 6,
+    "eligible": 56,
+    "selected": 12
+  },
+  "language_selection_mode": "automatic_or_multilingual",
+  "limitations": {
+    "code_switch_evidence_limited_to_observed_partial_language_transitions": true,
+    "cpu_results_do_not_estimate_gpu_performance": true,
+    "gpu_authorization_marker_present_at_model_initialization": false,
+    "stored_asr_is_reference_not_ground_truth": true
+  },
+  "max_ticks_per_recording": 8,
+  "model": "base",
+  "order": {
+    "baseline_first_samples": 6,
+    "prototype_first_samples": 6
+  },
+  "output": {
+    "baseline_language_switch_events": 1,
+    "exact_match_rate": 0.9318,
+    "language_comparisons": 77,
+    "language_disagreements": 2,
+    "prototype_switch_lag_windows_median": null,
+    "prototype_switch_lag_windows_p90": null,
+    "token_edit_rate_prototype_vs_baseline": 0.0381
+  },
+  "paired_total_delta_prototype_minus_baseline_ms": {
+    "median": -289.416,
+    "p90": 932.259
+  },
+  "regimes": {
+    "baseline": "fresh sticky language detection each window plus greedy decode",
+    "prototype": "detect each window until sticky language established, then fresh detection every third window plus greedy decode"
+  },
+  "samples_with_windows": 12,
+  "sampling_seconds": 1,
+  "selected_duration_buckets": {
+    "long": 6,
+    "medium": 3,
+    "short": 3
+  },
+  "shared_lock_wait_seconds": 0.0,
+  "timings": {
+    "baseline": {
+      "decode_ms_median": 658.071,
+      "decode_ms_p90": 2147.263,
+      "detect_ms_median": 553.046,
+      "detect_ms_p90": 1585.372,
+      "fresh_detection_calls": 88,
+      "total_ms_median": 1196.902,
+      "total_ms_p90": 4125.477
+    },
+    "prototype": {
+      "decode_ms_median": 620.312,
+      "decode_ms_p90": 2548.303,
+      "detect_ms_median": 0.0,
+      "detect_ms_p90": 1788.519,
+      "fresh_detection_calls": 42,
+      "total_ms_median": 936.231,
+      "total_ms_p90": 4236.248
+    }
+  },
+  "window_seconds": 6,
+  "windows_compared": 88
+}

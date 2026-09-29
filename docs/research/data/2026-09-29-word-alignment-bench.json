@@ -1,0 +1,79 @@
+{
+  "backend": "cached faster-whisper base CPU int8 proxy; not GPU performance",
+  "batch_size": 16,
+  "beam_size": 5,
+  "benchmark": "word_alignment_overhead",
+  "compute_type": "int8",
+  "cpu_threads": 4,
+  "language_selection": "application setting applied in memory",
+  "methodology": {
+    "drift": "token error rate against redacted stored reference using modal normalized repeat output; not ground-truth accuracy",
+    "eligible_consent_and_identifier_filter": "tuparles_perf_common.samples(limit=12)",
+    "network": "disabled via HF_HUB_OFFLINE and TRANSFORMERS_OFFLINE; cached model only",
+    "order": "alternating by sample and repeat",
+    "paired_ratio": "per-sample median time without timestamps divided by median time with timestamps; aggregate median/p90 only",
+    "privacy": "raw inputs and outputs process-local; no transcript, identifier, sample ID, filename, or audio persisted",
+    "timed_repeats_per_sample_per_condition": 2,
+    "warmup_per_condition": 1
+  },
+  "model": "base",
+  "prompt": "application vocab prompt applied in memory; omitted from artifact",
+  "quality_comparison": {
+    "exact_match_to_redacted_reference_count": {
+      "off": 0,
+      "on": 0
+    },
+    "exact_match_to_redacted_reference_rate": {
+      "off": 0.0,
+      "on": 0.0
+    },
+    "median_token_error_rate_vs_redacted_reference": {
+      "off": 0.2379,
+      "on": 0.2379
+    },
+    "repeat_output_agreement_count": {
+      "off": 12,
+      "on": 12
+    },
+    "repeat_output_agreement_rate": {
+      "off": 1.0,
+      "on": 1.0
+    },
+    "same_redacted_output_exact_match_count": 12,
+    "same_redacted_output_exact_match_rate": 1.0
+  },
+  "sample_counts": {
+    "consented_rows": 62,
+    "duration_buckets": {
+      "long_gte_30s": 6,
+      "medium_10_to_30s": 3,
+      "short_lt_10s": 3
+    },
+    "duration_filtered": 6,
+    "eligible": 56,
+    "selected": 12
+  },
+  "vad": {
+    "max_speech_duration_s": 30,
+    "min_silence_duration_ms": 500,
+    "speech_pad_ms": 200
+  },
+  "vad_effective_behavior": "faster-whisper consumes max_speech_duration_s and sets it to chunk_length (30s); this matches the requested 30s cap",
+  "word_timestamps": {
+    "off": {
+      "median": 2.1959,
+      "n": 24,
+      "p90": 7.7454
+    },
+    "on": {
+      "median": 2.2943,
+      "n": 24,
+      "p90": 8.1841
+    },
+    "paired_speed_ratio_off_over_on": {
+      "median": 0.9702,
+      "n": 12,
+      "p90": 1.074
+    }
+  }
+}

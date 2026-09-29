@@ -1,0 +1,39 @@
+{
+  "controller_gpu": {
+    "analytics_voice_load_ms": 3052.7,
+    "delivered_signal_order": [
+      1,
+      2
+    ],
+    "errors": [],
+    "heartbeat": {
+      "max_ms": 128.5,
+      "over_100ms": 2,
+      "p99_ms": 111.1,
+      "ticks": 105
+    },
+    "queued_order": [
+      1,
+      2
+    ],
+    "real_preview_decode_ms": [
+      941.7,
+      562.9,
+      584.9
+    ],
+    "real_preview_intervals_ms": [
+      1031.9
+    ],
+    "restarted_before_first_stub_delivery": true,
+    "stop_to_restart_ms": 63.8,
+    "stop_to_stub_delivery_ms": {
+      "1": 1476.4,
+      "2": 510.2
+    },
+    "stopped_during_real_preview": true,
+    "stub_delivery_order": [
+      1,
+      2
+    ]
+  }
+}

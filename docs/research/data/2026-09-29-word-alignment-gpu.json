@@ -1,0 +1,78 @@
+{
+  "backend": "faster-whisper large-v3-turbo CUDA float16; GPU",
+  "batch_size": 16,
+  "beam_size": 5,
+  "benchmark": "word_alignment_overhead",
+  "compute_type": "float16",
+  "device": "cuda",
+  "language_selection": "application setting applied in memory",
+  "methodology": {
+    "drift": "token error rate against redacted stored reference using modal normalized repeat output; not ground-truth accuracy",
+    "eligible_consent_and_identifier_filter": "tuparles_perf_common.samples(limit=12)",
+    "network": "disabled via HF_HUB_OFFLINE and TRANSFORMERS_OFFLINE; cached model only",
+    "order": "alternating by sample and repeat",
+    "paired_ratio": "per-sample median time without timestamps divided by median time with timestamps; aggregate median/p90 only",
+    "privacy": "raw inputs and outputs process-local; no transcript, identifier, sample ID, filename, or audio persisted",
+    "timed_repeats_per_sample_per_condition": 3,
+    "warmup_per_condition": 1
+  },
+  "model": "large-v3-turbo",
+  "prompt": "application vocab prompt applied in memory; omitted from artifact",
+  "quality_comparison": {
+    "exact_match_to_redacted_reference_count": {
+      "off": 2,
+      "on": 2
+    },
+    "exact_match_to_redacted_reference_rate": {
+      "off": 0.1667,
+      "on": 0.1667
+    },
+    "median_token_error_rate_vs_redacted_reference": {
+      "off": 0.0665,
+      "on": 0.0665
+    },
+    "repeat_output_agreement_count": {
+      "off": 12,
+      "on": 12
+    },
+    "repeat_output_agreement_rate": {
+      "off": 1.0,
+      "on": 1.0
+    },
+    "same_redacted_output_exact_match_count": 12,
+    "same_redacted_output_exact_match_rate": 1.0
+  },
+  "sample_counts": {
+    "consented_rows": 62,
+    "duration_buckets": {
+      "long_gte_30s": 6,
+      "medium_10_to_30s": 3,
+      "short_lt_10s": 3
+    },
+    "duration_filtered": 6,
+    "eligible": 56,
+    "selected": 12
+  },
+  "vad": {
+    "max_speech_duration_s": 30,
+    "min_silence_duration_ms": 500,
+    "speech_pad_ms": 200
+  },
+  "word_timestamps": {
+    "off": {
+      "median": 0.8821,
+      "n": 36,
+      "p90": 1.2063
+    },
+    "on": {
+      "median": 0.9496,
+      "n": 36,
+      "p90": 1.3678
+    },
+    "paired_speed_ratio_off_over_on": {
+      "median": 0.9726,
+      "n": 12,
+      "p90": 1.0099
+    }
+  }
+}

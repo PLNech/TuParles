@@ -1,0 +1,41 @@
+{
+  "corpus": "existing public synthetic bilingual corpus; baseline, not a new regression",
+  "backend": "GpuEngine turbo float16, current application settings",
+  "cases": 72,
+  "passed": 20,
+  "missing_anchor_cases": 52,
+  "forbidden_phrase_cases": 6,
+  "median_reference_wer": 0.6363636363636364,
+  "median_decode_and_postprocess_s": 0.4657147205034562,
+  "categories": {
+    "compound-borrow": {
+      "cases": 8,
+      "passed": 0
+    },
+    "homophone": {
+      "cases": 20,
+      "passed": 7
+    },
+    "acronyms": {
+      "cases": 4,
+      "passed": 0
+    },
+    "en-verb-borrow": {
+      "cases": 20,
+      "passed": 7
+    },
+    "numbers-switch": {
+      "cases": 8,
+      "passed": 2
+    },
+    "en-noun-sounds-fr": {
+      "cases": 4,
+      "passed": 4
+    },
+    "mid-sentence-switch": {
+      "cases": 8,
+      "passed": 0
+    }
+  },
+  "privacy": "public fixture references; inferred words and prompts omitted"
+}

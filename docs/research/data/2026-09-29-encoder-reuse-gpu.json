@@ -1,0 +1,57 @@
+{
+  "selection": {
+    "consented_rows": 62,
+    "eligible": 56,
+    "duration_filtered": 6,
+    "selected": 8
+  },
+  "settings_language_count": 2,
+  "preview_window_s": 20,
+  "samples": 8,
+  "repeats": 2,
+  "windows_per_take": 2,
+  "exceptions_by_type": {},
+  "mean_uninstrumented_two_window_s": 1.1977,
+  "output_mismatches": 0,
+  "raw_detection_equals_vad_encode": {
+    "False": 32
+  },
+  "baseline": {
+    "mean_total_s": 0.6033,
+    "median_total_s": 0.5796,
+    "mean_feature_s": 0.0718,
+    "mean_encode_s": 0.3502,
+    "mean_detection_s_including_feature_encode": 0.2207,
+    "mean_decode_s": 0.0922,
+    "mean_lookup_s": 0.0022,
+    "feature_calls": 64,
+    "encode_calls": 64,
+    "detection_calls": 32,
+    "decode_calls": 32,
+    "possible_exact_hits": 0,
+    "reuse_hits": 0,
+    "exact_hits_first_window": 0,
+    "exact_hits_second_window": 0,
+    "encode_calls_first_window": 32,
+    "encode_calls_second_window": 32
+  },
+  "reuse": {
+    "mean_total_s": 0.5936,
+    "median_total_s": 0.5414,
+    "mean_feature_s": 0.0666,
+    "mean_encode_s": 0.3462,
+    "mean_detection_s_including_feature_encode": 0.219,
+    "mean_decode_s": 0.0956,
+    "mean_lookup_s": 0.0017,
+    "feature_calls": 64,
+    "encode_calls": 64,
+    "detection_calls": 32,
+    "decode_calls": 32,
+    "possible_exact_hits": 0,
+    "reuse_hits": 0,
+    "exact_hits_first_window": 0,
+    "exact_hits_second_window": 0,
+    "encode_calls_first_window": 32,
+    "encode_calls_second_window": 32
+  }
+}
