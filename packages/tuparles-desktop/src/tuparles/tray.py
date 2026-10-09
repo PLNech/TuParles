@@ -8,6 +8,7 @@ into focus, because focus just moved to a menu.
 """
 
 import math
+from collections import OrderedDict
 from collections.abc import Callable
 
 from PySide6.QtCore import QObject, QRectF, Qt, QTimer, QUrl, Signal
@@ -33,7 +34,25 @@ _CPU_IDLE = QColor(96, 112, 156)
 _DEV_DOT = QColor(243, 139, 168)
 
 _REST_HEIGHTS = (0.45, 0.85, 0.60)  # the glyph's pose when not animating
-_TRAY_FPS_MS = 100  # ~10 Hz: a gentle breath without hammering the DBus tray
+# Icon churn budget. On SNI trays (GNOME appindicator, KDE) every setIcon is an
+# org.kde.StatusNotifierItem.NewIcon D-Bus signal — Qt emits it unconditionally,
+# with no comparison to the previous icon — and the shell then fetches and
+# decodes a fresh pixmap ON ITS MAIN THREAD. The old 10 Hz breath, running
+# around the clock even at rest, grew gnome-shell's heap ~450 MiB/12 h and
+# stalled its main loop 0.4-0.7 s every ~11 s (system-wide freezes, stuck key
+# repeat). So: rest never animates (zero updates, the timer is off), and a live
+# take animates at 2 Hz — slow enough that a take's few seconds cost the shell a
+# handful of pixmaps, fast enough that the glyph visibly moves while you speak.
+_TRAY_FRAME_MS = 500  # 2 Hz, and ONLY while recording/decoding
+# The live animation is a loop of a few precomputed poses, not a free-running
+# phase: frames repeat exactly, so they cache (no paint per tick) and dedupe.
+# 6 frames at 2 Hz = one 3 s cycle, close to the old breath's ~2.2 s period.
+_ANIM_FRAMES = 6
+_ANIMATED_STATES = frozenset({"recording", "processing"})
+# Every reachable frame: rest x (6 state colours) + 2 live states x 6 frames x
+# (2 engines), each with/without the dev dot = 60. The bound is a backstop
+# against a future key that grows without limit, not a working-set size.
+_ICON_CACHE_MAX = 64
 _HISTORY_SHOWN = 8
 _LABEL_CHARS = 46
 _README_URL = "https://github.com/PLNech/TuParles#readme"
@@ -87,6 +106,31 @@ def state_color(state: str, backend: str) -> QColor:
     return QColor(_CPU_IDLE) if on_cpu else QColor(_IDLE)
 
 
+def frame_pose(kind: str, frame: int) -> tuple[tuple[float, ...], float]:
+    """(bar heights, vertical lift) for animation frame `frame` of `kind`. Pure
+    and periodic over `_ANIM_FRAMES`, so a frame index fully names a picture.
+
+    "recording": the creature leans in — bigger, phase-shifted bars + a slight
+    bob. "processing": a bright pulse travelling across the three bars. Anything
+    else ("rest"): the static rest pose."""
+    theta = 2 * math.pi * (frame % _ANIM_FRAMES) / _ANIM_FRAMES
+    if kind == "recording":
+        heights = tuple(
+            0.42 + 0.45 * (0.5 + 0.5 * math.sin(theta + i * 2 * math.pi / 3))
+            for i in range(3)
+        )
+        return heights, 0.9 * math.sin(theta)
+    if kind == "processing":
+        center = 3 * (frame % _ANIM_FRAMES) / _ANIM_FRAMES
+        heights = tuple(
+            0.30
+            + 0.55 * math.exp(-(min(abs(i - center), 3 - abs(i - center)) ** 2) / 0.6)
+            for i in range(3)
+        )
+        return heights, 0.0
+    return _REST_HEIGHTS, 0.0
+
+
 class Tray(QObject):
     toggle_requested = Signal()
     restart_requested = Signal()
@@ -102,8 +146,9 @@ class Tray(QObject):
         # Pull source for the ambient engine colour ("gpu"|"cpu"), as the bubble.
         self._backend_source = backend_source or (lambda: "gpu")
         self._state = "idle"
-        self._phase = 0.0  # advances each tick; drives the breath/pulse
+        self._frame = 0  # index into the live animation loop (0.._ANIM_FRAMES-1)
         self._animate = bool(settings.get("tray_animation"))
+        self._dev_dot = takes.dev_recording_enabled()
 
         self._menu = QMenu()
         self._toggle_act = self._menu.addAction("Dicter")
@@ -149,76 +194,106 @@ class Tray(QObject):
         )
         self._menu.addAction("Quitter").triggered.connect(self.quit_requested.emit)
 
-        self._tray = QSystemTrayIcon(self._compose_icon(), self)
+        # The frame on screen, by key, so an unchanged frame never re-reaches
+        # setIcon (Qt would re-emit NewIcon for it regardless). The key names
+        # the picture: (pose kind, frame index, colour rgba, dev dot).
+        self._icon_cache: OrderedDict[tuple, QIcon] = OrderedDict()
+        self._current_key = self._frame_key()
+        self._current_icon = self._icon_for(self._current_key)
+        self._tray = QSystemTrayIcon(self._current_icon, self)
         self._tray.setContextMenu(self._menu)
+        self._tooltip = ""
         self._refresh_tooltip()
         self._tray.show()
 
-        # The breath: one timer advances the phase and repaints the glyph. Only
-        # runs when animation is on; otherwise the glyph is set on state change.
+        # The live-take animation: one timer, created once, that steps the frame
+        # loop. It runs ONLY while recording/decoding with animation on; rest is
+        # a single static glyph set on state change (see _TRAY_FRAME_MS).
         self._timer = QTimer(self)
-        self._timer.setInterval(_TRAY_FPS_MS)
+        self._timer.setInterval(_TRAY_FRAME_MS)
         self._timer.timeout.connect(self._tick)
-        if self._animate:
+        self._sync_timer()
+
+    def _pose_kind(self) -> str:
+        if self._animate and self._state in _ANIMATED_STATES:
+            return self._state
+        return "rest"
+
+    def _frame_key(self) -> tuple:
+        """What the glyph should show right now, as a hashable key. Reads only
+        memory (the backend pull is an attribute read) — never settings.json,
+        so a tick costs no file I/O."""
+        kind = self._pose_kind()
+        frame = self._frame if kind != "rest" else 0
+        color = state_color(self._state, self._backend_source())
+        return kind, frame, color.rgba(), self._dev_dot
+
+    def _icon_for(self, key: tuple) -> QIcon:
+        """The cached QIcon for `key`, painted once on first sight. LRU-bounded
+        by _ICON_CACHE_MAX as a backstop; the reachable set is smaller."""
+        icon = self._icon_cache.get(key)
+        if icon is not None:
+            self._icon_cache.move_to_end(key)
+            return icon
+        kind, frame, rgba, dev_dot = key
+        heights, lift = frame_pose(kind, frame)
+        icon = _glyph(QColor.fromRgba(rgba), heights, lift, dev_dot=dev_dot)
+        self._icon_cache[key] = icon
+        while len(self._icon_cache) > _ICON_CACHE_MAX:
+            self._icon_cache.popitem(last=False)
+        return icon
+
+    def _show(self) -> None:
+        """Push the current frame to the tray iff it differs from what is
+        already shown. The one and only setIcon call site."""
+        key = self._frame_key()
+        if key == self._current_key:
+            return
+        self._current_key = key
+        self._current_icon = self._icon_for(key)
+        self._tray.setIcon(self._current_icon)
+
+    def _sync_timer(self) -> None:
+        """Run the frame timer exactly when there is something to animate."""
+        wanted = self._pose_kind() != "rest"
+        if wanted and not self._timer.isActive():
             self._timer.start()
-
-    def _state_color(self) -> QColor:
-        return state_color(self._state, self._backend_source())
-
-    def _pose(self) -> tuple[tuple[float, ...], float]:
-        """(bar heights, vertical lift) for this frame. A calm breath at rest,
-        a livelier undulation + bounce while recording, a travelling pulse
-        while decoding. Returns the static rest pose when animation is off."""
-        if not self._animate:
-            return _REST_HEIGHTS, 0.0
-        ph = self._phase
-        if self._state == "recording":
-            # the creature leans in: bigger, phase-shifted bars + a slight bob
-            heights = tuple(
-                0.42 + 0.45 * (0.5 + 0.5 * math.sin(ph * 1.3 + i * 1.1))
-                for i in range(3)
-            )
-            return heights, 0.9 * math.sin(ph * 0.9)
-        if self._state == "processing":
-            # a bright pulse travelling across the three bars: "thinking"
-            center = (ph * 0.7) % 3
-            heights = tuple(
-                0.30
-                + 0.55
-                * math.exp(-(min(abs(i - center), 3 - abs(i - center)) ** 2) / 0.6)
-                for i in range(3)
-            )
-            return heights, 0.0
-        # idle: a slow, shallow breath with a gentle bob — alive, at rest
-        breath = 0.5 + 0.5 * math.sin(ph * 0.32)
-        heights = tuple(b * (0.86 + 0.14 * breath) for b in _REST_HEIGHTS)
-        return heights, 0.7 * math.sin(ph * 0.32)
-
-    def _compose_icon(self) -> QIcon:
-        heights, lift = self._pose()
-        return _glyph(
-            self._state_color(), heights, lift, dev_dot=takes.dev_recording_enabled()
-        )
+        elif not wanted and self._timer.isActive():
+            self._timer.stop()
 
     def _refresh_tooltip(self) -> None:
         """Spell out dev capture in the tooltip whenever it's armed, so the red
-        dot has words next to it on hover."""
+        dot has words next to it on hover. Only re-sent when the text changes
+        (a setToolTip is a NewToolTip D-Bus signal too)."""
         base = "TuParles — Ctrl droit + Alt droit pour dicter"
-        if takes.dev_recording_enabled():
+        if self._dev_dot:
             base += "\n⚠ Mode dev : audio brut (non masqué) enregistré sur le disque"
-        self._tray.setToolTip(base)
+        if base != self._tooltip:
+            self._tooltip = base
+            self._tray.setToolTip(base)
 
     def _tick(self) -> None:
-        self._phase += 0.2  # advance the breath
-        self._tray.setIcon(self._compose_icon())
+        self._frame = (self._frame + 1) % _ANIM_FRAMES
+        self._show()
+
+    def refresh(self) -> None:
+        """Re-pull the ambient inputs (engine colour) and repaint only if the
+        glyph actually changed. Cheap and idempotent: safe to call whenever a
+        caller suspects the backend moved."""
+        self._show()
 
     def set_state(self, state: str) -> None:
+        if state != self._state:
+            self._frame = 0  # each live state starts its loop from the top
         self._state = state
+        # Re-read the dev badge once per state change (a settings.json read), so
+        # a take never starts with a stale "recording your voice" indicator.
+        self._dev_dot = takes.dev_recording_enabled()
         self._toggle_act.setText(
             "Arrêter la dictée" if state == "recording" else "Dicter"
         )
-        if not self._animate:  # animated path repaints on the timer instead
-            self._tray.setIcon(self._compose_icon())
+        self._sync_timer()
+        self._show()
 
     def on_final(self, _text: str) -> None:
         self._copy_act.setEnabled(True)
@@ -226,16 +301,15 @@ class Tray(QObject):
 
     def apply_live_settings(self) -> None:
         """Re-read the settings the Réglages dialog can change and apply them
-        without a restart (start/stop the breath, repaint now). Wired to the
-        dialog's `accepted` — the rest (mic, langs, casing, PII) is already
-        read per-take, so this just covers the tray's own live state."""
+        without a restart (start/stop the live-take animation, repaint if the
+        glyph changed). Wired to the dialog's `accepted` — the rest (mic, langs,
+        casing, PII) is already read per-take, so this just covers the tray's
+        own live state."""
         self._animate = bool(settings.get("tray_animation"))
-        if self._animate and not self._timer.isActive():
-            self._timer.start()
-        elif not self._animate and self._timer.isActive():
-            self._timer.stop()
+        self._dev_dot = takes.dev_recording_enabled()
+        self._sync_timer()
         self._refresh_tooltip()  # dev capture may have just been toggled
-        self._tray.setIcon(self._compose_icon())  # reflect the change at once
+        self._show()  # reflect the change at once, if there is one
 
     def _open_settings(self) -> None:
         from tuparles.settings_ui import SettingsDialog
