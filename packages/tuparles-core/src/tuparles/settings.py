@@ -80,11 +80,12 @@ _DEFAULTS: dict[str, object] = {
     # renders smaller). The missing accessibility knob and the HiDPI escape
     # hatch — 10.5 is the historical default. Applies live, no restart.
     "bubble_font_pt": 10.5,
-    # Tray "breathing creature": the menubar glyph gently animates (a calm
-    # breath at rest, livelier while recording, a travelling pulse while
-    # decoding) for an alive feel. ~10 Hz icon updates travel over DBus on SNI
-    # trays (GNOME/KDE) — default on, but a knob so a desktop that chokes on the
-    # churn (or a battery-minded user) can fall back to a static glyph.
+    # Tray glyph animation WHILE A TAKE IS LIVE: a livelier undulation while
+    # recording, a travelling pulse while decoding, at 2 Hz. At rest the glyph is
+    # static whatever this says — the old 24/7 10 Hz breath was a D-Bus NewIcon
+    # storm that grew gnome-shell's heap and stalled its main loop. Default on
+    # (it now costs the shell a few pixmaps per take); off = a static glyph that
+    # changes only with state.
     "tray_animation": True,
     # Start cue (SPEC: "feedback que la dictée a démarré"): a soft tick the
     # instant capture goes live, so you know to speak. Opt-IN — a quiet local

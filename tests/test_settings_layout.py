@@ -130,3 +130,19 @@ class TestSettingsStillRoundTrip:
         dlg._mic.setCurrentIndex(i)
         dlg._save()
         assert settings.get("input_device") == "bluez_input.AA_BB.0"  # …id stored
+
+
+class TestTrayAnimationIsHonest:
+    """The tray glyph no longer breathes at rest (the 24/7 D-Bus icon churn
+    that froze gnome-shell); the checkbox must say what it now does."""
+
+    def test_label_scopes_the_animation_to_live_takes(self, tmp_path, monkeypatch):
+        _qt(tmp_path, monkeypatch)
+        from tuparles.settings_ui import SettingsDialog
+
+        dlg = SettingsDialog()
+        label = dlg._tray_anim.text().lower()
+        hint = dlg._tray_anim.toolTip().lower()
+        assert "dictée" in label and "décodage" in label
+        assert "respire" not in hint, "rest no longer breathes"
+        assert "repos" in hint, "say what happens at rest: nothing moves"

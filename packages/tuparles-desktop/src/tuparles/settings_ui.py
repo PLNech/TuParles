@@ -358,10 +358,11 @@ class SettingsDialog(QDialog):
         layout.addWidget(self._ribbon_font)
 
         layout.addWidget(_section("Barre des tâches"))
-        self._tray_anim = QCheckBox("Icône animée dans la barre des tâches")
+        self._tray_anim = QCheckBox("Animer l'icône pendant la dictée et le décodage")
         self._tray_anim.setToolTip(
-            "L'icône respire doucement (et s'anime pendant la dictée). "
-            "Décoche si ton bureau rame avec les mises à jour d'icône."
+            "Au repos, l'icône reste fixe : aucune mise à jour. Pendant la dictée "
+            "et le décodage, elle s'anime doucement (2 images/s). Décoche pour une "
+            "icône toujours fixe, qui ne change qu'avec l'état."
         )
         self._tray_anim.setChecked(bool(settings.get("tray_animation")))
         layout.addWidget(self._tray_anim)
