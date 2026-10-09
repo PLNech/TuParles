@@ -67,9 +67,10 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
   visible — the whole overview without a tower planted over your code. Tune
   « Largeur du bandeau » (0 = the discreet fixed pill), « Lignes du bandeau »
   and « Taille du texte » in *Réglages*, or switch to the one-line *minimal*
-  pill. The **tray glyph breathes** —
-  calm at rest, livelier while recording, a travelling pulse while decoding, in
-  the engine colour (toggle off in *Réglages*). Optional soft **start tick**
+  pill. The **tray glyph** sits still at rest (zero icon updates, so the
+  desktop shell never pays for it) and comes alive only during a take —
+  livelier bars while recording, a travelling pulse while decoding, at 2 Hz, in
+  the engine colour (toggle the animation off in *Réglages*). Optional soft **start tick**
   (*Réglages*, off by default) confirms recording has begun. A slow decode
   (past ~3 s) shows a quiet **`(Ns)` counter** so it reads as *working*, not
   frozen; and if a final is ever lost after a preview was shown, the bubble

@@ -3,6 +3,17 @@
 ## Unreleased — performance and responsiveness
 
 ### Fixed
+- **The tray no longer floods the desktop shell.** The glyph used to repaint at
+  10 Hz around the clock, even at rest, and every repaint is a
+  `StatusNotifierItem.NewIcon` D-Bus signal (Qt never compares frames), so
+  gnome-shell fetched and decoded a pixmap on its main thread ten times a
+  second. Its heap grew ~450 MiB in 12 h and its main loop stalled 0.4–0.7 s
+  every ~11 s (freezes, stuck key repeat). Now the glyph at rest is static: zero
+  updates, no timer running. During a take it animates at 2 Hz through 6 cached
+  frames, and an unchanged frame never reaches `setIcon`. Ticks no longer read
+  `settings.json` either. Measured on a private session bus with a real Qt SNI
+  tray, NewIcon per scripted phase: before, 60 in 6 s idle, 41 in 4 s recording,
+  20 in 2 s decoding; after, 0, 9 and 5.
 - Rapid stop/start no longer lets an old live-preview worker resume on the next
   take. Cancellation belongs to each recording, and queued preview results are
   checked against the active recording before reaching the bubble.
@@ -16,6 +27,9 @@
   and offer Retry; download controls fit on narrow screens.
 
 ### Changed
+- `tray_animation` (Réglages → « Animer l'icône pendant la dictée et le
+  décodage ») now means "animate while recording/decoding"; rest is always
+  still. Default stays on.
 - Live previews copy only their configured audio window. Audio concatenation runs
   outside the recorder callback lock, so copy cost stays bounded on long takes.
 - Android transcripts support text selection/copy, the Search keyboard action
