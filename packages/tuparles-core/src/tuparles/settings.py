@@ -276,12 +276,14 @@ _DEFAULTS: dict[str, object] = {
     # turn a no-speech file into an empty result, so default on; `--no-silence-gate`
     # bypasses it per run. Offline batch path only — the daemon is untouched.
     "silence_gate": True,
-    # Loop guard for offline `transcribe` (#54): a phrase repeated verbatim 4+
-    # times in a row over 12+ words (so "the" x12, "Thank you." x6, a 3-word
-    # phrase x4) keeps ONE copy, and the block is flagged (`[…]` in the txt,
-    # `repetition` + top-level `truncated_repetition` in the sidecar). Honest
-    # repeats ("non non non", a phrase said twice) are far below it. Default
-    # on; off keeps the raw decode. Offline batch path only.
+    # Loop guard for offline `transcribe` (#54): a phrase repeated verbatim 8+
+    # times in a row over 16+ words (so "the" x16, "Thank you." x8, a longer
+    # phrase x8) keeps ONE copy, with a visible `[…×N]` at the cut in the txt
+    # and `repetition` + top-level `truncated_repetition` in the sidecar.
+    # Emphasis repeats stay untouched (a phrase x4, a PIN "one two" x6,
+    # "zero" x12); the real hallucination loops run to dozens of copies.
+    # Default on; off (or `--no-repetition-guard`) keeps the raw decode.
+    # Offline batch path only.
     "repetition_guard": True,
 }
 

@@ -48,12 +48,15 @@ def collapse_repeats(text: str) -> str:
 # word tokens instead and is deliberately MORE conservative than the 3-sentence
 # rule above, because a meeting transcript is a record, not a dictation: only a
 # phrase repeated verbatim LOOP_MIN_COPIES times in a row, covering at least
-# LOOP_MIN_WORDS words, is a loop. So a one-word loop needs 12 copies, a
-# two-word one 6, three words or more 4. "non non non", "très très très
-# très", a chanted "on y va" x3 and "Thank you." x4 all stay untouched.
+# LOOP_MIN_WORDS words, is a loop. So a one-word loop needs 16 copies, a
+# two-word one 8, any longer phrase 8. A first cut at 4 copies / 12 words
+# rewrote real speech in a blind review: "we need to ship this now" x4, "c'est
+# pas possible" x4, a PIN read as "one two" x6, "Thank you." x6, "zero" x12,
+# code dictated as "self dot x equals" x4. Real hallucination loops run to
+# dozens of copies, so the threshold can sit well above emphasis.
 LOOP_MAX_PHRASE_WORDS = 16  # Whisper loops one short sentence, not a paragraph
-LOOP_MIN_COPIES = 4  # three verbatim copies is still something people say
-LOOP_MIN_WORDS = 12  # copies x phrase length: protects short honest repeats
+LOOP_MIN_COPIES = 8  # emphasis, a chant, a dictated PIN or code stay under it
+LOOP_MIN_WORDS = 16  # copies x phrase length: "zero" x12 is a number, not a loop
 
 _NON_WORD = re.compile(r"[^\w']+")
 
