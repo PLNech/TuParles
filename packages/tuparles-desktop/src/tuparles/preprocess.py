@@ -91,10 +91,11 @@ def far_field_gain(
     for decoding and the stated trade-off.
 
     Returns (pcm, gain_db); the input object untouched and 0.0 when it does
-    nothing: disabled, under 0.5 s, digital silence, no sustained speech over
-    the floor (amplifying noise is what makes decoders hallucinate), fewer than
-    3 syllable-rate level jumps (a steady fan, a slam: see `_modulation_events`), audio
-    already at -30 dBFS or louder, or a lift under 3 dB. int16 in gives int16
+    nothing: disabled, under 0.5 s, digital silence, no sustained energy over
+    the floor (amplifying hiss is what makes decoders hallucinate), audio
+    already at -30 dBFS or louder, or a lift under 3 dB. It checks level and
+    signal-to-noise, NOT whether the energy is speech: a drifting fan or heavy
+    typing over a quiet floor can be lifted (see the build note). int16 in gives int16
     out, floating in gives the same floating dtype out. Pure, never mutates.
     """
     if not enabled or pcm.size < FAR_FIELD_MIN_FRAMES * FAR_FIELD_FRAME:

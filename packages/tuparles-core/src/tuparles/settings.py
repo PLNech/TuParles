@@ -213,10 +213,11 @@ _DEFAULTS: dict[str, object] = {
     "speech_leveler": True,
     # Far-field gain stage (#51): one conservative linear lift for quiet room /
     # laptop-array mics (~-48 dBFS RMS), applied first at the decode seam. It
-    # only acts when speech is quiet AND stands clearly over the noise floor;
-    # normal near-field audio comes out byte-identical, so default on is safe.
-    # It's a setting: smart default on, total override.
-    "far_field_gain": True,
+    # measures level and signal-to-noise, it does NOT tell speech from other
+    # sustained sound (a drifting fan, typing can be lifted), and it has not
+    # been validated on real room recordings (#53). Default OFF, opt in from
+    # Réglages; normal near-field audio comes out byte-identical either way.
+    "far_field_gain": False,
     # Preserve and restore the user's clipboard around a take (#28). TuParles
     # pastes via the clipboard, which clobbers whatever you had copied. With this
     # on, we snapshot the clipboard before delivery and put it back after the paste

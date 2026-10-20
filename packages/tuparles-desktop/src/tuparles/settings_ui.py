@@ -495,10 +495,9 @@ class SettingsDialog(QDialog):
 
         self._far_field_gain = QCheckBox("Micro lointain (gain automatique)")
         self._far_field_gain.setToolTip(
-            "Relève automatiquement le niveau d'un micro éloigné (salle de "
-            "réunion, micro de portable) quand la voix est faible mais se "
-            "détache nettement du bruit de fond. N'amplifie que l'audio faible : "
-            "une voix normale, proche du micro, n'est jamais modifiée."
+            "Expérimental : remonte le niveau des micros lointains (salle de "
+            "réunion). Désactivé par défaut tant qu'il n'est pas validé sur des "
+            "enregistrements réels."
         )
         self._far_field_gain.setChecked(bool(settings.get("far_field_gain")))
         layout.addWidget(self._far_field_gain)
