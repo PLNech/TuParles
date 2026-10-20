@@ -37,7 +37,10 @@
   cached 5 s. A system battery reporting *Discharging* means "on battery",
   even when a supply reports `online=1` (a low-wattage USB-C PD charger or a
   dock can do that while the battery drains). Desktops, unreadable trees and
-  unknown states keep the GPU, and peripheral (mouse) batteries are ignored. `tuparles transcribe --device auto` honours it too, and
+  unknown states keep the GPU, and peripheral (mouse) batteries are ignored.
+  Unplugging is honoured at once, but returning to the GPU waits for 30 s of
+  steady mains (any Discharging blip restarts the window), so a marginal
+  charger flipping Discharging/Charging doesn't cost a CUDA rebuild per take. `tuparles transcribe --device auto` honours it too, and
   the one-time GPU→CPU toast names the battery as the reason. Build note:
   `docs/research/2026-10-20-power-aware-engine.md`.
 

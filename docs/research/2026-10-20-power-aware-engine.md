@@ -69,6 +69,18 @@ a draining mouse can't push a desktop onto CPU. The asymmetry is deliberate. A
 false "on battery" silently slows a plugged-in machine. A false "on AC" just
 means the old behaviour, and the user can still tick « Préférer le CPU ».
 
+**Replug hysteresis.** Later in the same session BAT0 was seen flipping
+Discharging <-> Charging on a marginal charger. Read instantly, that bounces
+the engine between backends, and every return to the GPU costs a ~1.6 s CUDA
+rebuild. `PowerProbe` is therefore asymmetric in time too. Unplugging is
+honoured at the next read, since CPU is the safe side. Returning to mains
+needs "not discharging" to hold for 30 s (`REPLUG_SETTLE_S`), and any
+Discharging read restarts the window. The first reading has no history and is
+trusted as-is, so a cold start on AC doesn't wait. The window is measured
+between reads, and reads only happen at takes. So after a long idle on mains,
+the first take still runs on CPU and starts the window, and the GPU comes back
+for takes 30 s later.
+
 **A 5 s cache.** The probe is a directory walk with a few small reads, and it
 runs twice per take: at take start (`supports_partials`) and at the final
 (`transcribe`), never per partial, so an unplug mid-take keeps that take's live

@@ -208,7 +208,9 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
   `/sys/class/power_supply` (cached 5 s). The machine's own battery decides: if
   it reports *Discharging*, that's "on battery", even when a weak USB-C charger
   or dock reports itself online. A desktop with no battery, or a box where that
-  tree can't be read, keeps the GPU. `tuparles transcribe --device auto` follows it too.
+  tree can't be read, keeps the GPU. Unplugging switches at the next take, but
+  mains must hold steady for 30 s before the GPU comes back, so a flaky charger
+  can't bounce every take through a ~1.6 s CUDA rebuild. `tuparles transcribe --device auto` follows it too.
   Caveat: after a mid-session switch the leftover ~190 MB CUDA context may keep
   the card from fully sleeping; a daemon started on battery never touches CUDA.
 - **Self-healing GPU**: if the CUDA context dies mid-session — a laptop
