@@ -41,6 +41,10 @@ listens → you get notes). Five orthogonal dimensions:
   (see §5). Where Granola is the meeting-notes foil, this is the dictation foil.
 
 ### Build notes (decisions as we ship)
+- [TuParles as a systemd user service](2026-10-20-user-service.md) — why
+  `graphical-session.target`, what the session must hand the user manager
+  (and the bare-X11 gotcha), install-only by default with no-clobber, and what
+  stayed unverified because the service was never started.
 - [On battery, act as if « Préférer le CPU » were ticked](2026-10-20-power-aware-engine.md) —
   the `battery_aware` setting: reusing the prefer-CPU seam, reversible
   preference vs irreversible failure, positive-evidence-only sysfs probe with a
