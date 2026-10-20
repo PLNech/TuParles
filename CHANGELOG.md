@@ -30,16 +30,23 @@
 - **Far-field gain** (#51, epic #56): quiet room and laptop-array mics
   (measured ~-30 dBFS peak, -48 dBFS RMS, intelligible only after about +29 dB)
   now get one conservative linear lift at the shared `prepare_pcm` seam,
-  before any leveling. On 20 ms frames: speech level = power mean of the frames
-  above the 70th percentile, floor = 10th percentile; gain =
-  `-26 dBFS - speech level`, capped at +36 dB and at a -1 dBFS post-gain peak,
-  no compression and no clipping. It does nothing (the buffer comes back
-  byte-identical) under 0.5 s, on digital silence, when speech is under 8 dB
-  over the floor (never amplify hiss), when speech is already at -30 dBFS or
-  louder, or when the lift would be under 3 dB. On by default; toggle in
-  *Réglages › Décodage* (*« Micro lointain (gain automatique) »*). The applied
-  gain is logged (`far-field gain +N dB`) and kept in
-  `preprocess.last_far_field_gain_db`. The silence trim detects speech on a
+  before any leveling. On 20 ms frames: speech level = 90th percentile of frame
+  dB (a dB-domain estimate, so one loud frame cannot dominate), floor = 10th
+  percentile; gain = `-26 dBFS - speech level`, capped at +36 dB, with no
+  compression. It does nothing (the buffer comes back byte-identical) under
+  0.5 s, on digital silence, when speech is under 8 dB over the floor (never
+  amplify hiss), when fewer than 15 frames (0.3 s) sit 8 dB over the floor (a
+  click or a few keystrokes are not speech), when speech is already at -30 dBFS
+  or louder, or when the lift would be under 3 dB. The -1 dBFS ceiling follows
+  a robust peak (99.9th percentile of |x|, never the single max), and the
+  output is clipped to +-0.99, so one push-to-talk clack no longer vetoes the
+  lift; the clack itself is clipped, which is harmless for decoding. On by
+  default; toggle in *Réglages › Décodage* (*« Micro lointain (gain
+  automatique) »*). The applied gain is logged (`far-field gain +N dB`) and
+  exposed as `preprocess.last_far_field_gain_db` for debugging; nothing
+  consumes it yet. Partials and the final decode each measure their own buffer,
+  so the gain can differ between them (see the build note); the downstream
+  leveler absorbs it. The silence trim detects speech on a
   lifted copy of the take (so trim and decode agree, and a faint take is not
   judged silent) but still returns a slice of the original, unamplified audio.
   Not yet validated on real far-field
