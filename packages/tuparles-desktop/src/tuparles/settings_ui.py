@@ -493,6 +493,16 @@ class SettingsDialog(QDialog):
         self._speech_leveler.setChecked(bool(settings.get("speech_leveler")))
         layout.addWidget(self._speech_leveler)
 
+        self._far_field_gain = QCheckBox("Micro lointain (gain automatique)")
+        self._far_field_gain.setToolTip(
+            "Relève automatiquement le niveau d'un micro éloigné (salle de "
+            "réunion, micro de portable) quand la voix est faible mais se "
+            "détache nettement du bruit de fond. N'amplifie que l'audio faible : "
+            "une voix normale, proche du micro, n'est jamais modifiée."
+        )
+        self._far_field_gain.setChecked(bool(settings.get("far_field_gain")))
+        layout.addWidget(self._far_field_gain)
+
         layout.addWidget(_section("Rattrapage"))
         self._quiet_rescue = QCheckBox("Rattraper les prises parlées trop bas")
         self._quiet_rescue.setToolTip(
@@ -613,6 +623,7 @@ class SettingsDialog(QDialog):
         settings.put("trim_silence", self._trim_silence.isChecked())
         settings.put("quiet_rescue", self._quiet_rescue.isChecked())
         settings.put("speech_leveler", self._speech_leveler.isChecked())
+        settings.put("far_field_gain", self._far_field_gain.isChecked())
         settings.put("clipboard_restore", self._clipboard_restore.isChecked())
         settings.put("bubble_screen", self._screen.currentData())
         settings.put("bubble_max_width", self._ribbon_width.value() / 100)

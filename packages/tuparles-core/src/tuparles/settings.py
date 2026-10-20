@@ -211,6 +211,12 @@ _DEFAULTS: dict[str, object] = {
     # swapping each way (boundary jitter, no direction). It's a setting:
     # smart default on, total override.
     "speech_leveler": True,
+    # Far-field gain stage (#51): one conservative linear lift for quiet room /
+    # laptop-array mics (~-48 dBFS RMS), applied first at the decode seam. It
+    # only acts when speech is quiet AND stands clearly over the noise floor;
+    # normal near-field audio comes out byte-identical, so default on is safe.
+    # It's a setting: smart default on, total override.
+    "far_field_gain": True,
     # Preserve and restore the user's clipboard around a take (#28). TuParles
     # pastes via the clipboard, which clobbers whatever you had copied. With this
     # on, we snapshot the clipboard before delivery and put it back after the paste
