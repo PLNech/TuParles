@@ -264,6 +264,25 @@ _DEFAULTS: dict[str, object] = {
     # default on, total override via `--no-json`. Offline batch path only — the
     # live dictation daemon is untouched.
     "transcribe_json": True,
+    # Silence gate for offline `transcribe` (#54). Whisper fed a near-silent
+    # file can invent a language and loop one phrase for 30 s. Before decoding,
+    # a file is skipped (empty transcript, « Aucune parole détectée », the
+    # reason + levels in the sidecar) only when BOTH say nothing: the decoder's
+    # own VAD finds no speech span, AND fewer than 160 ms of frames sit 6 dB
+    # over the noise floor. Either clause alone means decode. On the file path
+    # the VAD is the one the decoder runs, on the same prepared audio, so a
+    # gated file is one the decoder would have returned empty anyway: the gate
+    # only makes "nothing here" explicit and skips the model. It can only ever
+    # turn a no-speech file into an empty result, so default on; `--no-silence-gate`
+    # bypasses it per run. Offline batch path only — the daemon is untouched.
+    "silence_gate": True,
+    # Loop guard for offline `transcribe` (#54): a phrase repeated verbatim 4+
+    # times in a row over 12+ words (so "the" x12, "Thank you." x6, a 3-word
+    # phrase x4) keeps ONE copy, and the block is flagged (`[…]` in the txt,
+    # `repetition` + top-level `truncated_repetition` in the sidecar). Honest
+    # repeats ("non non non", a phrase said twice) are far below it. Default
+    # on; off keeps the raw decode. Offline batch path only.
+    "repetition_guard": True,
 }
 
 
