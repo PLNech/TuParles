@@ -234,3 +234,99 @@ class TestPrepareSeam:
         from tuparles import settings
 
         assert settings._DEFAULTS["far_field_gain"] is True
+
+
+class TestTrimSeam:
+    """`trim_silence` decides on far-field-LIFTED audio but slices the ORIGINAL.
+
+    Trim and decode must agree on what counts as speech: a take at -48 dBFS
+    trims to the same span as the same take 28 dB louder. The RMS fallback tier
+    is forced (silero is an optional dep, and a synthetic burst is not speech to
+    it); the lift is applied identically ahead of either tier."""
+
+    @pytest.fixture(autouse=True)
+    def _rms_tier(self, monkeypatch):
+        import tuparles.preprocess as pp
+
+        monkeypatch.setattr(pp, "_silero_unavailable", True)
+        monkeypatch.setattr(pp, "_far_field_gain_on", lambda: True)
+
+    @staticmethod
+    def _take(speech_rms_db: float) -> np.ndarray:
+        """0.8 s floor, 2 s speech-like bursts, 0.8 s floor — as float64."""
+        floor_db = speech_rms_db - 40.0
+        rng = np.random.RandomState(11)
+        lead = _band_noise(int(0.8 * SAMPLE_RATE), rng) * 10 ** (floor_db / 20)
+        tail = _band_noise(int(0.8 * SAMPLE_RATE), rng) * 10 ** (floor_db / 20)
+        return np.concatenate(
+            [lead, _speech_like(2.0, speech_rms_db, 40.0, seed=12), tail]
+        )
+
+    @staticmethod
+    def _span(orig: np.ndarray, out: np.ndarray) -> tuple[int, int]:
+        """Where `out` sits inside `orig` (it must be a contiguous slice)."""
+        for start in range(0, orig.size - out.size + 1, 1):
+            if orig[start] == out[0] and np.array_equal(
+                orig[start : start + out.size], out
+            ):
+                return start, start + out.size
+        raise AssertionError("trim output is not a slice of the original")
+
+    def test_quiet_and_loud_takes_trim_to_the_same_span(self):
+        from tuparles.preprocess import trim_silence
+
+        quiet = _to_i16(self._take(-46.0))  # about -48 dBFS RMS overall
+        loud = _to_i16(self._take(-46.0) * 10 ** (28.0 / 20))  # about -20 dBFS
+        oq, ol = trim_silence(quiet), trim_silence(loud)
+        assert oq.size < quiet.size and ol.size < loud.size  # both really trimmed
+        (sq, eq), (sl, el) = self._span(quiet, oq), self._span(loud, ol)
+        tol = int(0.040 * SAMPLE_RATE)
+        assert abs(sq - sl) <= tol and abs(eq - el) <= tol
+
+    def test_very_quiet_take_is_trimmed_not_judged_silent(self):
+        # Peak ~ -48 dBFS: under the RMS tier's absolute silence floor unlifted,
+        # so the old behaviour handed back the whole buffer. Lifted, it trims.
+        from tuparles.preprocess import trim_silence
+
+        quiet = _to_i16(self._take(-64.0))
+        out = trim_silence(quiet)
+        assert out.size < quiet.size
+
+    def test_returns_slice_of_original_unlifted_int16(self):
+        from tuparles.preprocess import trim_silence
+
+        quiet = _to_i16(self._take(-46.0))
+        out = trim_silence(quiet)
+        assert out.dtype == np.int16 and out.size < quiet.size
+        self._span(quiet, out)  # values untouched: array_equal to a source slice
+        assert _peak_db(out) < -25.0  # still quiet: the lift is NOT baked in
+
+    def test_float32_is_a_slice_of_the_original(self):
+        from tuparles.preprocess import trim_silence
+
+        quiet = self._take(-46.0).astype(np.float32)
+        out = trim_silence(quiet)
+        assert out.dtype == np.float32 and out.size < quiet.size
+        self._span(quiet, out)
+
+    def test_setting_off_keeps_the_old_decision(self, monkeypatch):
+        import tuparles.preprocess as pp
+
+        monkeypatch.setattr(pp, "_far_field_gain_on", lambda: False)
+        # Very quiet take: under the absolute RMS floor, so untouched, as before.
+        very_quiet = _to_i16(self._take(-64.0))
+        assert np.array_equal(pp.trim_silence(very_quiet), very_quiet)
+        # Quiet-but-above-floor take: the scale-free RMS gate, unchanged.
+        quiet = _to_i16(self._take(-46.0))
+        out = pp.trim_silence(quiet)
+        assert out.size < quiet.size
+        assert out.size == 38880  # pinned: the pre-#51 result for this take
+
+    def test_low_level_noise_is_left_alone(self):
+        # No speech structure: the lift no-ops and the RMS gate still finds
+        # nothing worth cutting.
+        from tuparles.preprocess import trim_silence
+
+        rng = np.random.RandomState(13)
+        pcm = _to_i16(rng.randn(4 * SAMPLE_RATE) * 10 ** (-48 / 20))
+        assert np.array_equal(trim_silence(pcm), pcm)
