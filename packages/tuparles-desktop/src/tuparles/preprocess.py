@@ -46,7 +46,6 @@ from tuparles.config import (
     TRIM_RMS_TOP_DB,
 )
 
-
 _log = logging.getLogger("tuparles.preprocess")
 
 # --- far-field gain (#51) ----------------------------------------------------
