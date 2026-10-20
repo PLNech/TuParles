@@ -61,8 +61,13 @@ def test_an_empty_or_missing_tree_is_not_on_battery(tmp_path):
 
 def test_a_peripheral_battery_is_not_the_machines(tmp_path):
     # A wireless mouse draining its own cell must not push a desktop onto CPU.
-    _supply(tmp_path, "hidpp_battery_0", type="Battery", scope="Device",
-            status="Discharging")
+    _supply(
+        tmp_path,
+        "hidpp_battery_0",
+        type="Battery",
+        scope="Device",
+        status="Discharging",
+    )
     assert read_on_battery(tmp_path) is False
 
 

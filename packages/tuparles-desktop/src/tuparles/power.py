@@ -49,9 +49,12 @@ def read_on_battery(root: Path = POWER_SUPPLY_ROOT) -> bool:
             kind = "Battery"  # older/odd drivers omit `type`; the name is enough
         if kind in _MAINS_TYPES and _read(supply / "online") == "1":
             return False  # a live charger beats any battery status
-        if kind == "Battery" and _read(supply / "scope") != "Device":
-            if _read(supply / "status") == "Discharging":
-                discharging = True
+        if (
+            kind == "Battery"
+            and _read(supply / "scope") != "Device"  # not a mouse's cell
+            and _read(supply / "status") == "Discharging"
+        ):
+            discharging = True
     return discharging
 
 
