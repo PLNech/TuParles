@@ -27,35 +27,35 @@
   and offer Retry; download controls fit on narrow screens.
 
 ### Added
-- **Far-field gain** (#51, epic #56): quiet room and laptop-array mics
-  (measured ~-30 dBFS peak, -48 dBFS RMS, intelligible only after about +29 dB)
-  now get one conservative linear lift at the shared `prepare_pcm` seam,
-  before any leveling. On 20 ms frames: speech level = 90th percentile of frame
-  dB (a dB-domain estimate, so one loud frame cannot dominate), floor = 10th
-  percentile; gain = `-26 dBFS - speech level`, capped at +36 dB, with no
-  compression. It does nothing (the buffer comes back byte-identical) under
-  0.5 s, on digital silence, when speech is under 8 dB over the floor (never
-  amplify hiss), when fewer than 15 frames (0.3 s) sit 8 dB over the floor (a
-  click or a few keystrokes are not speech), when speech is already at -30 dBFS
-  or louder, when the lift would be under 3 dB, or when the take has fewer than
-  3 syllable-rate jumps (5 dB frame to frame, 100 ms apart: a drifting fan, a
-  door slam or a flat burst have none or one or two). There is no peak-based
-  gain reduction; the output is only clipped to +-0.99, so no push-to-talk
-  clack (grid-tested: 1 to 3 clacks of 8 or 20 ms at 0.6 or 0.95, takes of 1.5
-  to 6 s, all within 3 dB of the clack-free lift) vetoes the lift; the clack
-  itself is clipped, which is harmless for decoding. Known limits: dense typing
-  (40 soft keystrokes in 4 s lift +17 dB) still reads as speech, and three or
-  more slams or bursts would pass the modulation rule. On by
-  default; toggle in *Réglages › Décodage* (*« Micro lointain (gain
-  automatique) »*). The applied gain is logged (`far-field gain +N dB`) and
-  exposed as `preprocess.last_far_field_gain_db` for debugging; nothing
-  consumes it yet. Partials and the final decode each measure their own buffer,
-  so the gain can differ between them (see the build note); the downstream
-  leveler absorbs it. The silence trim detects speech on a
-  lifted copy of the take (so trim and decode agree, and a faint take is not
-  judged silent) but still returns a slice of the original, unamplified audio.
-  Not yet validated on real far-field
-  audio: the WER eval lane is #53. Build note:
+- **Far-field gain, experimental, off by default** (#51, epic #56): an opt-in
+  lift for quiet room and laptop-array mics (measured ~-30 dBFS peak, -48 dBFS
+  RMS, intelligible only after about +29 dB), at the shared `prepare_pcm` seam
+  before any leveling. On 20 ms frames: level = 90th percentile of frame dB,
+  floor = 10th percentile; one linear gain `-26 dBFS - level`, capped at +36 dB,
+  no compression, no peak-based reduction. It does nothing (the buffer comes
+  back byte-identical) under 0.5 s, on digital silence, when the level is under
+  8 dB over the floor, when fewer than 15 frames (0.3 s) sit 8 dB over the
+  floor, when the level is already at -30 dBFS or louder, or when the lift
+  would be under 3 dB. This is a level and signal-to-noise gate: it does not
+  tell speech from other sustained sound. Clacks are handled only by a hard
+  +-0.99 clip on the output, which does not hurt decoding (grid-tested: 1 to 3
+  clacks of 8 or 20 ms at 0.6 or 0.95, takes of 1.5 to 6 s, all within 3 dB of
+  the clack-free lift, output never above 0.99). Toggle in *Réglages ›
+  Décodage* (*« Micro lointain (gain automatique) »*), off until validated on
+  real room recordings (#53 A/B). Known limits, measured: non-stationary noise
+  can be lifted (drifting pink fan +-10 dB +9.9 to +29.9 dB at -45 to -65 dBFS,
+  flat 0.5 s burst at -35 dBFS +9.3, door-slam pairs +8.5 to +17.8, slams at
+  -35 dBFS +18.4, ordinary typing 13 keystrokes in 4 s +25.9, 40 soft ones
+  +16.9). Mitigations: the decoder's own VAD filter downstream, and the planned
+  VAD-based speech gate (#54). A modulation-rule guard was tried and reverted
+  (a clack counts as an event; single-word takes never qualify), see the build
+  note. The applied gain is logged (`far-field gain +N dB`) and exposed as
+  `preprocess.last_far_field_gain_db` for debugging; nothing consumes it yet.
+  Partials and the final decode each measure their own buffer; after the first
+  0.5 s tick they agree within 0.3 dB on a quiet take. The silence trim detects
+  speech on a lifted copy of the take when the setting is on (so trim and
+  decode agree, and a faint take is not judged silent) but still returns a
+  slice of the original, unamplified audio. Build note:
   `docs/research/2026-10-20-far-field-gain.md`.
 - **Background service** (#48): `tuparles service install` renders
   `packaging/tuparles.service.in` into `~/.config/systemd/user/tuparles.service`,

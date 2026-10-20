@@ -54,19 +54,18 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
   decode). Conservative by design: it only ever trims the ends, keeps a margin,
   and hands the engine the whole take at the least doubt. On by default; toggle
   in *Réglages › Décodage* (*« Couper les silences en début/fin de prise »*).
-- **Lifts a far-away mic** — a meeting-room or laptop-array mic that records
-  you at about -48 dBFS gets one automatic, linear boost (up to +36 dB, peak
-  clipped at 0.99) before decode. It only acts when the audio is quiet, stays
-  over the noise floor for at least 0.3 s, and its level jumps around the way
-  speech does (a steady fan, a door slam or hiss are left alone rather than
-  amplified); normal audio is never touched. Dense typing can still pass for
-  speech. A loud push-to-talk clack does not stop the lift; the clack itself is
-  clipped, which does not hurt decoding. The silence
-  trim judges speech on the lifted audio too, so a quiet take trims like a
-  normal one. On by default; toggle in *Réglages › Décodage* (*« Micro lointain
-  (gain automatique) »*). It also amplifies the room's own noise, and is not yet
-  measured on real far-field audio (see
-  `docs/research/2026-10-20-far-field-gain.md`).
+- **Lifts a far-away mic (experimental, off by default)** — a meeting-room or
+  laptop-array mic that records you at about -48 dBFS can get one automatic,
+  linear boost (up to +36 dB, output clipped at 0.99) before decode. Turn it on
+  in *Réglages › Décodage* (*« Micro lointain (gain automatique) »*). It checks
+  level and signal-to-noise only: the audio must be quiet and stay over the
+  noise floor for at least 0.3 s; normal audio is never touched. It does **not**
+  tell speech from other sound, so a drifting fan, door slams or typing over a
+  quiet room can be lifted too (up to about +30 dB in our tests); that is why it
+  is off until it has been validated on real room recordings. A loud
+  push-to-talk clack does not stop the lift; the clack itself is clipped, which
+  does not hurt decoding. The silence trim judges speech on the lifted audio
+  when it is on. See `docs/research/2026-10-20-far-field-gain.md`.
 - **A bubble that tells you what's happening** — the waveform tracks your
   voice on a perceptual scale, so even quiet speech visibly moves the bars
   ("I hear you"); the bars are **green on GPU, blue on CPU**, so you always
