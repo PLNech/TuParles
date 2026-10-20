@@ -631,8 +631,8 @@ def render_json(
     segments: list[Segment],
     *,
     source: str,
-    model: str,
-    device: str,
+    model: str | None,  # None: no model ran (a file the silence gate skipped)
+    device: str | None,
     duration: float,
     date: str,
     language: str | None = None,
