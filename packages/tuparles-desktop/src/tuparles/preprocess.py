@@ -63,8 +63,6 @@ FAR_FIELD_SPEECH_PCTL = 90  # speech level = this percentile of frame dB
 FAR_FIELD_NOISE_PCTL = 10  # floor = this percentile of frame dB
 FAR_FIELD_MIN_SPEECH_FRAMES = 15  # 0.3 s over the floor: a click is not speech
 FAR_FIELD_QUIET_DBFS = -30.0  # at or above this the audio is not "quiet"
-FAR_FIELD_PEAK_CEILING = 10.0 ** (-1.0 / 20.0)  # robust peak after gain, -1 dBFS
-FAR_FIELD_PEAK_PCTL = 99.9  # "robust peak": one clack must not set the ceiling
 FAR_FIELD_HARD_LIMIT = 0.99  # the output is clipped to +-this after the gain
 FAR_FIELD_MIN_GAIN_DB = 3.0  # a smaller lift is not worth touching the audio
 
@@ -85,11 +83,12 @@ def far_field_gain(
     frame cannot dominate it), floor = 10th percentile, and at least 15 frames
     (0.3 s) must sit 8 dB over the floor (a click or a few keystrokes are not
     speech). A SINGLE linear gain (no compression, no dynamics inside a take)
-    lifts speech toward `TARGET_SPEECH_DBFS`, capped at `MAX_GAIN_DB` and so
-    that the ROBUST peak (99.9th percentile of |x|, never the single max) lands
-    at -1 dBFS. The output is then clipped to +-0.99: a push-to-talk clack that
-    exceeds it is clipped, which is harmless for decoding and the stated
-    trade-off for not letting one clack veto the lift of the whole take.
+    lifts speech toward `TARGET_SPEECH_DBFS`, capped at `MAX_GAIN_DB`. There is
+    NO peak-based gain reduction: at the target, speech peaks sit well under
+    full scale, and any peak rule lets a transient (a push-to-talk clack of any
+    length, or several) veto the lift of the whole take. Instead the output is
+    clipped to +-0.99: a clack that exceeds it is clipped, which is harmless
+    for decoding and the stated trade-off.
 
     Returns (pcm, gain_db); the input object untouched and 0.0 when it does
     nothing: disabled, under 0.5 s, digital silence, no sustained speech over
@@ -118,11 +117,7 @@ def far_field_gain(
         < FAR_FIELD_MIN_SPEECH_FRAMES
     ):
         return pcm, 0.0
-    peak = float(np.percentile(np.abs(f), FAR_FIELD_PEAK_PCTL))
-    if not np.isfinite(peak) or peak <= 0.0:
-        return pcm, 0.0
     gain_db = min(max(TARGET_SPEECH_DBFS - speech_db, 0.0), MAX_GAIN_DB)
-    gain_db = min(gain_db, 20.0 * float(np.log10(FAR_FIELD_PEAK_CEILING / peak)))
     if gain_db < FAR_FIELD_MIN_GAIN_DB:
         return pcm, 0.0
     lifted = np.clip(
