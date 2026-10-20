@@ -210,9 +210,10 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
   or dock reports itself online. A desktop with no battery, or a box where that
   tree can't be read, keeps the GPU. Unplugging switches at the next take, but
   mains must hold steady for 30 s before the GPU comes back, so a flaky charger
-  can't bounce every take through a ~1.6 s CUDA rebuild. After more than 30 s
-  without a take, the next reading is trusted at once, so the first take after
-  a long idle on mains is back on the GPU. `tuparles transcribe --device auto`
+  can't bounce every take through a ~1.6 s CUDA rebuild. That holds while
+  takes are under 5 min apart. After 5 min or more without a take, the next
+  reading is trusted at once, so the first take after a long idle on mains is
+  back on the GPU. `tuparles transcribe --device auto`
   follows it too.
   Caveat: after a mid-session switch the leftover ~190 MB CUDA context may keep
   the card from fully sleeping; a daemon started on battery never touches CUDA.

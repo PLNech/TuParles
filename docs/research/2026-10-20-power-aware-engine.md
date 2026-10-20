@@ -77,11 +77,20 @@ honoured at the next read, since CPU is the safe side. Returning to mains
 needs "not discharging" to hold for 30 s (`REPLUG_SETTLE_S`), and any
 Discharging read restarts the window. The first reading has no history and is
 trusted as-is, so a cold start on AC doesn't wait. The same goes for any read
-taken more than 30 s after the previous sysfs read. Hysteresis absorbs
-flapping between close reads, and a gap longer than the window carries no
-flapping evidence. Reads only happen at takes, so this rule is what puts the
-first take after a long idle on mains straight back on the GPU, without a
-poller. (A cache hit inside the 5 s TTL is not a read and doesn't count.)
+taken 5 min (`COLD_START_GAP_S`) or more after the previous sysfs read, since
+a gap that long carries no flapping evidence. Reads only happen at takes, so
+this rule is what puts the first take after a long idle on mains straight
+back on the GPU, without a poller. (A cache hit inside the 5 s TTL is not a
+read and doesn't count.)
+
+The first version of the gap reused the 30 s settle window. Round-2
+verification caught the flaw: with takes every 40 s, which is ordinary
+dictation spacing, every read was a "cold start". A flapping charger then
+gave True/False/True/False, with a CUDA rebuild every other take. Hysteresis
+was skipped exactly where it was needed. With a separate 5 min gap, takes at
+dictation spacing keep the window: a replug costs one extra CPU take (the
+first calm read starts the window, the next one 30 s or more later ends it).
+The honest scope: the protection holds while takes are under 5 min apart.
 
 **A 5 s cache.** The probe is a directory walk with a few small reads, and it
 runs twice per take: at take start (`supports_partials`) and at the final
