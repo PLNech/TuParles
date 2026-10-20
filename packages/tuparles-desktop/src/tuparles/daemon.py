@@ -99,12 +99,18 @@ class Bridge(QObject):
     # the bubble dissolves the dimmed partial in amber, never a red recant
 
 
-def backend_shift_message(backend: str, already_announced: bool) -> str | None:
+def backend_shift_message(
+    backend: str, already_announced: bool, reason: str | None = None
+) -> str | None:
     """The one-time backend-shift toast (#27): the first time a decode lands on
     CPU after the GPU has given up mid-session, name the fallback so the bubble
-    going green→blue reads as honest rather than broken. Returns None while still
-    on GPU or once already announced. Pure — headless-tested."""
+    going green→blue reads as honest rather than broken. `reason` is the
+    engine's `cpu_reason`: on battery the move is a choice, so the toast says
+    so instead of sounding like a breakdown. Returns None while still on GPU or
+    once already announced. Pure — headless-tested."""
     if backend == "cpu" and not already_announced:
+        if reason == "battery":
+            return "Sur batterie — passé sur CPU pour l'économiser"
         return "Passé sur CPU — un peu plus lent"
     return None
 
@@ -640,6 +646,7 @@ class Controller(QObject):
                 msg = backend_shift_message(
                     getattr(self._engine, "active_backend", "gpu"),
                     self._backend_announced,
+                    getattr(self._engine, "cpu_reason", None),
                 )
                 if msg and settings.get("backend_toast"):
                     # The status channel queues-and-re-fires if the bubble is

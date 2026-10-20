@@ -269,3 +269,163 @@ class TestPreferCpu:
         settings.put("prefer_cpu", True)
         assert eng.supports_partials is False  # FakeCpu has none
         assert eng._gpu is None
+
+
+class TestBatteryAware:
+    """« Économiser la batterie » — on battery, behave as if prefer_cpu were set.
+
+    The probe is injected (monkeypatched `tuparles.power.on_battery`), never the
+    real sysfs: the suite must not care whether the dev laptop is plugged in.
+    conftest pins it to "on AC" for every other test.
+    """
+
+    @staticmethod
+    def _plug(monkeypatch, state):
+        from tuparles import power
+
+        monkeypatch.setattr(power, "on_battery", lambda: state["battery"])
+
+    @staticmethod
+    def _counting_factory():
+        calls = []
+
+        def factory():
+            calls.append(1)
+            return FakeGpu()
+
+        return factory, calls
+
+    def test_on_battery_starts_on_cpu_without_touching_the_card(self, monkeypatch):
+        self._plug(monkeypatch, {"battery": True})
+        factory, calls = self._counting_factory()
+        eng = ResilientEngine(gpu_factory=factory, cpu_factory=FakeCpu)
+
+        assert calls == [], "on battery, yet a CUDA engine was built"
+        assert eng.active_backend == "cpu"  # tray/bubble go blue
+        assert eng._on_cpu_reason == "preference"  # reversible, not a failure
+        assert eng.cpu_reason == "battery"  # and we know why, for the toast/log
+        assert eng.transcribe(AUDIO).text == "cpu"
+        assert calls == []
+
+    def test_on_ac_uses_the_gpu(self, monkeypatch):
+        self._plug(monkeypatch, {"battery": False})
+        eng = ResilientEngine(gpu_factory=lambda: FakeGpu(), cpu_factory=FakeCpu)
+        assert eng.active_backend == "gpu"
+        assert eng.cpu_reason is None
+        assert eng.transcribe(AUDIO).text == "gpu"
+
+    def test_setting_off_ignores_the_battery(self, monkeypatch):
+        from tuparles import settings
+
+        settings.put("battery_aware", False)
+        self._plug(monkeypatch, {"battery": True})
+        eng = ResilientEngine(gpu_factory=lambda: FakeGpu(), cpu_factory=FakeCpu)
+        assert eng.active_backend == "gpu"
+        assert eng.transcribe(AUDIO).text == "gpu"
+
+    def test_battery_aware_is_on_by_default(self):
+        from tuparles import settings
+
+        assert settings.get("battery_aware") is True
+
+    def test_prefer_cpu_still_wins_on_ac(self, monkeypatch):
+        from tuparles import settings
+
+        settings.put("prefer_cpu", True)
+        self._plug(monkeypatch, {"battery": False})
+        factory, calls = self._counting_factory()
+        eng = ResilientEngine(gpu_factory=factory, cpu_factory=FakeCpu)
+        assert eng.transcribe(AUDIO).text == "cpu"
+        assert eng.cpu_reason == "preference"
+        assert calls == []
+
+    def test_plugging_in_with_prefer_cpu_set_stays_on_cpu(self, monkeypatch):
+        from tuparles import settings
+
+        settings.put("prefer_cpu", True)
+        state = {"battery": True}
+        self._plug(monkeypatch, state)
+        factory, calls = self._counting_factory()
+        eng = ResilientEngine(gpu_factory=factory, cpu_factory=FakeCpu)
+        assert eng.transcribe(AUDIO).text == "cpu"
+
+        state["battery"] = False  # charger in, but the user still wants CPU
+        assert eng.transcribe(AUDIO).text == "cpu"
+        assert eng.cpu_reason == "preference"
+        assert calls == []
+
+    def test_a_failed_gpu_is_not_resurrected_by_plugging_in(self, monkeypatch):
+        state = {"battery": False}
+        self._plug(monkeypatch, state)
+        seq = [FakeGpu(dies_after=0)]
+        calls = []
+
+        def factory():
+            calls.append(1)
+            if seq:
+                return seq.pop()
+            raise RuntimeError("no CUDA device")
+
+        eng = ResilientEngine(gpu_factory=factory, cpu_factory=FakeCpu)
+        assert eng.transcribe(AUDIO).text == "cpu"  # died, rebuild failed
+        assert eng._on_cpu_reason == "failure"
+        built = len(calls)
+
+        state["battery"] = True  # unplugged…
+        assert eng.transcribe(AUDIO).text == "cpu"
+        state["battery"] = False  # …and back on AC: still a dead card
+        assert eng.transcribe(AUDIO).text == "cpu"
+        assert eng._on_cpu_reason == "failure"
+        assert eng.cpu_reason == "failure"
+        assert len(calls) == built, "a mains flip retried a dead GPU"
+
+    def test_battery_ac_battery_round_trip(self, monkeypatch):
+        state = {"battery": True}
+        self._plug(monkeypatch, state)
+        factory, calls = self._counting_factory()
+        eng = ResilientEngine(gpu_factory=factory, cpu_factory=FakeCpu)
+        assert eng.transcribe(AUDIO).text == "cpu"
+        assert calls == []  # never built on battery
+
+        state["battery"] = False  # plugged in at the customer's desk
+        assert eng.transcribe(AUDIO).text == "gpu"
+        assert eng.active_backend == "gpu"
+        assert eng.cpu_reason is None
+        assert len(calls) == 1  # built lazily, exactly when first needed
+
+        state["battery"] = True  # unplugged for the walk to the meeting room
+        assert eng.transcribe(AUDIO).text == "cpu"
+        assert eng._gpu is None  # released, VRAM and all
+        assert eng.cpu_reason == "battery"
+
+        state["battery"] = False
+        assert eng.transcribe(AUDIO).text == "gpu"
+        assert len(calls) == 2  # rebuilt once per return to AC, not per take
+        assert eng.transcribe(AUDIO).text == "gpu"
+        assert len(calls) == 2
+
+    def test_partials_follow_the_power_state_from_the_same_take(self, monkeypatch):
+        state = {"battery": False}
+        self._plug(monkeypatch, state)
+        eng = ResilientEngine(gpu_factory=lambda: FakeGpu(), cpu_factory=FakeCpu)
+        assert eng.supports_partials is True  # GPU partials
+
+        state["battery"] = True
+        assert eng.supports_partials is False  # FakeCpu has none
+        assert eng._gpu is None
+
+    def test_an_unplug_mid_take_lands_at_the_final_decode(self, monkeypatch):
+        """The preference is synced at take start (supports_partials) and at the
+        final (transcribe), never per partial: partials are frequent and must
+        not thrash a GPU release/rebuild. So an unplug mid-take keeps the live
+        previews on the GPU and moves the final decode to CPU."""
+        state = {"battery": False}
+        self._plug(monkeypatch, state)
+        eng = ResilientEngine(gpu_factory=lambda: FakeGpu(), cpu_factory=FakeCpu)
+        assert eng.supports_partials is True  # take starts on mains
+
+        state["battery"] = True  # unplugged while speaking
+        assert eng.transcribe_partial(AUDIO) == "p"  # previews: still the GPU
+        assert eng.active_backend == "gpu"
+        assert eng.transcribe(AUDIO).text == "cpu"  # the final honours it
+        assert eng.cpu_reason == "battery"

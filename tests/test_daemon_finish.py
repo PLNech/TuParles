@@ -350,6 +350,15 @@ def test_backend_shift_message_pure():
     assert backend_shift_message("cpu", False) == "Passé sur CPU — un peu plus lent"
 
 
+def test_backend_shift_message_names_the_battery():
+    """On battery the move to CPU is a choice, not a breakdown — say so."""
+    assert backend_shift_message("cpu", False, "battery") == (
+        "Sur batterie — passé sur CPU pour l'économiser"
+    )
+    assert backend_shift_message("cpu", True, "battery") is None
+    assert backend_shift_message("gpu", False, None) is None
+
+
 def test_finish_announces_cpu_fallback_once(monkeypatch):
     """The first decode that lands on CPU emits the toast once; later takes stay
     quiet (the fallback is sticky — say it once, not every take)."""

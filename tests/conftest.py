@@ -14,10 +14,16 @@ setting writes it itself; one that needs a specific config dir can still
 
 import pytest
 
+from tuparles import power
+
 
 @pytest.fixture(autouse=True)
 def _isolate_user_state(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
     # theme.py writes its recoloured QSS icons here; keep them out of the real one.
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    # The same lesson for the power source: `battery_aware` is on by default, so
+    # an unplugged dev laptop would flip every engine test onto CPU. Pin "on AC";
+    # tests about the battery inject their own state.
+    monkeypatch.setattr(power, "on_battery", lambda: False)
     yield

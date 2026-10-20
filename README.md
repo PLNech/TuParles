@@ -200,6 +200,23 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
   too on `--device auto`, while an explicit `--device cuda` still wins. The
   trade-off is stated plainly in the dialog: slower, and the CPU rung can't
   follow code-switching segment by segment.
+- **Battery-aware** (on by default): *Réglages › Décodage › « Économiser la
+  batterie (CPU sur batterie) »*. While the laptop is discharging, the engine
+  behaves exactly as if « Préférer le CPU » were ticked (no CUDA engine, CPU
+  decode, blue tray) and goes back to the GPU on mains. It is checked again at
+  every take, with no restart. The power source is read from
+  `/sys/class/power_supply` (cached 5 s). The machine's own battery decides: if
+  it reports *Discharging*, that's "on battery", even when a weak USB-C charger
+  or dock reports itself online. A desktop with no battery, or a box where that
+  tree can't be read, keeps the GPU. Unplugging switches at the next take, but
+  mains must hold steady for 30 s before the GPU comes back, so a flaky charger
+  can't bounce every take through a ~1.6 s CUDA rebuild. That holds while
+  takes are under 5 min apart. After 5 min or more without a take, the next
+  reading is trusted at once, so the first take after a long idle on mains is
+  back on the GPU. `tuparles transcribe --device auto`
+  follows it too.
+  Caveat: after a mid-session switch the leftover ~190 MB CUDA context may keep
+  the card from fully sleeping; a daemon started on battery never touches CUDA.
 - **Self-healing GPU**: if the CUDA context dies mid-session — a laptop
   suspend/resume is the classic culprit, leaving `nvidia-smi` happy but
   CUDA unusable — the engine rebuilds the context on the next take, and

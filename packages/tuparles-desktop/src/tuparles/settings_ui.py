@@ -440,6 +440,16 @@ class SettingsDialog(QDialog):
         self._prefer_cpu.setChecked(bool(settings.get("prefer_cpu")))
         layout.addWidget(self._prefer_cpu)
 
+        self._battery_aware = QCheckBox("Économiser la batterie (CPU sur batterie)")
+        self._battery_aware.setToolTip(
+            "Sur batterie, la dictée tourne sur le CPU et la carte reste éteinte ; "
+            "sur secteur, retour au GPU. Vérifié à chaque prise, sans redémarrer. "
+            "Sans batterie (poste fixe), rien ne change. Décoche pour garder le "
+            "GPU même sur batterie."
+        )
+        self._battery_aware.setChecked(bool(settings.get("battery_aware")))
+        layout.addWidget(self._battery_aware)
+
         layout.addWidget(_section("Aperçu en direct"))
         self._cpu_partials = QCheckBox("Aperçu en direct sur CPU")
         self._cpu_partials.setToolTip(
@@ -597,6 +607,7 @@ class SettingsDialog(QDialog):
         settings.put("start_cue_sound", self._start_sound.isChecked())
         settings.put("tray_animation", self._tray_anim.isChecked())
         settings.put("prefer_cpu", self._prefer_cpu.isChecked())
+        settings.put("battery_aware", self._battery_aware.isChecked())
         settings.put("cpu_partials_enabled", self._cpu_partials.isChecked())
         settings.put("backend_toast", self._backend_toast.isChecked())
         settings.put("trim_silence", self._trim_silence.isChecked())

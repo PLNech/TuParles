@@ -26,6 +26,28 @@
   Failed first-run model downloads show the same error reason as the model picker
   and offer Retry; download controls fit on narrow screens.
 
+### Added
+- **Battery-aware engine** (`battery_aware`, on by default; Réglages › Décodage
+  › « Économiser la batterie (CPU sur batterie) »). While the laptop is
+  discharging, dictation behaves exactly as if « Préférer le CPU » were ticked:
+  no CUDA engine, CPU decode, blue tray. On mains it goes back to the GPU, which
+  is rebuilt lazily at the next take, with no restart. A GPU that genuinely
+  failed stays failed: plugging in never retries a dead card. The power source
+  comes from a new stdlib-only `power.py` probe of `/sys/class/power_supply`,
+  cached 5 s. A system battery reporting *Discharging* means "on battery",
+  even when a supply reports `online=1` (a low-wattage USB-C PD charger or a
+  dock can do that while the battery drains). Desktops, unreadable trees and
+  unknown states keep the GPU, and peripheral (mouse) batteries are ignored.
+  Unplugging is honoured at once, but returning to the GPU waits for 30 s of
+  steady mains (any Discharging blip restarts the window), so a marginal
+  charger flipping Discharging/Charging doesn't cost a CUDA rebuild per take.
+  That protection holds while takes are under 5 min apart. A gap of 5 min or
+  more is treated as a cold start and the reading is trusted at once, so the
+  first take after a long idle on mains is back on the GPU.
+  `tuparles transcribe --device auto` honours it too, and the one-time GPU→CPU
+  toast names the battery as the reason. Build note:
+  `docs/research/2026-10-20-power-aware-engine.md`.
+
 ### Changed
 - `tray_animation` (Réglages → « Animer l'icône pendant la dictée et le
   décodage ») now means "animate while recording/decoding"; rest is always

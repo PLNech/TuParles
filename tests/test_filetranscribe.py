@@ -652,3 +652,22 @@ class TestPreferCpuSetting:
         monkeypatch.setitem(sys.modules, "ctranslate2", FakeCt2())
         assert ft.pick_device("auto") == ("cuda", "float16", "large-v3-turbo")
         assert probed == [1]
+
+    def test_auto_on_battery_picks_cpu_without_probing(self, monkeypatch):
+        """« Économiser la batterie » reaches batch transcription too: a 30 s
+        clip is ~65 s of CPU on the small model, but the GPU path would spin
+        up CUDA on the battery the setting is there to save."""
+        import sys
+
+        from tuparles import power
+
+        monkeypatch.setattr(power, "on_battery", lambda: True)
+
+        class Boom:
+            def __getattr__(self, _name):
+                raise AssertionError("probed CUDA while on battery")
+
+        monkeypatch.setitem(sys.modules, "ctranslate2", Boom())
+        assert ft.pick_device("auto") == ("cpu", "int8", ft.CPU_FILE_MODEL)
+        # An explicit flag still wins over the power state.
+        assert ft.pick_device("cuda") == ("cuda", "float16", "large-v3-turbo")

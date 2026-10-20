@@ -146,3 +146,20 @@ class TestTrayAnimationIsHonest:
         assert "dictée" in label and "décodage" in label
         assert "respire" not in hint, "rest no longer breathes"
         assert "repos" in hint, "say what happens at rest: nothing moves"
+
+
+class TestBatteryAwareToggle:
+    """« Économiser la batterie » — smart default on, total override in Réglages."""
+
+    def test_checkbox_defaults_on_and_round_trips(self, tmp_path, monkeypatch):
+        _qt(tmp_path, monkeypatch)
+        from tuparles import settings
+        from tuparles.settings_ui import SettingsDialog
+
+        dlg = SettingsDialog()
+        assert dlg._battery_aware.isChecked() is True  # the shipped default
+        hint = dlg._battery_aware.toolTip().lower()
+        assert "batterie" in hint and "secteur" in hint  # says both halves
+        dlg._battery_aware.setChecked(False)
+        dlg._save()
+        assert settings.get("battery_aware") is False
