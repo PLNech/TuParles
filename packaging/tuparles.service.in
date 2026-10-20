@@ -1,0 +1,42 @@
+# TuParles as a systemd *user* service (#48).
+# Rendered by `tuparles service install` into ~/.config/systemd/user/; the
+# ExecStart placeholder becomes the resolved launcher (the venv's bin/tuparles),
+# the same resolution as the desktop entry. Edits to the rendered
+# copy are yours to keep: a re-install never overwrites a file that differs, it
+# writes tuparles.service.new beside it.
+#
+# Nothing here forces the engine: battery_aware / prefer_cpu (Réglages) decide
+# GPU or CPU exactly as for a launcher start, so on battery it decodes on CPU.
+
+[Unit]
+Description=TuParles — local push-to-talk dictation
+Documentation=https://github.com/PLNech/TuParles#run-as-a-background-service
+# The tray, the bubble, the hotkey and the paste all live in the logged-in
+# graphical session: start with it, stop with it at logout, start again at the
+# next login (the WantedBy below).
+After=graphical-session.target
+PartOf=graphical-session.target
+# A crash loop gives up after 5 failures in 2 min instead of spinning.
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+Type=simple
+# Fail with a readable journal line when the session never handed its display
+# to the user manager (GNOME/KDE do; a bare ~/.xsession may not). See README.
+ExecStartPre=/bin/sh -c 'test -n "$${DISPLAY}$${WAYLAND_DISPLAY}" || { echo "no DISPLAY or WAYLAND_DISPLAY in the systemd user manager; run: systemctl --user import-environment DISPLAY WAYLAND_DISPLAY XAUTHORITY XDG_SESSION_TYPE" >&2; exit 1; }'
+ExecStart=@EXEC@
+# Quitting from the tray exits 0 and stays quit; only a crash restarts.
+Restart=on-failure
+RestartSec=5
+# A background dictation daemon must not hog the box (on battery the decode
+# runs on CPU): mildly lower priority and half the default CPU weight.
+Nice=5
+CPUWeight=50
+Environment=PYTHONUNBUFFERED=1
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=tuparles
+
+[Install]
+WantedBy=graphical-session.target
