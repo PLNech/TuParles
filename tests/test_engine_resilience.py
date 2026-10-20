@@ -413,3 +413,19 @@ class TestBatteryAware:
         state["battery"] = True
         assert eng.supports_partials is False  # FakeCpu has none
         assert eng._gpu is None
+
+    def test_an_unplug_mid_take_lands_at_the_final_decode(self, monkeypatch):
+        """The preference is synced at take start (supports_partials) and at the
+        final (transcribe), never per partial: partials are frequent and must
+        not thrash a GPU release/rebuild. So an unplug mid-take keeps the live
+        previews on the GPU and moves the final decode to CPU."""
+        state = {"battery": False}
+        self._plug(monkeypatch, state)
+        eng = ResilientEngine(gpu_factory=lambda: FakeGpu(), cpu_factory=FakeCpu)
+        assert eng.supports_partials is True  # take starts on mains
+
+        state["battery"] = True  # unplugged while speaking
+        assert eng.transcribe_partial(AUDIO) == "p"  # previews: still the GPU
+        assert eng.active_backend == "gpu"
+        assert eng.transcribe(AUDIO).text == "cpu"  # the final honours it
+        assert eng.cpu_reason == "battery"
