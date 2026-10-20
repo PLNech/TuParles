@@ -58,7 +58,8 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
   you at about -48 dBFS gets one automatic, linear boost (up to +36 dB, peak
   held under -1 dBFS) before decode. It only acts when the voice is quiet *and*
   clearly above the room noise; normal audio is never touched, and noise-only
-  audio is left alone rather than amplified. On by default; toggle in
+  audio is left alone rather than amplified. The silence trim judges speech
+  on the lifted audio too, so a quiet take trims like a normal one. On by default; toggle in
   *Réglages › Décodage* (*« Micro lointain (gain automatique) »*). It also
   amplifies the room's own noise, and is not yet measured on real far-field
   audio (see `docs/research/2026-10-20-far-field-gain.md`).

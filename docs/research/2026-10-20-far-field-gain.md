@@ -65,11 +65,20 @@ flood the journal. A lift is the event worth tracing; a no-op is silent.
 - **It also amplifies the room noise.** A single linear gain lifts speech and
   floor together; the 8 dB SNR gate only refuses the clear cases. A room where
   speech sits barely over a loud floor is the failure mode to look for.
-- **Interplay with the tuned VAD and the silence trim.** In the daemon, the
-  trim (`trim_silence`, silero VAD) runs at capture handoff, *before*
-  `prepare_pcm`, so it still sees the unlifted take. The engines' in-decode VAD
-  runs after and sees lifted speech. Whether silero's thresholds behave on a
-  -48 dBFS take is a question for #53, not settled here.
+- **Interplay with the tuned VAD and the silence trim.** The trim
+  (`trim_silence`) runs at capture handoff in the daemon, *before*
+  `prepare_pcm`. Resolved: it now runs its speech detection (silero tier and
+  RMS fallback alike) on a far-field-lifted float copy, computed once up front,
+  while still slicing and returning the original unlifted buffer (dtype
+  preserved); the `prepare_pcm` lift then applies to the trimmed slice. Trim and
+  decode therefore decide on the same speech, and a faint take is no longer
+  judged "silent" by the RMS tier's absolute floor (peak under 0.005, about
+  -46 dBFS). The RMS tier's 30 dB gate is relative to the loudest frame, so
+  its span was already scale-invariant above that floor; the lift's real effect
+  there is the floor, and on silero (not importable in the dev venv, so this
+  tier is untested here) its absolute speech-probability behaviour on a
+  -48 dBFS take. The engines' in-decode VAD runs after `prepare_pcm` and always
+  saw lifted speech. Silero on real far-field audio remains a #53 measurement.
 - **Stacking with later conditioning.** After the lift, `speech_leveler`
   (compressor + peak makeup) or peak normalization still run. On lifted audio
   they act as before; their combined effect on far-field takes is unmeasured.

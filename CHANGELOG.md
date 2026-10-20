@@ -39,7 +39,10 @@
   louder, or when the lift would be under 3 dB. On by default; toggle in
   *Réglages › Décodage* (*« Micro lointain (gain automatique) »*). The applied
   gain is logged (`far-field gain +N dB`) and kept in
-  `preprocess.last_far_field_gain_db`. Not yet validated on real far-field
+  `preprocess.last_far_field_gain_db`. The silence trim detects speech on a
+  lifted copy of the take (so trim and decode agree, and a faint take is not
+  judged silent) but still returns a slice of the original, unamplified audio.
+  Not yet validated on real far-field
   audio: the WER eval lane is #53. Build note:
   `docs/research/2026-10-20-far-field-gain.md`.
 - **Background service** (#48): `tuparles service install` renders
