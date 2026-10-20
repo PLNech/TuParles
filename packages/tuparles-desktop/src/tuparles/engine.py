@@ -683,6 +683,8 @@ class ResilientEngine:
         # thrash), never fall back — let the final transcribe() drive recovery.
         # After a sticky CPU fallback, partials come from the CPU engine's own
         # small model (#127); before that, from the live GPU context.
+        # No _sync_cpu_preference() here on purpose: a plug change mid-take
+        # lands at the final decode (transcribe), not per partial.
         try:
             if self._on_cpu:
                 return self._cpu_engine().transcribe_partial(audio)
