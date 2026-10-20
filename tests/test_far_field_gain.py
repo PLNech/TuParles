@@ -16,6 +16,8 @@ from tuparles.preprocess import (
 )
 
 FRAME = 320  # 20 ms at 16 kHz
+HARD_LIMIT = 0.99  # output sample bound after the lift
+LIMIT_DB = 20 * np.log10(HARD_LIMIT) + 0.01
 
 
 def _band_noise(n: int, rng: np.random.RandomState) -> np.ndarray:
@@ -53,17 +55,29 @@ def _f(x: np.ndarray) -> np.ndarray:
 
 
 def _speech_db(x: np.ndarray) -> float:
-    """Independent re-statement of the stage's speech level: power-mean of the
-    frames at or above the 70th percentile of frame RMS."""
+    """Independent re-statement of the stage's speech level: the 90th
+    percentile of frame level in dB (a dB-domain estimate, so one loud frame
+    cannot dominate it)."""
     f = _f(x)
     n = f.size // FRAME
     p = (f[: n * FRAME].reshape(n, FRAME) ** 2).mean(axis=1)
     db = 10 * np.log10(np.maximum(p, 1e-12))
-    return float(10 * np.log10(p[db >= np.percentile(db, 70)].mean()))
+    return float(np.percentile(db, 90))
 
 
 def _peak_db(x: np.ndarray) -> float:
     return float(20 * np.log10(np.abs(_f(x)).max()))
+
+
+def _click(
+    x: np.ndarray, at: float, amp: float, ms: float = 8.0, seed: int = 99
+) -> np.ndarray:
+    """Add a decaying random-sign burst (keyboard click / push-to-talk clack)."""
+    y = x.copy()
+    i, m = int(at * SAMPLE_RATE), int(ms * SAMPLE_RATE / 1000)
+    r = np.random.RandomState(seed)
+    y[i : i + m] += amp * np.exp(-np.arange(m) / (m / 4)) * np.sign(r.randn(m))
+    return y
 
 
 class TestLifts:
@@ -74,27 +88,29 @@ class TestLifts:
         out, gain = far_field_gain(pcm)
         assert gain > 3.0
         assert abs(_speech_db(out) - TARGET_SPEECH_DBFS) <= 2.0
-        assert _peak_db(out) <= -1.0 + 0.05
+        assert _peak_db(out) <= LIMIT_DB
         # returned gain is the gain actually applied (single linear gain)
         applied = 20 * np.log10(np.abs(_f(out)).max() / np.abs(_f(pcm)).max())
         assert applied == pytest.approx(gain, abs=0.1)
 
-    def test_peak_ceiling_limits_gain(self):
-        # Quiet speech plus one tall transient: the lift stops at -1 dBFS peak
-        # instead of clipping, and no compression squashes the click.
+    def test_robust_peak_ceiling_limits_gain(self):
+        # 0.4% of the samples sit at -14 dBFS (a sustained loud passage, not a
+        # one-off click): the p99.9 ceiling is binding, the lift stops short of
+        # the speech target and the robust peak lands at -1 dBFS.
         sig = _speech_like(6.0, speech_rms_db=-44.0)
-        sig[8000] = 10 ** (-14.0 / 20)  # a -14 dBFS click
+        sig[::250] = 10 ** (-14.0 / 20)
         out, gain = far_field_gain(_to_i16(sig))
-        assert _peak_db(out) <= -1.0 + 0.05
         assert gain < MAX_GAIN_DB
-        assert gain == pytest.approx(13.0, abs=0.2)  # -1 - (-14)
+        assert gain == pytest.approx(13.0, abs=0.3)  # -1 - (-14)
+        robust = float(np.percentile(np.abs(_f(out)), 99.9))
+        assert 20 * np.log10(robust) <= -1.0 + 0.1
 
     def test_gain_never_exceeds_max_and_is_clamped(self):
         # -66 dBFS speech wants +40 dB; the cap holds it at MAX_GAIN_DB.
         sig = _speech_like(8.0, speech_rms_db=-66.0, seed=3)
         out, gain = far_field_gain(_to_i16(sig))
         assert gain == pytest.approx(MAX_GAIN_DB, abs=1e-6)
-        assert _peak_db(out) <= -1.0 + 0.05
+        assert _peak_db(out) <= LIMIT_DB
 
     def test_very_quiet_structure_is_not_blown_up(self):
         # -75 dBFS is under the digital-silence floor: never amplified at all.
@@ -162,7 +178,7 @@ class TestDtypes:
         assert gain > 0 and out.dtype == np.int16
         # no sign flip from wraparound: where the input is clearly positive the
         # output is positive, and the ceiling holds in int16 units too
-        assert int(np.abs(out.astype(np.int32)).max()) <= int(0.8913 * 32768) + 1
+        assert int(np.abs(out.astype(np.int32)).max()) <= int(HARD_LIMIT * 32768) + 1
         big = np.abs(pcm) > 20
         assert np.all(np.sign(out[big]) == np.sign(pcm[big]))
 
@@ -170,7 +186,7 @@ class TestDtypes:
         pcm = _speech_like(8.0, speech_rms_db=-46.0).astype(np.float32)
         out, gain = far_field_gain(pcm)
         assert gain > 0 and out.dtype == np.float32
-        assert float(np.abs(out).max()) <= 0.8913 + 1e-4
+        assert float(np.abs(out).max()) <= HARD_LIMIT + 1e-4
 
     def test_input_not_mutated(self):
         pcm = _to_i16(_speech_like(8.0, speech_rms_db=-46.0))
@@ -330,3 +346,78 @@ class TestTrimSeam:
         rng = np.random.RandomState(13)
         pcm = _to_i16(rng.randn(4 * SAMPLE_RATE) * 10 ** (-48 / 20))
         assert np.array_equal(trim_silence(pcm), pcm)
+
+
+class TestNoiseIsNotSpeech:
+    """R1: a click is not speech. The speech level is the p90 of frame dB (not a
+    power mean, which one loud frame dominates) and the take needs at least 15
+    frames (0.3 s) sitting 8 dB over the floor before anything is amplified."""
+
+    @staticmethod
+    def _hiss(seconds: float = 4.0, db: float = -60.0, seed: int = 21) -> np.ndarray:
+        r = np.random.RandomState(seed)
+        return (r.randn(int(seconds * SAMPLE_RATE)) * 10 ** (db / 20)).astype(
+            np.float32
+        )
+
+    def test_hiss_plus_single_click_untouched(self):
+        x = _click(self._hiss(), at=1.0, amp=0.3)
+        out, gain = far_field_gain(x)
+        assert gain == 0.0 and out is x
+
+    def test_hiss_plus_typing_clicks_untouched(self):
+        x = self._hiss()
+        for j in range(7):  # seven soft 20 ms keystrokes, spread over the take
+            x = _click(x, at=0.1 + j * 0.45, amp=0.02, ms=20.0, seed=30 + j)
+        out, gain = far_field_gain(x)
+        assert gain == 0.0 and out is x
+
+    def test_hiss_plus_many_typing_clicks_untouched(self):
+        x = self._hiss(seconds=8.0)
+        for j in range(37):  # a long typing burst: 37 keystrokes
+            x = _click(x, at=0.1 + j * 0.2, amp=0.02, ms=20.0, seed=40 + j)
+        out, gain = far_field_gain(x)
+        assert gain == 0.0 and out is x
+
+    def test_sustained_quiet_speech_still_lifts(self):
+        pcm = _to_i16(_speech_like(8.0, speech_rms_db=-46.0))
+        out, gain = far_field_gain(pcm)
+        assert gain > 10.0
+        assert abs(_speech_db(out) - TARGET_SPEECH_DBFS) <= 2.0
+
+    def test_loud_near_field_untouched(self):
+        pcm = _to_i16(_speech_like(6.0, speech_rms_db=-20.0, seed=8))
+        out, gain = far_field_gain(pcm)
+        assert gain == 0.0 and out is pcm
+
+
+class TestClack:
+    """A1: the ceiling follows a robust peak (p99.9 of |x|), so one push-to-talk
+    clack does not cancel the lift; the clack itself is hard-limited to +-0.99
+    after the gain (clipping a transient is harmless for decoding)."""
+
+    def _speech(self) -> np.ndarray:
+        return _speech_like(6.0, speech_rms_db=-46.0).astype(np.float32)
+
+    def test_no_clack_gain_is_the_reference(self):
+        # pinned for this seeded signal: target -26 minus the p90 frame level
+        out, gain = far_field_gain(self._speech())
+        assert gain == pytest.approx(24.2, abs=0.1)
+        assert abs(_speech_db(out) - TARGET_SPEECH_DBFS) <= 0.1
+
+    @pytest.mark.parametrize("amp", [0.2, 0.6, 0.95])
+    def test_clack_does_not_cancel_the_lift(self, amp):
+        base = self._speech()
+        _, ref = far_field_gain(base)
+        x = _click(base, at=0.05, amp=amp)
+        out, gain = far_field_gain(x)
+        assert abs(gain - ref) <= 3.0
+        assert float(np.abs(out).max()) <= HARD_LIMIT + 1e-6
+
+    @pytest.mark.parametrize("amp", [0.2, 0.6, 0.95])
+    def test_only_the_clack_is_clipped(self, amp):
+        x = _click(self._speech(), at=0.05, amp=amp)
+        out, gain = far_field_gain(x)
+        lin = np.float32(10 ** (gain / 20))
+        after = int(0.2 * SAMPLE_RATE)  # well past the 8 ms clack
+        assert np.allclose(out[after:], x[after:] * lin, atol=1e-6)
