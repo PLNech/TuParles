@@ -6,7 +6,7 @@ artifacts, latency, and a dependency, and over-cleaning measurably hurts the
 decode (the 2026-07-11 survey found original noisy audio beat enhanced audio
 in 40/40 configs). Its VAD already drops silence *within* a decode.
 
-Two things this module does own:
+Three things this module does own:
 
 - **level** — `normalize_audio` / `prepare_pcm`: a soft take uses only a
   sliver of the int16 range, so the effective SNR after the /32768 scaling is
@@ -19,6 +19,9 @@ Two things this module does own:
   one conservative linear gain. `prepare_pcm` is the single "prepare PCM for decode" seam every
   engine + the offline file path share, so conditioning can never silently
   diverge between rungs.
+- **no speech at all** — `silence_gate` (#54): before an offline decode, is
+  there certainly nothing to transcribe? Only when a speech detector found no
+  span AND the energy has no structure; either clause alone means decode.
 - **dead lead/tail** — `trim_silence`: the *whole-buffer* silence the in-decode
   VAD doesn't help with on the CPU rungs (qwen/whisper.cpp decode every silent
   second). Trimmed once at capture handoff, upstream of the engines. Speech is
@@ -27,6 +30,8 @@ Two things this module does own:
 """
 
 import logging
+from collections.abc import Callable, Sequence
+from dataclasses import asdict, dataclass
 
 import numpy as np
 
@@ -404,3 +409,113 @@ def trim_silence(pcm: np.ndarray, sample_rate: int = SAMPLE_RATE) -> np.ndarray:
             print(f"silence trim failed ({str(exc)[:120]}); using untrimmed audio")
             _trim_warned = True
         return pcm
+
+
+# --- silence gate (#54) --------------------------------------------------------
+# "Is there certainly no speech in this whole file?" — asked before an offline
+# decode, because Whisper fed near-silence can loop one phrase for 30 s. Two
+# independent clauses must BOTH say "nothing": a speech detector found no span,
+# AND the energy has no structure. Either one alone means decode. The bias is
+# absolute: a gated real utterance is a black hole nobody can recover, a
+# hallucination is visible and fixable. See docs/research/2026-10-20-silence-gate.md.
+GATE_FRAME = SAMPLE_RATE // 50  # 20 ms frames, the far-field stage's grain
+GATE_MIN_FRAMES = 25  # 0.5 s: shorter than this is too little to judge → decode
+GATE_FLOOR_PCTL = 10  # noise floor = this percentile of frame dB
+GATE_LEVEL_PCTL = 90  # reported level (forensics only, decides nothing)
+GATE_ACTIVE_DB = 6.0  # a frame this far over the floor is "energy structure";
+# lower than far-field's 8 dB on purpose: the gate must see a faint word
+GATE_MIN_ACTIVE_FRAMES = 8  # 160 ms of such frames → decode. A 0.6 s word at
+# 6 dB SNR measures 12; 40 clicks over 30 s of hiss measure 4.
+
+SpeechSpanFn = Callable[[np.ndarray, int], tuple[int, int] | None]
+
+
+@dataclass(frozen=True)
+class SilenceVerdict:
+    """The gate's decision plus the numbers behind it (logged, and written to
+    the transcribe sidecar: a skipped file must say why). `reason` is one of
+    no_speech (gated), energy_structure, speech_detected, no_detector,
+    too_short, error — every value but no_speech means "decode"."""
+
+    gated: bool
+    reason: str
+    detector: str | None = None
+    floor_dbfs: float | None = None
+    level_dbfs: float | None = None
+    peak_dbfs: float | None = None
+    active_s: float = 0.0
+
+    def as_dict(self) -> dict:
+        return asdict(self)
+
+
+def default_speech_detectors() -> list[tuple[str, SpeechSpanFn]]:
+    """The trim tiers, as gate detectors: silero-vad when importable, else the
+    RMS span. Resolved at call time so a caller (or a test) sees the current
+    functions."""
+    return [("silero", _silero_speech_span), ("rms", _rms_speech_span)]
+
+
+def _r1(x: float) -> float | None:
+    return round(float(x), 1) if np.isfinite(x) else None
+
+
+def silence_gate(
+    pcm: np.ndarray,
+    sample_rate: int = SAMPLE_RATE,
+    *,
+    detectors: Sequence[tuple[str, SpeechSpanFn]] | None = None,
+) -> SilenceVerdict:
+    """Decide "certainly no speech" for a whole mono buffer (int16 or float).
+
+    1. Energy, on the RAW audio (relative measures, so the level is moot):
+       frames at least `GATE_ACTIVE_DB` over the 10th-percentile floor. Any
+       `GATE_MIN_ACTIVE_FRAMES` of them → decode, without asking a detector.
+    2. Speech detectors, tried in order; one that raises is skipped. The first
+       to answer decides: a span → decode; None → gated. None answering →
+       decode. Default: silero-vad when importable, else the RMS span (which
+       is relative to the loudest frame, so any click reads as "speech": in
+       that tier the gate only closes on near-digital silence, by design).
+
+    Pure, never raises (an error → decode)."""
+    try:
+        f = _to_float32(pcm).astype(np.float64)
+        n = f.size // GATE_FRAME
+        if n < GATE_MIN_FRAMES:
+            return SilenceVerdict(False, "too_short")
+        frames = f[: n * GATE_FRAME].reshape(n, GATE_FRAME)
+        db = 10.0 * np.log10(np.maximum((frames**2).mean(axis=1), 1e-12))
+        floor = float(np.percentile(db, GATE_FLOOR_PCTL))
+        if not np.isfinite(floor):
+            return SilenceVerdict(False, "error")
+        active = int((db >= floor + GATE_ACTIVE_DB).sum())
+        peak = float(np.abs(f).max())
+        level = float(np.percentile(db, GATE_LEVEL_PCTL))
+
+        def verdict(gated: bool, reason: str, detector: str | None = None):
+            return SilenceVerdict(
+                gated,
+                reason,
+                detector,
+                floor_dbfs=_r1(floor),
+                level_dbfs=_r1(level),
+                peak_dbfs=_r1(20.0 * np.log10(max(peak, 1e-9))),
+                active_s=round(active * GATE_FRAME / sample_rate, 2),
+            )
+
+        if active >= GATE_MIN_ACTIVE_FRAMES:
+            return verdict(False, "energy_structure")
+        if detectors is None:
+            detectors = default_speech_detectors()
+        audio_f = _to_float32(pcm)
+        for name, detect in detectors:
+            try:
+                span = detect(audio_f, sample_rate)
+            except Exception:
+                continue  # missing or broken: the next tier answers
+            if span is not None:
+                return verdict(False, "speech_detected", name)
+            return verdict(True, "no_speech", name)
+        return verdict(False, "no_detector")
+    except Exception:
+        return SilenceVerdict(False, "error")
