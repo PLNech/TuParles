@@ -455,6 +455,7 @@ tuparles transcribe --device cpu talk.wav   # force CPU (battery-friendly)
 tuparles transcribe --model medium x.m4a     # heavier model for a kept transcript
 tuparles transcribe --turn-gap 0 x.m4a       # disable turn seams (one block per segment)
 tuparles transcribe --no-json x.m4a          # skip the JSON sidecar (txt only)
+tuparles transcribe --no-silence-gate x.wav  # decode even a file with no speech detected
 ```
 
 Each file becomes a sibling `<name>-transcript.txt` of `[mm:ss] text` lines,
@@ -496,3 +497,20 @@ silent) and reserves a `speakers` placeholder for future diarization. Handy for
 ```
 
 Default on; `--no-json` (or `transcribe_json: false` in your config) skips it.
+
+**Near-silence.** Whisper fed a file with no speech can invent a language and
+loop one phrase for the whole file. Two guards, both settings (default on):
+
+- **Silence gate** (`silence_gate`). A file is skipped only when the decoder's
+  own VAD finds no speech AND the audio has no energy structure (under 160 ms
+  of frames 6 dB over the noise floor). Either one alone means it is decoded.
+  A skipped file prints « Aucune parole détectée », the model is not loaded
+  for it, and both sidecars still get written: the txt says
+  `# aucune parole détectée`, the JSON has `"messages": []`, `"language": null`
+  and a `no_speech` object with the reason and the measured levels.
+  `--no-silence-gate` decodes it anyway.
+- **Loop guard** (`repetition_guard`). A phrase repeated verbatim 4+ times in
+  a row over 12+ words is cut to one copy. The block ends with ` […]` in the
+  txt, and the JSON carries `repetition: {phrase, copies}` on that message and
+  `truncated_repetition: true` at the top. Ordinary repeats ("non non non", a
+  sentence said twice) are well under that threshold.

@@ -3,6 +3,38 @@
 ## Unreleased — performance and responsiveness
 
 ### Fixed
+- **`tuparles transcribe` on a near-silent file** (#54, epic #56): a 30 s file
+  at about -30 dBFS peak once came back as a wrong language (Welsh) and one
+  phrase looped for 30 s. Two structural layers, no confidence score:
+  - **Silence gate** (setting `silence_gate`, default on;
+    `--no-silence-gate` bypasses it per run). A file is skipped only when
+    BOTH say nothing: the decoder's own VAD (faster-whisper's silero, same
+    parameters, same prepared audio) finds no speech span, AND fewer than
+    160 ms of 20 ms frames sit 6 dB over the 10th-percentile floor. Either
+    clause alone means decode. A skipped file is never decoded (the model
+    is not even loaded for it), prints « Aucune parole détectée », and
+    still gets both sidecars: `# aucune parole détectée` in the txt and a
+    `no_speech` object with the verdict and levels in the JSON, with
+    `language: null` instead of a guess. A decode that returns nothing
+    says so too (`no_speech: {"reason": "decoder_empty"}`).
+  - **Loop guard** (setting `repetition_guard`, default on): a phrase
+    repeated verbatim 4+ times in a row over 12+ words keeps one copy,
+    across segment boundaries too. The block ends with ` […]` in the txt,
+    and the JSON carries `repetition: {phrase, copies}` per message and a
+    top-level `truncated_repetition`. "non non non", "très très très
+    très" and "Thank you." x4 stay untouched.
+  - The sidecar also gains `language_probability`. All new JSON keys are
+    pure additions under schema v1.
+  - The decoder now gets a copy of the shared VAD parameters:
+    faster-whisper 1.2.1's batched pipeline pops `max_speech_duration_s`
+    off the dict it is handed.
+  - Not reproduced on synthetic audio: on four seeded near-silent files
+    the decoder's VAD found no speech and the decode was already empty
+    (language detection on the empty input still said `en` 0.34, Welsh
+    third at 0.17). So the gate makes the empty result explicit, and the
+    loop guard is the layer that handles a hallucination. Constants come
+    from synthetic signals only, with no real-audio eval. Build note:
+    `docs/research/2026-10-20-silence-gate.md`.
 - **The tray no longer floods the desktop shell.** The glyph used to repaint at
   10 Hz around the clock, even at rest, and every repaint is a
   `StatusNotifierItem.NewIcon` D-Bus signal (Qt never compares frames), so
