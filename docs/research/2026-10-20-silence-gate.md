@@ -134,25 +134,46 @@ that miss is a wasted decode, never a lost word.
 segments, because Whisper often splits a loop into many one-phrase segments.
 A **loop** is a phrase of up to `LOOP_MAX_PHRASE_WORDS` (16) words, compared
 without case or punctuation, that repeats verbatim at least `LOOP_MIN_COPIES`
-(4) times in a row and covers at least `LOOP_MIN_WORDS` (12) words. So a
-one-word loop needs 12 copies, two words need 6, and three or more need 4.
+(8) times in a row and covers at least `LOOP_MIN_WORDS` (16) words. So a
+one-word loop needs 16 copies, and any longer phrase needs 8.
 The guard keeps one copy, drops the other copies and any partial copy right
 after them, and keeps whatever follows. On a real hallucination the loop runs
 to the end of the window, so nothing follows it. If the rule fires on real
-speech, keeping the tail loses less than truncating it. The brief said
-"truncate at the first repetition". This is that cut, minus deleting what
-comes after.
+speech, keeping the tail loses less than truncating it.
 
-Why those numbers: real speech repeats a sentence twice for emphasis, and
-sometimes a word or a short chant three times ("non non non", "on y va" x3).
-Verbatim four times over 12 words is very rare in a meeting. It is still
-more conservative than the daemon's sentence rule (`collapse_repeats`,
-3 identical sentences), because a transcript is a record. The cut is never
-silent: the block ends with ` […]` in the txt, and the JSON has
+Why those numbers. The first cut used 4 copies over 12 words, and a blind
+review showed it rewrote real speech. Each of these was cut, and each now
+comes back unchanged (`tests/test_silence_gate.py::LEGIT_REPEATS`):
+
+| said | copies | words | 4/12 rule | 8/16 rule |
+|---|---|---|---|---|
+| "We need to ship this now." | 4 | 24 | cut | unchanged |
+| "c'est pas possible" | 4 | 12 | cut | unchanged |
+| "let it be" | 4 | 12 | cut | unchanged |
+| "and then we went" | 4 | 16 | cut | unchanged |
+| "the code is" + "one two" | 6 | 12 | cut (`the code is one two […]`, a different PIN) | unchanged |
+| "Thank you." | 6 | 12 | cut | unchanged |
+| "zero" | 12 | 12 | cut | unchanged |
+| "return none" | 6 | 12 | cut | unchanged |
+| "self dot x equals" (code) | 4 | 16 | cut | unchanged |
+
+The real hallucination shapes the reviewer used, at 40 copies, are all
+still caught. A phrase of 2, 3 or 5 words repeated 8, 12 or 40 times is cut
+to one copy. A one-word phrase is cut at 16 copies and above, so "zero" x12
+is a number and is left alone. Both rules are still more conservative than
+the daemon's sentence rule (`collapse_repeats`, 3 identical sentences),
+because a transcript is a record.
+
+The cut is never silent. The txt puts ` […×N]` (N = copies seen) right
+after the surviving copy, so it sits between the survivor and any real text
+that followed. When Whisper split the loop into one segment per copy, the
+marker goes after the surviving segment. The JSON has
 `repetition: {phrase, copies}` per message and `truncated_repetition` at the
-top. `repetition_guard: false` keeps the raw decode. The gzip
-`compression_ratio` was not used as a trigger, because it says "repetitive"
-without saying where to cut. It is still in each message's annotations.
+top, and stderr names the phrase, the count and the time.
+`repetition_guard: false` or `--no-repetition-guard` keeps the raw decode.
+The gzip `compression_ratio` was not used as a trigger, because it says
+"repetitive" without saying where to cut. It is still in each message's
+annotations.
 
 ### (c) Language
 
@@ -186,7 +207,8 @@ own change.
   The field file was not available, and the bug itself did not reproduce.
 - The loop guard was tested on constructed text, not on a captured Whisper
   hallucination.
-- The silero-vad package tier was not exercised (it is not installed here).
+- The silero-vad package tier was never run (it is not installed here). Only
+  the silero model bundled inside faster-whisper was.
   The tests inject detectors. The decoder-VAD tier was exercised locally (real
   faster-whisper, CPU), and its test skips in CI, where faster-whisper is
   absent.

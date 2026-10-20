@@ -456,6 +456,7 @@ tuparles transcribe --model medium x.m4a     # heavier model for a kept transcri
 tuparles transcribe --turn-gap 0 x.m4a       # disable turn seams (one block per segment)
 tuparles transcribe --no-json x.m4a          # skip the JSON sidecar (txt only)
 tuparles transcribe --no-silence-gate x.wav  # decode even a file with no speech detected
+tuparles transcribe --no-repetition-guard x.wav  # keep a decode loop as decoded
 ```
 
 Each file becomes a sibling `<name>-transcript.txt` of `[mm:ss] text` lines,
@@ -499,18 +500,29 @@ silent) and reserves a `speakers` placeholder for future diarization. Handy for
 Default on; `--no-json` (or `transcribe_json: false` in your config) skips it.
 
 **Near-silence.** Whisper fed a file with no speech can invent a language and
-loop one phrase for the whole file. Two guards, both settings (default on):
+loop one phrase for the whole file (#54). Two guards, both settings (default
+on), each with its own bypass flag:
 
-- **Silence gate** (`silence_gate`). A file is skipped only when the decoder's
-  own VAD finds no speech AND the audio has no energy structure (under 160 ms
-  of frames 6 dB over the noise floor). Either one alone means it is decoded.
-  A skipped file prints « Aucune parole détectée », the model is not loaded
-  for it, and both sidecars still get written: the txt says
-  `# aucune parole détectée`, the JSON has `"messages": []`, `"language": null`
-  and a `no_speech` object with the reason and the measured levels.
-  `--no-silence-gate` decodes it anyway.
-- **Loop guard** (`repetition_guard`). A phrase repeated verbatim 4+ times in
-  a row over 12+ words is cut to one copy. The block ends with ` […]` in the
-  txt, and the JSON carries `repetition: {phrase, copies}` on that message and
-  `truncated_repetition: true` at the top. Ordinary repeats ("non non non", a
-  sentence said twice) are well under that threshold.
+- **Silence gate** (`silence_gate`, bypass: `--no-silence-gate`). A file is
+  skipped only when the decoder's own VAD finds no speech AND the audio has no
+  energy structure (under 160 ms of frames 6 dB over the noise floor). Either
+  one alone means it is decoded. A skipped file prints « Aucune parole
+  détectée », the model is not loaded for it, and both sidecars still get
+  written: the txt says `# aucune parole détectée`, the JSON has
+  `"messages": []`, `"language": null` and a `no_speech` object with the
+  reason and the measured levels.
+- **Loop guard** (`repetition_guard`, bypass: `--no-repetition-guard`). A
+  phrase repeated verbatim **8 or more times in a row, over 16 or more
+  words**, is cut to one copy. A visible `[…×N]` marks the cut in the txt,
+  right after the surviving copy, and anything said after the loop stays. The
+  JSON carries `repetition: {phrase, copies}` on that message and
+  `truncated_repetition: true` at the top. Ordinary emphasis repeats are left
+  alone: a phrase said four times, a PIN read as "one two" six times, "zero"
+  twelve times.
+
+Caveats, plainly: the reported loop **did not reproduce** on synthetic audio
+(the decoder's VAD already returned nothing on every near-silent test file),
+so these are guards, not a confirmed fix. Every threshold comes from
+**synthetic signals only**, with no real-recording eval yet. The **silero-vad
+package tier is untested here**: only the silero model bundled inside
+faster-whisper was run.
