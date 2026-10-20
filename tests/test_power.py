@@ -199,3 +199,62 @@ class TestReplugHysteresis:
         from tuparles import power
 
         assert power.REPLUG_SETTLE_S == 30.0
+
+
+class TestLongGapIsAColdStart:
+    """Hysteresis absorbs flapping between *close* reads. A gap longer than the
+    settle window carries no flapping evidence, so the next read is trusted
+    as-is: after a long idle on mains the very first take is back on the GPU."""
+
+    _rig = staticmethod(TestReplugHysteresis._rig)
+
+    def test_replug_after_a_long_idle_is_honoured_at_once(self, tmp_path):
+        probe, now, set_status = self._rig(tmp_path, "Discharging")
+        assert probe.on_battery() is True  # unplugged
+        set_status("Charging")
+        now[0] += 600.0  # 10 min idle, plugged back in meanwhile
+        assert probe.on_battery() is False  # GPU on the first take
+
+    def test_a_close_replug_read_still_waits(self, tmp_path):
+        probe, now, set_status = self._rig(tmp_path, "Discharging")
+        assert probe.on_battery() is True
+        set_status("Charging")
+        now[0] += 5.0
+        assert probe.on_battery() is True  # inside the window, as before
+
+    def test_a_discharging_read_after_a_long_gap_is_on_battery(self, tmp_path):
+        probe, now, set_status = self._rig(tmp_path, "Charging")
+        assert probe.on_battery() is False
+        set_status("Discharging")
+        now[0] += 600.0
+        assert probe.on_battery() is True
+
+    def test_flapping_with_short_gaps_still_holds_the_window(self, tmp_path):
+        probe, now, set_status = self._rig(tmp_path, "Discharging")
+        assert probe.on_battery() is True
+        for _ in range(4):  # 25 s gaps, each under the 30 s window
+            set_status("Charging")
+            now[0] += 25.0
+            assert probe.on_battery() is True
+            set_status("Discharging")
+            now[0] += 25.0
+            assert probe.on_battery() is True
+
+    def test_staleness_counts_from_the_last_sysfs_read_not_a_cache_hit(self, tmp_path):
+        # With the real 5 s TTL: calls inside the TTL are cache hits and must
+        # not refresh the "last read" time the staleness check uses.
+        _supply(tmp_path, "BAT0", type="Battery", status="Discharging")
+        now = [1000.0]
+        probe = PowerProbe(
+            root=tmp_path, ttl_s=5.0, settle_s=30.0, clock=lambda: now[0]
+        )
+        assert probe.on_battery() is True  # sysfs read at t=0
+        (tmp_path / "BAT0" / "status").write_text("Charging\n", encoding="utf-8")
+        for _ in range(4):
+            now[0] += 1.0
+            assert probe.on_battery() is True  # t=1..4: cache hits
+        now[0] = 1031.0
+        # Last sysfs read was t=0 (31 s ago): a cold start, so False. Had the
+        # t=4 cache hit counted, the gap would be 27 s and the window would
+        # only just be starting.
+        assert probe.on_battery() is False
