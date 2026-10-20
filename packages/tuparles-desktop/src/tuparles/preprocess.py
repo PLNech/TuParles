@@ -15,13 +15,16 @@ Two things this module does own:
   gain and quiet speech stays quiet (the 2026-07-15 quiet-take collapse). The
   `speech_leveler` setting (default on) swaps in the frame-wise compressor
   (`_compress_f32`) at the same seam. DC-offset removal fixes a biased mic
-  either way. `prepare_pcm` is the single "prepare PCM for decode" seam every
+  either way. Before either, `far_field_gain` (#51) lifts a quiet room mic by
+  one conservative linear gain. `prepare_pcm` is the single "prepare PCM for decode" seam every
   engine + the offline file path share, so conditioning can never silently
   diverge between rungs.
 - **dead lead/tail** — `trim_silence`: the *whole-buffer* silence the in-decode
   VAD doesn't help with on the CPU rungs (qwen/whisper.cpp decode every silent
   second). Trimmed once at capture handoff, upstream of the engines.
 """
+
+import logging
 
 import numpy as np
 
@@ -42,6 +45,80 @@ from tuparles.config import (
     TRIM_RMS_FRAME_MS,
     TRIM_RMS_TOP_DB,
 )
+
+
+_log = logging.getLogger("tuparles.preprocess")
+
+# --- far-field gain (#51) ----------------------------------------------------
+# Every constant is a deliberate, conservative choice (see
+# docs/research/2026-10-20-far-field-gain.md).
+TARGET_SPEECH_DBFS = -26.0  # where lifted speech lands (typical near-field level)
+MAX_GAIN_DB = 36.0  # hard cap: never turn a faint take into amplified hiss
+FAR_FIELD_FRAME = SAMPLE_RATE // 50  # 20 ms analysis frames
+FAR_FIELD_MIN_FRAMES = 25  # 0.5 s: too little audio to judge a level
+FAR_FIELD_SILENCE_DBFS = -70.0  # speech level below this = digital silence
+FAR_FIELD_MIN_SNR_DB = 8.0  # speech over the floor, else it is just noise
+FAR_FIELD_QUIET_DBFS = -30.0  # at or above this the audio is not "quiet"
+FAR_FIELD_PEAK_CEILING = 10.0 ** (-1.0 / 20.0)  # post-gain peak, -1 dBFS (0.891)
+FAR_FIELD_MIN_GAIN_DB = 3.0  # a smaller lift is not worth touching the audio
+
+# Last gain the stage applied (0.0 = no-op) — the forensics hook; the log line
+# in prepare_pcm fires only when a lift happens.
+last_far_field_gain_db = 0.0
+_last_logged_gain = 0
+
+
+def far_field_gain(
+    pcm: np.ndarray, *, enabled: bool = True
+) -> tuple[np.ndarray, float]:
+    """Conservative automatic gain for quiet far-field mics (#51).
+
+    Meeting-room / laptop-array audio measures ~-30 dBFS peak, -48 dBFS RMS and
+    is only intelligible after ~+29 dB. On 20 ms frames, speech level = power
+    mean of frames at or above the 70th percentile of frame RMS; floor = 10th
+    percentile. A SINGLE linear gain (no compression, no clipping, no dynamics
+    inside a take) lifts speech toward `TARGET_SPEECH_DBFS`, capped at
+    `MAX_GAIN_DB` and at a -1 dBFS post-gain peak.
+
+    Returns (pcm, gain_db); the input object untouched and 0.0 when it does
+    nothing: disabled, under 0.5 s, digital silence, no clear speech over the
+    floor (< 8 dB: amplifying noise is what makes decoders hallucinate), audio
+    already at -30 dBFS or louder, or a lift under 3 dB. int16 in gives int16
+    out, floating in gives the same floating dtype out. Pure, never mutates.
+    """
+    if not enabled or pcm.size < FAR_FIELD_MIN_FRAMES * FAR_FIELD_FRAME:
+        return pcm, 0.0
+    if pcm.dtype == np.int16:
+        f = pcm.astype(np.float32) * np.float32(1.0 / 32768.0)
+    else:
+        f = pcm.astype(np.float32, copy=False)
+    n = f.size // FAR_FIELD_FRAME
+    frames = f[: n * FAR_FIELD_FRAME].reshape(n, FAR_FIELD_FRAME)
+    power = np.maximum((frames.astype(np.float64) ** 2).mean(axis=1), 1e-12)
+    db = 10.0 * np.log10(power)
+    loud = db >= np.percentile(db, 70)
+    speech_db = float(10.0 * np.log10(power[loud].mean()))
+    noise_db = float(np.percentile(db, 10))
+    if (
+        not np.isfinite(speech_db)
+        or speech_db < FAR_FIELD_SILENCE_DBFS
+        or speech_db - noise_db < FAR_FIELD_MIN_SNR_DB
+        or speech_db >= FAR_FIELD_QUIET_DBFS
+    ):
+        return pcm, 0.0
+    peak = float(np.abs(f).max())
+    if not np.isfinite(peak) or peak <= 0.0:
+        return pcm, 0.0
+    gain_db = min(max(TARGET_SPEECH_DBFS - speech_db, 0.0), MAX_GAIN_DB)
+    gain_db = min(gain_db, 20.0 * float(np.log10(FAR_FIELD_PEAK_CEILING / peak)))
+    if gain_db < FAR_FIELD_MIN_GAIN_DB:
+        return pcm, 0.0
+    lifted = f * np.float32(10.0 ** (gain_db / 20.0))
+    if pcm.dtype == np.int16:
+        out = np.clip(np.rint(lifted * 32768.0), -32768, 32767).astype(np.int16)
+    else:
+        out = lifted.astype(pcm.dtype, copy=False)
+    return out, float(gain_db)
 
 
 def normalize_audio(pcm: np.ndarray) -> np.ndarray:
@@ -80,6 +157,13 @@ def prepare_pcm(audio: np.ndarray) -> np.ndarray:
     2026-07-15 quiet-take lab), the compressor is not. One seam, so partials,
     finals and every engine flip together and can never silently diverge.
     """
+    global last_far_field_gain_db, _last_logged_gain
+    audio, gain_db = far_field_gain(audio, enabled=_far_field_gain_on())
+    last_far_field_gain_db = gain_db
+    if gain_db > 0.0 and round(gain_db) != _last_logged_gain:
+        # Partials call this every tick: log only when the lift moves a whole dB.
+        _last_logged_gain = round(gain_db)
+        _log.info("far-field gain +%.1f dB", gain_db)
     pcm = audio if audio.dtype == np.float32 else audio.astype(np.float32) / 32768.0
     if _speech_leveler_on():
         f = (pcm - np.float32(pcm.mean())).astype(np.float32)  # DC offset
@@ -88,6 +172,16 @@ def prepare_pcm(audio: np.ndarray) -> np.ndarray:
         except Exception:
             pass  # conditioning must never cost a decode — fall back to peak
     return normalize_audio(pcm)
+
+
+def _far_field_gain_on() -> bool:
+    """Hot-read the `far_field_gain` setting (same pattern as the leveler)."""
+    try:
+        from tuparles import settings
+
+        return bool(settings.get("far_field_gain"))
+    except Exception:
+        return False
 
 
 def _speech_leveler_on() -> bool:

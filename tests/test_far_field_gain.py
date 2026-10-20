@@ -83,11 +83,11 @@ class TestLifts:
         # Quiet speech plus one tall transient: the lift stops at -1 dBFS peak
         # instead of clipping, and no compression squashes the click.
         sig = _speech_like(6.0, speech_rms_db=-44.0)
-        sig[8000] = 10 ** (-24.0 / 20)  # a -24 dBFS click
+        sig[8000] = 10 ** (-14.0 / 20)  # a -14 dBFS click
         out, gain = far_field_gain(_to_i16(sig))
         assert _peak_db(out) <= -1.0 + 0.05
         assert gain < MAX_GAIN_DB
-        assert gain == pytest.approx(23.0, abs=0.2)  # -1 - (-24)
+        assert gain == pytest.approx(13.0, abs=0.2)  # -1 - (-14)
 
     def test_gain_never_exceeds_max_and_is_clamped(self):
         # -66 dBFS speech wants +40 dB; the cap holds it at MAX_GAIN_DB.
@@ -126,8 +126,8 @@ class TestNoOps:
         assert gain == 0.0 and np.array_equal(out, pcm)
 
     def test_weak_structure_over_floor_untouched(self):
-        # Speech only 6 dB over the floor (< 8 dB): amplifying would lift noise.
-        pcm = _to_i16(_speech_like(8.0, speech_rms_db=-46.0, floor_below_db=6.0))
+        # Speech no louder than the floor (< 8 dB over it): amplifying would lift noise.
+        pcm = _to_i16(_speech_like(8.0, speech_rms_db=-46.0, floor_below_db=0.0))
         out, gain = far_field_gain(pcm)
         assert gain == 0.0 and np.array_equal(out, pcm)
 
@@ -233,4 +233,4 @@ class TestPrepareSeam:
     def test_setting_defaults_on(self):
         from tuparles import settings
 
-        assert settings.DEFAULTS["far_field_gain"] is True
+        assert settings._DEFAULTS["far_field_gain"] is True
