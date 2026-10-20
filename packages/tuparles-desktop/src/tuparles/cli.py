@@ -35,6 +35,25 @@ def main() -> None:
     sub.add_parser(
         "diag", help="Print this box's capability report (paste into a bug report)"
     )
+    svc = sub.add_parser(
+        "service",
+        help="Background service (systemd user unit): install, uninstall, status, logs",
+    )
+    svc.add_argument("action", choices=["install", "uninstall", "status", "logs"])
+    svc.add_argument(
+        "--enable",
+        action="store_true",
+        help="install: also start it with every graphical session from now on",
+    )
+    svc.add_argument(
+        "--now", action="store_true", help="install: enable and start it right away"
+    )
+    svc.add_argument(
+        "--exec",
+        dest="exec_path",
+        metavar="PATH",
+        help="launcher to run (default: this venv's bin/tuparles)",
+    )
     sub.add_parser("update", help="Check GitHub for a newer release (no token)")
     sub.add_parser("whatsnew", help="Show the latest changelog section")
     cs = sub.add_parser(
@@ -97,6 +116,8 @@ def main() -> None:
         _report(args)
     elif args.cmd == "diag":
         _diag()
+    elif args.cmd == "service":
+        raise SystemExit(_service(args))
     elif args.cmd == "update":
         _update()
     elif args.cmd == "whatsnew":
@@ -173,6 +194,21 @@ def _diag() -> None:
     print(capability.probe().report(verbose=True))
     print()
     print(environment_block())
+
+
+def _service(args) -> int:
+    """The systemd user unit (#48). Install-only unless --enable / --now."""
+    from tuparles import service
+
+    if args.action == "install":
+        return service.install(
+            enable=args.enable, now=args.now, exec_path=args.exec_path
+        )
+    if args.action == "uninstall":
+        return service.uninstall(exec_path=args.exec_path)
+    if args.action == "status":
+        return service.status()
+    return service.logs()
 
 
 def _report(args) -> None:
