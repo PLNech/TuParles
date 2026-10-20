@@ -28,7 +28,11 @@ costs the engine a ~1.6 s CUDA rebuild. So going *to* battery is honoured at
 the next read (CPU is the conservative side), but going back to mains needs
 "not discharging" to hold for `REPLUG_SETTLE_S` (30 s); any Discharging read
 inside the window restarts it. The very first reading is trusted as-is, so a
-cold start on AC never waits.
+cold start on AC never waits — and so is any reading taken more than
+`REPLUG_SETTLE_S` after the previous sysfs read: hysteresis absorbs flapping
+between close reads, and a longer gap carries no flapping evidence. Reads only
+happen at takes, so this is what puts the first take after a long idle on
+mains straight back on the GPU, with no poller.
 """
 
 from __future__ import annotations
@@ -84,6 +88,8 @@ class PowerProbe:
         self._settle_s = settle_s
         self._clock = clock
         self._value = False
+        # Time of the last *sysfs* read (cache hits don't move it): both the
+        # TTL and the long-gap cold start are measured from it.
         self._read_at: float | None = None
         # When "not discharging" was first seen while still reporting battery;
         # None when there is no replug in progress.
@@ -91,12 +97,16 @@ class PowerProbe:
 
     def on_battery(self) -> bool:
         now = self._clock()
-        if self._read_at is None:
-            self._value = read_on_battery(self._root)  # no history: trust it
-            self._read_at = now
-        elif now - self._read_at >= self._ttl_s:
-            self._read_at = now
-            self._settle(read_on_battery(self._root), now)
+        if self._read_at is not None and now - self._read_at < self._ttl_s:
+            return self._value  # cache hit: no read, `_read_at` unchanged
+        reading = read_on_battery(self._root)
+        if self._read_at is None or now - self._read_at >= self._settle_s:
+            # No history, or none recent enough to show flapping: trust it.
+            self._value = reading
+            self._calm_since = None
+        else:
+            self._settle(reading, now)
+        self._read_at = now
         return self._value
 
     def _settle(self, discharging: bool, now: float) -> None:
