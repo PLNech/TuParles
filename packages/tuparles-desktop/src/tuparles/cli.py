@@ -104,6 +104,12 @@ def main() -> None:
         "(défaut : réglage silence_gate, activé)",
     )
     tr.add_argument(
+        "--no-repetition-guard",
+        action="store_true",
+        help="garder une boucle de répétition telle que décodée "
+        "(défaut : réglage repetition_guard, activé)",
+    )
+    tr.add_argument(
         "--stdout", action="store_true", help="afficher aussi le transcript"
     )
     args = parser.parse_args()
@@ -295,8 +301,8 @@ def _transcribe(args) -> None:
     `silence_gate`, `--no-silence-gate` to bypass). A gated file is never
     decoded — the model is only loaded for the first file that needs it — and
     still gets both sidecars, saying « aucune parole détectée » and why. After
-    a decode, the loop guard (setting `repetition_guard`) cuts a looped phrase
-    to one copy and says so."""
+    a decode, the loop guard (setting `repetition_guard`, `--no-repetition-guard`
+    to bypass) cuts a looped phrase to one copy and says so."""
     import json
     import sys
     from datetime import date
@@ -308,7 +314,7 @@ def _transcribe(args) -> None:
     format_ts = ft.format_ts
     want_json = bool(settings.get("transcribe_json")) and not args.no_json
     gate_on = bool(settings.get("silence_gate")) and not args.no_silence_gate
-    guard_on = bool(settings.get("repetition_guard"))
+    guard_on = bool(settings.get("repetition_guard")) and not args.no_repetition_guard
 
     paths = [Path(p) for p in args.files]
     missing = [p for p in paths if not p.exists()]
@@ -380,10 +386,12 @@ def _transcribe(args) -> None:
             if not segments:
                 no_speech = {"reason": "decoder_empty"}
             model_name, device = tr.model_name, tr.device
-        loops = [s.repetition for s in segments if s.repetition]
-        for phrase, copies in loops:
+        loops = [(s.start, s.repetition) for s in segments if s.repetition]
+        for start, (phrase, copies) in loops:
             print(
-                f"  boucle de répétition coupée : « {phrase[:60]} » ×{copies}",
+                f"  boucle de répétition coupée à [{format_ts(start)}] : "
+                f"« {phrase[:60]} » ×{copies} → une copie gardée "
+                "(--no-repetition-guard pour tout garder)",
                 file=sys.stderr,
             )
         today = date.today().isoformat()
