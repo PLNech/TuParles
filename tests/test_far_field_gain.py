@@ -94,16 +94,18 @@ class TestLifts:
         assert applied == pytest.approx(gain, abs=0.1)
 
     def test_robust_peak_ceiling_limits_gain(self):
-        # 0.4% of the samples sit at -14 dBFS (a sustained loud passage, not a
-        # one-off click): the p99.9 ceiling is binding, the lift stops short of
-        # the speech target and the robust peak lands at -1 dBFS.
-        sig = _speech_like(6.0, speech_rms_db=-44.0)
-        sig[::250] = 10 ** (-14.0 / 20)
+        # Six sustained clacks (about 0.8% of the samples): too many to be an
+        # outlier, so the p99.9 ceiling binds. The lift stops short of the
+        # speech target and the ROBUST peak lands at -1 dBFS.
+        base = _speech_like(6.0, speech_rms_db=-44.0)
+        _, free = far_field_gain(_to_i16(base))
+        sig = base
+        for k in range(6):
+            sig = _click(sig, at=0.3 + k * 0.9, amp=0.5, ms=16.0, seed=70 + k)
         out, gain = far_field_gain(_to_i16(sig))
-        assert gain < MAX_GAIN_DB
-        assert gain == pytest.approx(13.0, abs=0.3)  # -1 - (-14)
+        assert 3.0 < gain < free - 1.0
         robust = float(np.percentile(np.abs(_f(out)), 99.9))
-        assert 20 * np.log10(robust) <= -1.0 + 0.1
+        assert 20 * np.log10(robust) == pytest.approx(-1.0, abs=0.2)
 
     def test_gain_never_exceeds_max_and_is_clamped(self):
         # -66 dBFS speech wants +40 dB; the cap holds it at MAX_GAIN_DB.
@@ -402,7 +404,7 @@ class TestClack:
     def test_no_clack_gain_is_the_reference(self):
         # pinned for this seeded signal: target -26 minus the p90 frame level
         out, gain = far_field_gain(self._speech())
-        assert gain == pytest.approx(24.2, abs=0.1)
+        assert gain == pytest.approx(18.4, abs=0.1)
         assert abs(_speech_db(out) - TARGET_SPEECH_DBFS) <= 0.1
 
     @pytest.mark.parametrize("amp", [0.2, 0.6, 0.95])

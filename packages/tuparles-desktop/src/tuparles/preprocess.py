@@ -59,12 +59,17 @@ FAR_FIELD_FRAME = SAMPLE_RATE // 50  # 20 ms analysis frames
 FAR_FIELD_MIN_FRAMES = 25  # 0.5 s: too little audio to judge a level
 FAR_FIELD_SILENCE_DBFS = -70.0  # speech level below this = digital silence
 FAR_FIELD_MIN_SNR_DB = 8.0  # speech over the floor, else it is just noise
+FAR_FIELD_SPEECH_PCTL = 90  # speech level = this percentile of frame dB
+FAR_FIELD_NOISE_PCTL = 10  # floor = this percentile of frame dB
+FAR_FIELD_MIN_SPEECH_FRAMES = 15  # 0.3 s over the floor: a click is not speech
 FAR_FIELD_QUIET_DBFS = -30.0  # at or above this the audio is not "quiet"
-FAR_FIELD_PEAK_CEILING = 10.0 ** (-1.0 / 20.0)  # post-gain peak, -1 dBFS (0.891)
+FAR_FIELD_PEAK_CEILING = 10.0 ** (-1.0 / 20.0)  # robust peak after gain, -1 dBFS
+FAR_FIELD_PEAK_PCTL = 99.9  # "robust peak": one clack must not set the ceiling
+FAR_FIELD_HARD_LIMIT = 0.99  # the output is clipped to +-this after the gain
 FAR_FIELD_MIN_GAIN_DB = 3.0  # a smaller lift is not worth touching the audio
 
-# Last gain the stage applied (0.0 = no-op) — the forensics hook; the log line
-# in prepare_pcm fires only when a lift happens.
+# Last gain the stage applied (0.0 = no-op). Exposed for debugging; nothing
+# consumes it yet. The log line in prepare_pcm fires only when a lift happens.
 last_far_field_gain_db = 0.0
 _last_logged_gain = 0
 
@@ -75,15 +80,20 @@ def far_field_gain(
     """Conservative automatic gain for quiet far-field mics (#51).
 
     Meeting-room / laptop-array audio measures ~-30 dBFS peak, -48 dBFS RMS and
-    is only intelligible after ~+29 dB. On 20 ms frames, speech level = power
-    mean of frames at or above the 70th percentile of frame RMS; floor = 10th
-    percentile. A SINGLE linear gain (no compression, no clipping, no dynamics
-    inside a take) lifts speech toward `TARGET_SPEECH_DBFS`, capped at
-    `MAX_GAIN_DB` and at a -1 dBFS post-gain peak.
+    is only intelligible after ~+29 dB. On 20 ms frames (level in dBFS): speech
+    level = 90th percentile of frame dB (a dB-domain estimate, so one loud
+    frame cannot dominate it), floor = 10th percentile, and at least 15 frames
+    (0.3 s) must sit 8 dB over the floor (a click or a few keystrokes are not
+    speech). A SINGLE linear gain (no compression, no dynamics inside a take)
+    lifts speech toward `TARGET_SPEECH_DBFS`, capped at `MAX_GAIN_DB` and so
+    that the ROBUST peak (99.9th percentile of |x|, never the single max) lands
+    at -1 dBFS. The output is then clipped to +-0.99: a push-to-talk clack that
+    exceeds it is clipped, which is harmless for decoding and the stated
+    trade-off for not letting one clack veto the lift of the whole take.
 
     Returns (pcm, gain_db); the input object untouched and 0.0 when it does
-    nothing: disabled, under 0.5 s, digital silence, no clear speech over the
-    floor (< 8 dB: amplifying noise is what makes decoders hallucinate), audio
+    nothing: disabled, under 0.5 s, digital silence, no sustained speech over
+    the floor (amplifying noise is what makes decoders hallucinate), audio
     already at -30 dBFS or louder, or a lift under 3 dB. int16 in gives int16
     out, floating in gives the same floating dtype out. Pure, never mutates.
     """
@@ -97,26 +107,31 @@ def far_field_gain(
     frames = f[: n * FAR_FIELD_FRAME].reshape(n, FAR_FIELD_FRAME)
     power = np.maximum((frames.astype(np.float64) ** 2).mean(axis=1), 1e-12)
     db = 10.0 * np.log10(power)
-    loud = db >= np.percentile(db, 70)
-    speech_db = float(10.0 * np.log10(power[loud].mean()))
-    noise_db = float(np.percentile(db, 10))
+    speech_db = float(np.percentile(db, FAR_FIELD_SPEECH_PCTL))
+    noise_db = float(np.percentile(db, FAR_FIELD_NOISE_PCTL))
     if (
         not np.isfinite(speech_db)
         or speech_db < FAR_FIELD_SILENCE_DBFS
         or speech_db - noise_db < FAR_FIELD_MIN_SNR_DB
         or speech_db >= FAR_FIELD_QUIET_DBFS
+        or int((db >= noise_db + FAR_FIELD_MIN_SNR_DB).sum())
+        < FAR_FIELD_MIN_SPEECH_FRAMES
     ):
         return pcm, 0.0
-    peak = float(np.abs(f).max())
+    peak = float(np.percentile(np.abs(f), FAR_FIELD_PEAK_PCTL))
     if not np.isfinite(peak) or peak <= 0.0:
         return pcm, 0.0
     gain_db = min(max(TARGET_SPEECH_DBFS - speech_db, 0.0), MAX_GAIN_DB)
     gain_db = min(gain_db, 20.0 * float(np.log10(FAR_FIELD_PEAK_CEILING / peak)))
     if gain_db < FAR_FIELD_MIN_GAIN_DB:
         return pcm, 0.0
-    lifted = f * np.float32(10.0 ** (gain_db / 20.0))
+    lifted = np.clip(
+        f * np.float32(10.0 ** (gain_db / 20.0)),
+        -FAR_FIELD_HARD_LIMIT,
+        FAR_FIELD_HARD_LIMIT,
+    )
     if pcm.dtype == np.int16:
-        out = np.clip(np.rint(lifted * 32768.0), -32768, 32767).astype(np.int16)
+        out = np.rint(lifted * 32768.0).astype(np.int16)
     else:
         out = lifted.astype(pcm.dtype, copy=False)
     return out, float(gain_db)
