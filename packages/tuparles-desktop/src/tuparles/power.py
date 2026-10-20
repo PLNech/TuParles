@@ -21,6 +21,14 @@ rather than silently slowing a desktop down to CPU.
 
 Peripheral batteries (a wireless mouse or headset: `scope` = `Device`) are not
 the machine's and are ignored.
+
+`PowerProbe` adds hysteresis on top of the instantaneous reading. A marginal
+charger makes BAT0 flip Discharging <-> Charging, and every return to the GPU
+costs the engine a ~1.6 s CUDA rebuild. So going *to* battery is honoured at
+the next read (CPU is the conservative side), but going back to mains needs
+"not discharging" to hold for `REPLUG_SETTLE_S` (30 s); any Discharging read
+inside the window restarts it. The very first reading is trusted as-is, so a
+cold start on AC never waits.
 """
 
 from __future__ import annotations
@@ -31,6 +39,7 @@ from pathlib import Path
 
 POWER_SUPPLY_ROOT = Path("/sys/class/power_supply")
 CACHE_TTL_S = 5.0
+REPLUG_SETTLE_S = 30.0  # mains must hold this long before we leave the CPU
 
 
 def _read(path: Path) -> str | None:
@@ -60,26 +69,46 @@ def read_on_battery(root: Path = POWER_SUPPLY_ROOT) -> bool:
 
 
 class PowerProbe:
-    """`read_on_battery` behind a short TTL cache. Root and clock injectable."""
+    """`read_on_battery` behind a short TTL cache and a replug settle window.
+    Root, TTL, settle window and clock are injectable."""
 
     def __init__(
         self,
         root: Path = POWER_SUPPLY_ROOT,
         ttl_s: float = CACHE_TTL_S,
+        settle_s: float = REPLUG_SETTLE_S,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._root = root
         self._ttl_s = ttl_s
+        self._settle_s = settle_s
         self._clock = clock
         self._value = False
         self._read_at: float | None = None
+        # When "not discharging" was first seen while still reporting battery;
+        # None when there is no replug in progress.
+        self._calm_since: float | None = None
 
     def on_battery(self) -> bool:
         now = self._clock()
-        if self._read_at is None or now - self._read_at >= self._ttl_s:
-            self._value = read_on_battery(self._root)
+        if self._read_at is None:
+            self._value = read_on_battery(self._root)  # no history: trust it
             self._read_at = now
+        elif now - self._read_at >= self._ttl_s:
+            self._read_at = now
+            self._settle(read_on_battery(self._root), now)
         return self._value
+
+    def _settle(self, discharging: bool, now: float) -> None:
+        if discharging:
+            self._value = True  # unplug (or a sag): honoured at once
+            self._calm_since = None
+        elif self._value:
+            if self._calm_since is None:
+                self._calm_since = now
+            if now - self._calm_since >= self._settle_s:
+                self._value = False
+                self._calm_since = None
 
 
 _probe = PowerProbe()
