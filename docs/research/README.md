@@ -41,6 +41,10 @@ listens → you get notes). Five orthogonal dimensions:
   (see §5). Where Granola is the meeting-notes foil, this is the dictation foil.
 
 ### Build notes (decisions as we ship)
+- [On battery, act as if « Préférer le CPU » were ticked](2026-10-20-power-aware-engine.md) —
+  the `battery_aware` setting: reusing the prefer-CPU seam, reversible
+  preference vs irreversible failure, positive-evidence-only sysfs probe with a
+  5 s cache, and the one CPU cost data point (65 s wall for 30 s of audio).
 - [Performance audit and implementation](2026-09-29-performance-audit.md) —
   preview worker cancellation, asynchronous analytics, bounded audio snapshots,
   and consent-filtered local inference benchmarks.
