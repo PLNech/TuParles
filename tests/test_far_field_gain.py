@@ -93,20 +93,6 @@ class TestLifts:
         applied = 20 * np.log10(np.abs(_f(out)).max() / np.abs(_f(pcm)).max())
         assert applied == pytest.approx(gain, abs=0.1)
 
-    def test_robust_peak_ceiling_limits_gain(self):
-        # Six sustained clacks (about 0.8% of the samples): too many to be an
-        # outlier, so the p99.9 ceiling binds. The lift stops short of the
-        # speech target and the ROBUST peak lands at -1 dBFS.
-        base = _speech_like(6.0, speech_rms_db=-44.0)
-        _, free = far_field_gain(_to_i16(base))
-        sig = base
-        for k in range(6):
-            sig = _click(sig, at=0.3 + k * 0.9, amp=0.5, ms=16.0, seed=70 + k)
-        out, gain = far_field_gain(_to_i16(sig))
-        assert 3.0 < gain < free - 1.0
-        robust = float(np.percentile(np.abs(_f(out)), 99.9))
-        assert 20 * np.log10(robust) == pytest.approx(-1.0, abs=0.2)
-
     def test_gain_never_exceeds_max_and_is_clamped(self):
         # -66 dBFS speech wants +40 dB; the cap holds it at MAX_GAIN_DB.
         sig = _speech_like(8.0, speech_rms_db=-66.0, seed=3)
@@ -423,3 +409,49 @@ class TestClack:
         lin = np.float32(10 ** (gain / 20))
         after = int(0.2 * SAMPLE_RATE)  # well past the 8 ms clack
         assert np.allclose(out[after:], x[after:] * lin, atol=1e-6)
+
+
+class TestClackGrid:
+    """F1: there is NO peak-based gain reduction (at the -26 dBFS target speech
+    peaks sit 8+ dB under the +-0.99 limit anyway), so no transient, however
+    long, frequent or loud, can veto or shrink the lift. Every cell of the grid
+    must lift within 3 dB of the same take without clacks."""
+
+    @staticmethod
+    def _take(seconds: float) -> np.ndarray:
+        return _speech_like(seconds, speech_rms_db=-46.0, seed=2).astype(np.float32)
+
+    @pytest.mark.parametrize("seconds", [1.5, 3.0, 6.0])
+    @pytest.mark.parametrize("count", [1, 2, 3])
+    @pytest.mark.parametrize("ms", [8.0, 20.0])
+    @pytest.mark.parametrize("amp", [0.6, 0.95])
+    def test_lift_survives_every_clack(self, seconds, count, ms, amp):
+        base = self._take(seconds)
+        _, ref = far_field_gain(base)
+        assert ref > 10.0
+        x = base
+        starts = np.linspace(0.05, seconds - 0.1, count)
+        for k, at in enumerate(starts):
+            x = _click(x, at=float(at), amp=amp, ms=ms, seed=200 + k)
+        out, gain = far_field_gain(x)
+        assert abs(gain - ref) <= 3.0, (gain, ref)
+        assert float(np.abs(out).max()) <= HARD_LIMIT + 1e-6
+        # speech samples are exactly speech * gain; only clack regions can clip
+        lin = np.float32(10 ** (gain / 20))
+        keep = np.ones(x.size, bool)
+        for at in starts:
+            i = int(at * SAMPLE_RATE)
+            keep[max(0, i - 1) : i + int((ms + 2) * SAMPLE_RATE / 1000)] = False
+        assert np.allclose(out[keep], x[keep] * lin, atol=1e-6)
+
+    def test_high_crest_speech_is_not_clipped(self):
+        # speech with an ~18 dB crest factor, lifted to the target: peaks land
+        # near -8 dBFS, nowhere near the +-0.99 limit
+        base = self._take(6.0)
+        base[::4000] *= 4.0  # sparse peaky glottal-like pulses
+        crest = 20 * np.log10(np.abs(base).max() / np.sqrt(np.mean(base**2)))
+        assert 15.0 <= crest <= 24.0
+        out, gain = far_field_gain(base)
+        assert gain > 3.0
+        assert float(np.abs(out).max()) < HARD_LIMIT - 0.01
+        assert np.allclose(out, base * np.float32(10 ** (gain / 20)), atol=1e-6)
