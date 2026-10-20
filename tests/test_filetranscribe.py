@@ -534,7 +534,16 @@ def _run_transcribe(tmp_path, monkeypatch, **overrides):
     monkeypatch.setattr(
         ft, "decode_to_pcm", lambda p: np.zeros(16000, dtype=np.float32)
     )
-    fake = {"transcribe_json": True, "turn_gap_s": 1.2, "languages": []}
+    # The stubbed PCM is 1 s of digital zero: these tests exercise the sidecar
+    # wiring, not the silence gate (#54, tests/test_silence_gate.py), so the
+    # gate is explicitly off here or it would (rightly) skip the decode.
+    fake = {
+        "transcribe_json": True,
+        "turn_gap_s": 1.2,
+        "languages": [],
+        "silence_gate": False,
+        "repetition_guard": True,
+    }
     fake.update(overrides.pop("settings", {}))
     monkeypatch.setattr(ft.settings, "get", lambda key, *a: fake.get(key))
 
@@ -546,6 +555,7 @@ def _run_transcribe(tmp_path, monkeypatch, **overrides):
         turn_gap=None,
         no_json=False,
         stdout=False,
+        no_silence_gate=False,
     )
     for k, v in overrides.items():
         setattr(args, k, v)
