@@ -98,6 +98,12 @@ def main() -> None:
         "(défaut : réglage transcribe_json, activé)",
     )
     tr.add_argument(
+        "--no-silence-gate",
+        action="store_true",
+        help="décoder même un fichier sans parole détectée "
+        "(défaut : réglage silence_gate, activé)",
+    )
+    tr.add_argument(
         "--stdout", action="store_true", help="afficher aussi le transcript"
     )
     args = parser.parse_args()
@@ -283,22 +289,26 @@ def _transcribe(args) -> None:
     to skip) a `<stem>-transcript.json` schema-v1 sidecar carrying the QC/word
     detail the txt drops. Never overwrites an existing sidecar without `--force`,
     and writes to NEW paths (never the input). Progress + model chatter go to
-    stderr so `--stdout` stays clean."""
+    stderr so `--stdout` stays clean.
+
+    Near-silence (#54): each file first meets the silence gate (setting
+    `silence_gate`, `--no-silence-gate` to bypass). A gated file is never
+    decoded — the model is only loaded for the first file that needs it — and
+    still gets both sidecars, saying « aucune parole détectée » and why. After
+    a decode, the loop guard (setting `repetition_guard`) cuts a looped phrase
+    to one copy and says so."""
     import json
     import sys
     from datetime import date
 
+    from tuparles import filetranscribe as ft
     from tuparles import settings
     from tuparles.config import SAMPLE_RATE
-    from tuparles.filetranscribe import (
-        FileTranscriber,
-        decode_to_pcm,
-        format_ts,
-        render_json,
-        render_transcript,
-    )
 
+    format_ts = ft.format_ts
     want_json = bool(settings.get("transcribe_json")) and not args.no_json
+    gate_on = bool(settings.get("silence_gate")) and not args.no_silence_gate
+    guard_on = bool(settings.get("repetition_guard"))
 
     paths = [Path(p) for p in args.files]
     missing = [p for p in paths if not p.exists()]
@@ -328,45 +338,81 @@ def _transcribe(args) -> None:
     if not todo:
         return
 
-    print("Chargement du modèle…", file=sys.stderr)
-    tr = FileTranscriber(device=args.device, model=args.model)
-    print(f"Modèle : {tr.model_name} ({tr.device})", file=sys.stderr)
+    tr = None  # loaded on the first file that needs a decode, never for a gated one
 
     for p, txt_out, json_out in todo:
         print(f"Décodage audio : {p.name}", file=sys.stderr)
-        pcm = decode_to_pcm(p)
+        pcm = ft.decode_to_pcm(p)
         total = len(pcm) / SAMPLE_RATE
 
-        def progress(end_s: float, _total: float = total, _name: str = p.name) -> None:
-            pct = min(100, int(100 * end_s / _total)) if _total else 0
-            print(f"\r  {_name} : {pct:3d}%", end="", file=sys.stderr, flush=True)
+        verdict = ft.check_silence(pcm) if gate_on else None
+        segments: list[ft.Segment] = []
+        info: object = None
+        no_speech: dict | None = None
+        model_name: str | None = None
+        device: str | None = None
+        if verdict is not None and verdict.gated:
+            # Record the miss harder than a success: reason + levels, visibly.
+            print(
+                f"  porte de silence : {verdict.reason} (détecteur {verdict.detector}, "
+                f"plancher {verdict.floor_dbfs} dBFS, niveau {verdict.level_dbfs} dBFS, "
+                f"crête {verdict.peak_dbfs} dBFS, {verdict.active_s:.2f} s actives) "
+                "— non décodé (--no-silence-gate pour forcer)",
+                file=sys.stderr,
+            )
+            no_speech = {**verdict.as_dict(), "reason": "silence_gate"}
+        else:
+            if tr is None:
+                print("Chargement du modèle…", file=sys.stderr)
+                tr = ft.FileTranscriber(device=args.device, model=args.model)
+                print(f"Modèle : {tr.model_name} ({tr.device})", file=sys.stderr)
 
-        segments, info = tr.transcribe(pcm, progress=progress)
-        print("", file=sys.stderr)
+            def progress(
+                end_s: float, _total: float = total, _name: str = p.name
+            ) -> None:
+                pct = min(100, int(100 * end_s / _total)) if _total else 0
+                print(f"\r  {_name} : {pct:3d}%", end="", file=sys.stderr, flush=True)
+
+            segments, info = tr.transcribe(pcm, progress=progress)
+            print("", file=sys.stderr)
+            if guard_on:
+                segments = ft.guard_repetition(segments)
+            if not segments:
+                no_speech = {"reason": "decoder_empty"}
+            model_name, device = tr.model_name, tr.device
+        loops = [s.repetition for s in segments if s.repetition]
+        for phrase, copies in loops:
+            print(
+                f"  boucle de répétition coupée : « {phrase[:60]} » ×{copies}",
+                file=sys.stderr,
+            )
         today = date.today().isoformat()
         written: list[Path] = []
-        text = render_transcript(
+        text = ft.render_transcript(
             segments,
             source=p.name,
-            model=tr.model_name,
-            device=tr.device,
+            model=model_name or "sans décodage",
+            device=device or "porte de silence",
             duration=total,
             date=today,
             turn_gap=args.turn_gap,  # None → the turn_gap_s setting (1.2 default)
+            note=ft.NO_SPEECH_NOTE if no_speech else None,
         )
         if txt_out is not None:
             txt_out.write_text(text, encoding="utf-8")
             written.append(txt_out)
         if json_out is not None:
-            data = render_json(
+            data = ft.render_json(
                 segments,
                 source=p.name,
-                model=tr.model_name,
-                device=tr.device,
+                model=model_name,
+                device=device,
                 duration=total,
                 date=today,
                 language=getattr(info, "language", None),
                 turn_gap=args.turn_gap,
+                language_probability=getattr(info, "language_probability", None),
+                no_speech=no_speech,
             )
             json_out.write_text(
                 json.dumps(data, ensure_ascii=False, indent=2) + "\n",
@@ -374,7 +420,13 @@ def _transcribe(args) -> None:
             )
             written.append(json_out)
         summary = " + ".join(str(w) for w in written)
-        print(f"✓ {summary}  ({len(segments)} segments · {format_ts(total)})")
+        if no_speech:
+            detail = "Aucune parole détectée"
+        else:
+            detail = f"{len(segments)} segments"
+            if loops:
+                detail += f" · {len(loops)} boucle(s) coupée(s)"
+        print(f"✓ {summary}  ({detail} · {format_ts(total)})")
         if args.stdout:
             print(text)
 
