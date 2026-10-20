@@ -90,7 +90,10 @@ class Segment:
     which carry none of them, degrade to None via getattr defaults.
 
     `repetition` is set only by `guard_repetition` (#54): (phrase, copies) of a
-    decode loop it cut down to one copy in this segment, else None."""
+    decode loop it cut down to one copy in this segment, else None;
+    `repetition_at` is how many of the segment's tokens (words when timed,
+    else whitespace tokens) come before the cut, where the txt puts its
+    `[…×N]` marker."""
 
     start: float
     end: float
@@ -100,6 +103,7 @@ class Segment:
     no_speech_prob: float | None = None
     compression_ratio: float | None = None
     repetition: tuple[str, int] | None = None
+    repetition_at: int | None = None
 
 
 def decode_to_pcm(path: Path) -> np.ndarray:
@@ -365,13 +369,15 @@ def check_silence(pcm: np.ndarray) -> SilenceVerdict:
 
 def guard_repetition(segments: list[Segment]) -> list[Segment]:
     """Cut decode loops down to one copy (#54). The rule lives in
-    `repeats.find_loop` (a phrase repeated verbatim 4+ times over 12+ words);
+    `repeats.find_loop` (a phrase repeated verbatim 8+ times over 16+ words);
     here it runs over the whole decode as ONE word stream, so a loop that
     Whisper split into many one-phrase segments is caught too.
 
     Word timings ride along: a cut segment keeps the words it kept, its `end`
     moves to the last kept word, segments left empty disappear, and the
-    segment holding the surviving copy carries `repetition=(phrase, copies)`.
+    segment holding the end of the surviving copy carries
+    `repetition=(phrase, copies)` and `repetition_at` (its tokens before the
+    cut).
     Without word timings the text is split on whitespace and the span is left
     as decoded. Untouched input comes back as the same objects."""
     tokens: list[str] = []
@@ -391,10 +397,11 @@ def guard_repetition(segments: list[Segment]) -> list[Segment]:
     for g in kept:
         si, ti = owner[g]
         keep[si].add(ti)
-    flags: dict[int, tuple[str, int]] = {}
+    flags: dict[int, tuple[str, int, int]] = {}
     for i, k, r in loops:
         phrase = " ".join(t.strip() for t in tokens[i : i + k])
-        flags.setdefault(owner[i + k - 1][0], (phrase, r))
+        si, ti = owner[i + k - 1]  # the last token of the surviving copy
+        flags.setdefault(si, (phrase, r, ti))
 
     out: list[Segment] = []
     for si, seg in enumerate(segments):
@@ -405,6 +412,9 @@ def guard_repetition(segments: list[Segment]) -> list[Segment]:
         if not keep[si]:
             continue  # wholly inside a loop
         idx = sorted(keep[si])
+        flag = flags.get(si)
+        repetition = (flag[0], flag[1]) if flag else None
+        at = idx.index(flag[2]) + 1 if flag else None
         if seg.words:
             words = tuple(seg.words[j] for j in idx)
             out.append(
@@ -413,7 +423,8 @@ def guard_repetition(segments: list[Segment]) -> list[Segment]:
                     text="".join(w.word for w in words).strip(),
                     words=words,
                     end=words[-1].end,
-                    repetition=flags.get(si),
+                    repetition=repetition,
+                    repetition_at=at,
                 )
             )
         else:
@@ -421,7 +432,8 @@ def guard_repetition(segments: list[Segment]) -> list[Segment]:
                 replace(
                     seg,
                     text=" ".join(toks[j] for j in idx),
-                    repetition=flags.get(si),
+                    repetition=repetition,
+                    repetition_at=at,
                 )
             )
     return out
@@ -436,7 +448,13 @@ def format_ts(seconds: float) -> str:
 
 
 TURN_SEAM = "— "  # visible, unlabelled turn boundary (language-neutral, FR-natural)
-LOOP_MARK = " […]"  # txt-only: a decode loop was cut here (guard_repetition)
+
+
+def loop_mark(copies: int) -> str:
+    """txt-only marker at a decode-loop cut (guard_repetition): ` […×12]`."""
+    return f" […×{copies}]"
+
+
 NO_SPEECH_NOTE = "aucune parole détectée"  # the txt's one-line verdict
 
 
@@ -514,8 +532,10 @@ def render_transcript(
 ) -> str:
     """Segments → the `[mm:ss] text` transcript body, with a one-line provenance
     header. `note` adds a `# note` line under it (e.g. "aucune parole
-    détectée", #54); a block whose segment `guard_repetition` cut ends with
-    `LOOP_MARK`, so the cut is visible where it happened. Each line gets the deterministic lexicon (known mishears) but no
+    détectée", #54). Where `guard_repetition` cut a loop, `loop_mark` (` […×N]`,
+    N = copies seen) sits right after the surviving copy, inside its block,
+    with any real text that followed the loop after it. Each line gets the
+    deterministic lexicon (known mishears) but no
     spoken-punctuation / repeat-collapse / command parsing — a meeting is not a
     dictation, so we stay faithful to what was said.
 
@@ -539,16 +559,39 @@ def render_transcript(
     if note:
         lines.append(f"# {note}")
     lines.append("")
-    blocks = list(_iter_blocks(segments, threshold))
-    for n, (seam, blk, seg) in enumerate(blocks):
-        text = apply_lexicon(blk.text)
+    for seam, blk, seg in _iter_blocks(segments, threshold):
+        text = apply_lexicon(_marked_text(blk, seg))
         if not text:
             continue
         prefix = TURN_SEAM if seam else ""
-        last_of_seg = n + 1 == len(blocks) or blocks[n + 1][2] is not seg
-        mark = LOOP_MARK if seg.repetition and last_of_seg else ""
-        lines.append(f"[{format_ts(blk.start)}] {prefix}{text}{mark}")
+        lines.append(f"[{format_ts(blk.start)}] {prefix}{text}")
     return "\n".join(lines) + "\n"
+
+
+def _marked_text(blk: _Block, seg: Segment) -> str:
+    """The block's raw text, with `loop_mark` inserted at the loop cut when
+    the cut falls inside this block (#54). A timed block is a contiguous slice
+    of its segment's words, located by identity; an untimed block is the
+    whole segment, split on whitespace like guard_repetition split it."""
+    if seg.repetition is None or seg.repetition_at is None:
+        return blk.text
+    mark = loop_mark(seg.repetition[1])
+    if blk.words and seg.words:
+        offset = next((i for i, w in enumerate(seg.words) if w is blk.words[0]), None)
+        if offset is None:
+            return blk.text
+        j = seg.repetition_at - offset
+        if not 0 < j <= len(blk.words):
+            return blk.text
+        head = "".join(w.word for w in blk.words[:j]).strip()
+        tail = "".join(w.word for w in blk.words[j:]).strip()
+    else:
+        toks = blk.text.split()
+        j = seg.repetition_at
+        if not 0 < j <= len(toks):
+            return blk.text
+        head, tail = " ".join(toks[:j]), " ".join(toks[j:])
+    return head + mark + (f" {tail}" if tail else "")
 
 
 JSON_SCHEMA_VERSION = 1
