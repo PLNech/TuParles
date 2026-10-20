@@ -205,9 +205,10 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
   behaves exactly as if « Préférer le CPU » were ticked (no CUDA engine, CPU
   decode, blue tray) and goes back to the GPU on mains. It is checked again at
   every take, with no restart. The power source is read from
-  `/sys/class/power_supply` (cached 5 s). It only counts as "on battery" with
-  positive evidence: a desktop with no battery, or a box where that tree can't
-  be read, keeps the GPU. `tuparles transcribe --device auto` follows it too.
+  `/sys/class/power_supply` (cached 5 s). The machine's own battery decides: if
+  it reports *Discharging*, that's "on battery", even when a weak USB-C charger
+  or dock reports itself online. A desktop with no battery, or a box where that
+  tree can't be read, keeps the GPU. `tuparles transcribe --device auto` follows it too.
   Caveat: after a mid-session switch the leftover ~190 MB CUDA context may keep
   the card from fully sleeping; a daemon started on battery never touches CUDA.
 - **Self-healing GPU**: if the CUDA context dies mid-session — a laptop

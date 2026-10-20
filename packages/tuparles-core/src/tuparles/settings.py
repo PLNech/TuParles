@@ -113,7 +113,8 @@ _DEFAULTS: dict[str, object] = {
     # battery, behave exactly as if prefer_cpu were ticked — no CUDA engine, CPU
     # decode, blue tray — and go back to the GPU on mains, from the next take,
     # no restart. A laptop on a customer's desk would otherwise burn the dGPU for
-    # every take. Positive evidence only (power.py): a desktop with no battery,
+    # every take. The battery's own Discharging status decides, even when a weak
+    # USB-C charger reports online (power.py); a desktop with no battery,
     # or a probe that can't read sysfs, keeps the GPU. prefer_cpu still wins on
     # mains; untick this to keep the GPU on battery too.
     "battery_aware": True,

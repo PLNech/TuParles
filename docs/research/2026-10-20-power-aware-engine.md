@@ -10,11 +10,14 @@ and to untick it once back at a desk. A setting you have to remember twice a
 day is a chore.
 
 The CPU is not free either, and the one real data point we have says so. On
-that machine (62 GB RAM), `tuparles transcribe --device cpu` on 30 s of audio
-with the `small` model took **65 s wall at ~343 % CPU**: about 2.2× slower than
-real time, with three to four cores busy the whole time. So "CPU on battery"
-does not make a take cheap. It keeps the dGPU asleep and accepts a slower
-decode. We have not measured the GPU's draw on battery. The decision rests on
+that machine (62 GB RAM), the maintainer's session measured
+`tuparles transcribe --device cpu` on 30 s of audio at **65 s wall and ~343 %
+CPU**: about 2.2× slower than real time, with three to four cores busy the
+whole time. That is the file path: CTranslate2 int8 with the `small` model.
+It is **not** the daemon's CPU rung (whisper.cpp `base`, or qwen), which was
+not measured here, so it bounds the batch cost, not a dictation take's. Still,
+"CPU on battery" does not make work cheap. It keeps the dGPU asleep and accepts a slower
+decode. GPU power draw on battery is still unmeasured. The decision rests on
 the owner's rule plus that CPU figure, not on a watt comparison. A proper A/B
 would need a wall-power meter or `upower` discharge-rate logging. That's a
 follow-up, not a precondition.
@@ -52,9 +55,14 @@ return to mains becomes a failure and stops retrying. That's the same rule the
 checkbox already followed.
 
 **Fail toward the GPU only without battery evidence.** `power.read_on_battery`
-answers True only when a system battery says `Discharging` *and* no
-`Mains`/`USB` supply is `online`. Everything else answers False and keeps the
-pre-feature behaviour: a desktop with no battery, `Charging`/`Full`/
+answers True when a system battery says `Discharging`, whatever the supplies
+report. The first cut also required no `Mains`/`USB` supply to be `online`,
+and blind verification caught it on the dev laptop itself. It was at ~45 % and
+draining, with AC `online=1` and one UCSI USB-C port `online=1` (a dock or
+low-wattage PD partner), so the probe said "on AC" and kept the GPU. `online`
+means a supply is connected, not that it charges. So the battery's own status
+decides, and supplies are not read at all. Everything else answers False and
+keeps the pre-feature behaviour: a desktop with no battery, `Charging`/`Full`/
 `Not charging`, an unreadable tree, an unknown status, a box with no sysfs.
 Peripheral batteries (`scope = Device`, e.g. a wireless mouse) are ignored, so
 a draining mouse can't push a desktop onto CPU. The asymmetry is deliberate. A
@@ -62,7 +70,9 @@ false "on battery" silently slows a plugged-in machine. A false "on AC" just
 means the old behaviour, and the user can still tick « Préférer le CPU ».
 
 **A 5 s cache.** The probe is a directory walk with a few small reads, and it
-runs once or twice per take. Caching it for 5 s makes a burst of takes cost
+runs twice per take: at take start (`supports_partials`) and at the final
+(`transcribe`), never per partial, so an unplug mid-take keeps that take's live
+previews on the GPU and moves its final decode to CPU. Caching it for 5 s makes a burst of takes cost
 one walk, and an unplug is still seen by the next take that starts more than
 5 s later. No UPower, no D-Bus, no new dependency.
 

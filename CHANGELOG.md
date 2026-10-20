@@ -34,9 +34,10 @@
   is rebuilt lazily at the next take, with no restart. A GPU that genuinely
   failed stays failed: plugging in never retries a dead card. The power source
   comes from a new stdlib-only `power.py` probe of `/sys/class/power_supply`,
-  cached 5 s. It reports "on battery" only on positive evidence, so desktops,
-  unreadable trees and unknown states keep the GPU, and peripheral (mouse)
-  batteries are ignored. `tuparles transcribe --device auto` honours it too, and
+  cached 5 s. A system battery reporting *Discharging* means "on battery",
+  even when a supply reports `online=1` (a low-wattage USB-C PD charger or a
+  dock can do that while the battery drains). Desktops, unreadable trees and
+  unknown states keep the GPU, and peripheral (mouse) batteries are ignored. `tuparles transcribe --device auto` honours it too, and
   the one-time GPU→CPU toast names the battery as the reason. Build note:
   `docs/research/2026-10-20-power-aware-engine.md`.
 
