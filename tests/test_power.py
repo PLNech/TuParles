@@ -202,9 +202,12 @@ class TestReplugHysteresis:
 
 
 class TestLongGapIsAColdStart:
-    """Hysteresis absorbs flapping between *close* reads. A gap longer than the
-    settle window carries no flapping evidence, so the next read is trusted
-    as-is: after a long idle on mains the very first take is back on the GPU."""
+    """Hysteresis absorbs flapping between reads at dictation spacing. A gap of
+    COLD_START_GAP_S (5 min) or more carries no flapping evidence, so the next
+    read is trusted as-is: after a long idle on mains the very first take is
+    back on the GPU. The gap is deliberately NOT the 30 s settle window: takes
+    spaced 30-60 s apart are normal, and would otherwise bypass the hysteresis
+    on exactly the flapping charger it exists for."""
 
     _rig = staticmethod(TestReplugHysteresis._rig)
 
@@ -253,8 +256,35 @@ class TestLongGapIsAColdStart:
         for _ in range(4):
             now[0] += 1.0
             assert probe.on_battery() is True  # t=1..4: cache hits
-        now[0] = 1031.0
-        # Last sysfs read was t=0 (31 s ago): a cold start, so False. Had the
-        # t=4 cache hit counted, the gap would be 27 s and the window would
-        # only just be starting.
+        now[0] = 1301.0
+        # Last sysfs read was t=0 (301 s ago): a cold start, so False. Had the
+        # t=4 cache hit counted, the gap would be 297 s, under the 300 s cold
+        # start, and the settle window would only just be starting.
         assert probe.on_battery() is False
+
+    def test_cold_start_gap_is_its_own_5_min_constant(self):
+        from tuparles import power
+
+        assert power.COLD_START_GAP_S == 300.0
+        assert power.COLD_START_GAP_S > power.REPLUG_SETTLE_S
+
+    def test_flapping_with_takes_every_40_s_never_transitions(self, tmp_path):
+        # The round-2 verifier's scenario: 40 s > the 30 s settle window, so a
+        # cold start keyed on 30 s gave True/False/True/... = a CUDA rebuild
+        # every other take. Each read is a Discharging/not-discharging flip.
+        probe, now, set_status = self._rig(tmp_path, "Discharging")
+        seen = [probe.on_battery()]
+        for i in range(6):
+            set_status("Charging" if i % 2 == 0 else "Discharging")
+            now[0] += 40.0
+            seen.append(probe.on_battery())
+        assert seen == [True] * 7
+
+    def test_replug_with_takes_40_s_apart_costs_one_cpu_take(self, tmp_path):
+        probe, now, set_status = self._rig(tmp_path, "Discharging")
+        assert probe.on_battery() is True
+        set_status("Charging")  # plugged in for good
+        now[0] += 40.0
+        assert probe.on_battery() is True  # first calm read: window starts
+        now[0] += 40.0
+        assert probe.on_battery() is False  # 40 s calm >= 30 s: back to GPU
