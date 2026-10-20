@@ -62,9 +62,6 @@ FAR_FIELD_MIN_SNR_DB = 8.0  # speech over the floor, else it is just noise
 FAR_FIELD_SPEECH_PCTL = 90  # speech level = this percentile of frame dB
 FAR_FIELD_NOISE_PCTL = 10  # floor = this percentile of frame dB
 FAR_FIELD_MIN_SPEECH_FRAMES = 15  # 0.3 s over the floor: a click is not speech
-FAR_FIELD_MOD_DELTA_DB = 5.0  # a frame-to-frame jump this big is a modulation event
-FAR_FIELD_MOD_SEP_FRAMES = 5  # events count once per 100 ms (not once per edge)
-FAR_FIELD_MOD_MIN_EVENTS = 3  # speech modulates; a fan, a slam, a burst do not
 FAR_FIELD_QUIET_DBFS = -30.0  # at or above this the audio is not "quiet"
 FAR_FIELD_HARD_LIMIT = 0.99  # the output is clipped to +-this after the gain
 FAR_FIELD_MIN_GAIN_DB = 3.0  # a smaller lift is not worth touching the audio
@@ -73,24 +70,6 @@ FAR_FIELD_MIN_GAIN_DB = 3.0  # a smaller lift is not worth touching the audio
 # consumes it yet. The log line in prepare_pcm fires only when a lift happens.
 last_far_field_gain_db = 0.0
 _last_logged_gain = 0
-
-
-def _modulation_events(db: np.ndarray, noise_db: float) -> int:
-    """Count syllable-like jumps in the frame-level track (dB per 20 ms).
-
-    An event is a frame-to-frame change of at least FAR_FIELD_MOD_DELTA_DB with
-    one side over the floor + 8 dB, counted at most once per
-    FAR_FIELD_MOD_SEP_FRAMES. Speech modulates all the time; a fan with a slow
-    level drift has none, a door slam has one (its onset) and a flat burst two
-    (on, off): so those never reach FAR_FIELD_MOD_MIN_EVENTS."""
-    jump = np.abs(np.diff(db)) >= FAR_FIELD_MOD_DELTA_DB
-    live = np.maximum(db[1:], db[:-1]) >= noise_db + FAR_FIELD_MIN_SNR_DB
-    count, last = 0, -FAR_FIELD_MOD_SEP_FRAMES
-    for i in np.flatnonzero(jump & live):
-        if i - last >= FAR_FIELD_MOD_SEP_FRAMES:
-            count += 1
-            last = int(i)
-    return count
 
 
 def far_field_gain(
@@ -137,7 +116,6 @@ def far_field_gain(
         or speech_db >= FAR_FIELD_QUIET_DBFS
         or int((db >= noise_db + FAR_FIELD_MIN_SNR_DB).sum())
         < FAR_FIELD_MIN_SPEECH_FRAMES
-        or _modulation_events(db, noise_db) < FAR_FIELD_MOD_MIN_EVENTS
     ):
         return pcm, 0.0
     gain_db = min(max(TARGET_SPEECH_DBFS - speech_db, 0.0), MAX_GAIN_DB)
