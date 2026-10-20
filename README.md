@@ -54,6 +54,14 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
   decode). Conservative by design: it only ever trims the ends, keeps a margin,
   and hands the engine the whole take at the least doubt. On by default; toggle
   in *Réglages › Décodage* (*« Couper les silences en début/fin de prise »*).
+- **Lifts a far-away mic** — a meeting-room or laptop-array mic that records
+  you at about -48 dBFS gets one automatic, linear boost (up to +36 dB, peak
+  held under -1 dBFS) before decode. It only acts when the voice is quiet *and*
+  clearly above the room noise; normal audio is never touched, and noise-only
+  audio is left alone rather than amplified. On by default; toggle in
+  *Réglages › Décodage* (*« Micro lointain (gain automatique) »*). It also
+  amplifies the room's own noise, and is not yet measured on real far-field
+  audio (see `docs/research/2026-10-20-far-field-gain.md`).
 - **A bubble that tells you what's happening** — the waveform tracks your
   voice on a perceptual scale, so even quiet speech visibly moves the bars
   ("I hear you"); the bars are **green on GPU, blue on CPU**, so you always

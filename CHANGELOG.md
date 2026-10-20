@@ -27,6 +27,21 @@
   and offer Retry; download controls fit on narrow screens.
 
 ### Added
+- **Far-field gain** (#51, epic #56): quiet room and laptop-array mics
+  (measured ~-30 dBFS peak, -48 dBFS RMS, intelligible only after about +29 dB)
+  now get one conservative linear lift at the shared `prepare_pcm` seam,
+  before any leveling. On 20 ms frames: speech level = power mean of the frames
+  above the 70th percentile, floor = 10th percentile; gain =
+  `-26 dBFS - speech level`, capped at +36 dB and at a -1 dBFS post-gain peak,
+  no compression and no clipping. It does nothing (the buffer comes back
+  byte-identical) under 0.5 s, on digital silence, when speech is under 8 dB
+  over the floor (never amplify hiss), when speech is already at -30 dBFS or
+  louder, or when the lift would be under 3 dB. On by default; toggle in
+  *Réglages › Décodage* (*« Micro lointain (gain automatique) »*). The applied
+  gain is logged (`far-field gain +N dB`) and kept in
+  `preprocess.last_far_field_gain_db`. Not yet validated on real far-field
+  audio: the WER eval lane is #53. Build note:
+  `docs/research/2026-10-20-far-field-gain.md`.
 - **Background service** (#48): `tuparles service install` renders
   `packaging/tuparles.service.in` into `~/.config/systemd/user/tuparles.service`,
   a systemd user unit bound to `graphical-session.target` (starts with the
