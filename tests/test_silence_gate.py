@@ -242,8 +242,8 @@ class TestFindLoop:
         assert find_loop(["la"] * 40) == (0, 1, 40)
 
     def test_punctuation_and_case_do_not_hide_a_loop(self):
-        toks = ["Thank", "you."] * 3 + ["thank", "YOU!"] * 3
-        assert find_loop(toks) == (0, 2, 6)
+        toks = ["Thank", "you."] * 5 + ["thank", "YOU!"] * 5
+        assert find_loop(toks) == (0, 2, 10)
 
     @pytest.mark.parametrize(
         "text",
@@ -259,19 +259,55 @@ class TestFindLoop:
     def test_honest_repetition_is_not_a_loop(self, text):
         assert find_loop(text.split()) is None
 
+    @pytest.mark.parametrize("words", [1, 2, 3, 5])
+    @pytest.mark.parametrize("copies", [8, 12, 40])
+    def test_long_loops_are_found(self, words, copies):
+        phrase = ["w0", "w1", "w2", "w3", "w4"][:words]
+        hit = find_loop(["intro"] + phrase * copies)
+        if words * copies >= 16:
+            assert hit == (1, words, copies)
+        else:  # "zero" x8 / x12: enough copies, too few words — left alone
+            assert hit is None
+
+
+# The blind verifier's legitimate repeats (all <= 6 copies). Every one of them
+# was cut by the first 4-copy rule; under 8 copies + 16 words none may be.
+LEGIT_REPEATS = {
+    "ship-x4": "We need to ship this now. " * 4,
+    "fr-x4": "c'est pas possible " * 4,
+    "let-it-be-x4": "let it be " * 4,
+    "and-then-x4": "and then we went " * 4,
+    "pin-x6": "the code is " + "one two " * 6,
+    "thanks-x6": "Thank you. " * 6,
+    "zero-x12": "zero " * 12,
+    "return-none-x6": "return none " * 6,
+    "code-x4": "self dot x equals " * 4,
+}
+
+
+@pytest.mark.parametrize("name", sorted(LEGIT_REPEATS))
+def test_legitimate_repeats_come_back_unchanged(name):
+    text = LEGIT_REPEATS[name].strip()
+    assert find_loop(text.split()) is None
+    seg = ft.Segment(0.0, 5.0, text)
+    assert ft.guard_repetition([seg]) == [seg]
+    words = text.split()
+    wseg = ft.Segment(0.0, 5.0, text, _w(words))
+    assert ft.guard_repetition([wseg]) == [wseg]
+
 
 class TestCutLoops:
     def test_keeps_one_copy_and_drops_the_partial_tail(self):
-        toks = "bonjour".split() + "merci d'avoir regardé".split() * 6 + ["merci"]
+        toks = "bonjour".split() + "merci d'avoir regardé".split() * 8 + ["merci"]
         kept, loops = cut_loops(toks)
         assert kept == list(range(4))  # bonjour + one copy
-        assert loops == [(1, 3, 6)]
+        assert loops == [(1, 3, 8)]
 
     def test_text_after_the_loop_survives(self):
-        toks = ["a", "b"] + ["x", "y", "z"] * 5 + ["real", "words"]
+        toks = ["a", "b"] + ["x", "y", "z"] * 8 + ["real", "words"]
         kept, loops = cut_loops(toks)
         assert [toks[i] for i in kept] == ["a", "b", "x", "y", "z", "real", "words"]
-        assert loops == [(2, 3, 5)]
+        assert loops == [(2, 3, 8)]
 
     def test_untouched_when_no_loop(self):
         toks = "on y va on y va on y va".split()
@@ -338,12 +374,64 @@ def test_cut_segment_is_marked_in_txt_and_annotated_in_json():
     (cut,) = ft.guard_repetition([seg])
     kw = {"source": "x.wav", "model": "m", "device": "cpu", "duration": 30.0}
     txt = ft.render_transcript([cut], date="d", turn_gap=0, **kw)
-    assert txt.splitlines()[2] == "[00:00] the" + ft.LOOP_MARK
+    assert txt.splitlines()[2] == "[00:00] the […×40]"
     data = ft.render_json([cut], date="d", turn_gap=0, **kw)
     assert data["truncated_repetition"] is True
     (m,) = data["messages"]
     assert m["content"] == "the"  # content stays clean, the mark is txt-only
     assert m["annotations"]["repetition"] == {"phrase": "the", "copies": 40}
+
+
+_KW = {"source": "x.wav", "model": "m", "device": "cpu", "duration": 30.0}
+
+
+def _body(segments, turn_gap=0):
+    txt = ft.render_transcript(segments, date="d", turn_gap=turn_gap, **_KW)
+    return txt.splitlines()[2:]
+
+
+def test_marker_sits_at_the_cut_mid_text_without_words():
+    # loop_midtext: real text, a loop, real text again — the marker goes
+    # between the surviving copy and the tail, with the count.
+    text = "So we started. " + "and then we went " * 12 + "to the beach."
+    (cut,) = ft.guard_repetition([ft.Segment(0.0, 30.0, text)])
+    assert _body([cut]) == [
+        "[00:00] So we started. and then we went […×12] to the beach."
+    ]
+
+
+def test_marker_sits_at_the_cut_mid_text_with_words():
+    words = ["Bonjour."] + ["Merci", "d'avoir", "regardé."] * 20 + ["Au", "revoir."]
+    seg = ft.Segment(0.0, 18.9, " ".join(words), _w(words))
+    (cut,) = ft.guard_repetition([seg])
+    assert cut.text == "Bonjour. Merci d'avoir regardé. Au revoir."
+    assert _body([cut]) == ["[00:00] Bonjour. Merci d'avoir regardé. […×20] Au revoir."]
+
+
+def test_marker_follows_the_surviving_turn_seam_block():
+    # The cut lands in the first of two turn-split blocks: the mark stays at
+    # the cut, the second block is untouched.
+    words = ["Bonjour."] + ["la", "di"] * 10
+    timed = (*_w(words), ft.Word(20.0, 20.5, " Salut.", 0.9))
+    seg = ft.Segment(0.0, 20.5, " ".join(words) + " Salut.", timed)
+    (cut,) = ft.guard_repetition([seg])
+    assert _body([cut], turn_gap=1.2) == [
+        "[00:00] Bonjour. la di […×10]",
+        "[00:20] — Salut.",
+    ]
+
+
+def test_marker_follows_the_surviving_segment_of_a_split_loop():
+    segs = [ft.Segment(i * 2.0, i * 2.0 + 2.0, "Thank you.") for i in range(12)]
+    segs.append(ft.Segment(24.0, 26.0, "Bye."))
+    out = ft.guard_repetition(segs)
+    assert _body(out) == ["[00:00] Thank you. […×12]", "[00:24] Bye."]
+
+
+def test_split_emphasis_once_per_segment_is_untouched():
+    segs = [ft.Segment(i * 2.0, i * 2.0 + 2.0, "we ship it now") for i in range(4)]
+    assert ft.guard_repetition(segs) == segs
+    assert not any("[…" in ln for ln in _body(segs))
 
 
 def test_render_json_defaults_for_new_keys():
@@ -454,6 +542,7 @@ def _cli(tmp_path, monkeypatch, *, pcm, segments=None, settings=None, **flags):
         no_json=False,
         stdout=False,
         no_silence_gate=False,
+        no_repetition_guard=False,
     )
     for k, v in flags.items():
         setattr(args, k, v)
@@ -553,3 +642,37 @@ def test_silence_gate_and_repetition_guard_default_on():
     assert settings._DEFAULTS["silence_gate"] is True
     assert settings._DEFAULTS["repetition_guard"] is True
     assert settings.get("silence_gate") is True  # isolated, nothing stored
+
+
+def test_cli_no_repetition_guard_flag_keeps_the_raw_decode(tmp_path, monkeypatch):
+    looped = [ft.Segment(0.0, 30.0, "Merci d'avoir regardé. " * 25)]
+    _calls, txt, data = _cli(
+        tmp_path,
+        monkeypatch,
+        pcm=_quiet_file(),
+        segments=looped,
+        no_silence_gate=True,
+        no_repetition_guard=True,
+    )
+    assert data["truncated_repetition"] is False
+    assert data["messages"][0]["content"].count("Merci") == 25
+    assert "[…" not in txt.read_text(encoding="utf-8")
+
+
+def test_cli_names_the_cut_on_stderr_and_marks_it_in_txt(tmp_path, monkeypatch, capsys):
+    looped = [
+        ft.Segment(
+            0.0, 30.0, "Bonjour. " + "Merci d'avoir regardé. " * 25 + "Au revoir."
+        )
+    ]
+    _calls, txt, data = _cli(
+        tmp_path, monkeypatch, pcm=_quiet_file(), segments=looped, no_silence_gate=True
+    )
+    err = capsys.readouterr().err
+    assert "« Merci d'avoir regardé. » ×25" in err
+    body = txt.read_text(encoding="utf-8").splitlines()[2:]
+    assert body == ["[00:00] Bonjour. Merci d'avoir regardé. […×25] Au revoir."]
+    assert data["messages"][0]["annotations"]["repetition"] == {
+        "phrase": "Merci d'avoir regardé.",
+        "copies": 25,
+    }

@@ -556,6 +556,7 @@ def _run_transcribe(tmp_path, monkeypatch, **overrides):
         no_json=False,
         stdout=False,
         no_silence_gate=False,
+        no_repetition_guard=False,
     )
     for k, v in overrides.items():
         setattr(args, k, v)
