@@ -203,7 +203,9 @@ class TestGateNeverEatsSpeech:
         assert v.gated is True and v.detector == "fake-vad"
 
     def test_too_short_to_judge_is_decoded(self):
-        v = pp.silence_gate(np.zeros(SR // 4, dtype=np.float32), SR, detectors=NO_SPEECH)
+        v = pp.silence_gate(
+            np.zeros(SR // 4, dtype=np.float32), SR, detectors=NO_SPEECH
+        )
         assert v.gated is False
         assert v.reason == "too_short"
 
@@ -383,7 +385,7 @@ def test_decode_does_not_let_faster_whisper_mutate_the_shared_vad_params(
     t.device, t.model_name, t._model_override = "cpu", "small", None
     t._batched = _Popping()
     t.transcribe(np.zeros(16, dtype=np.float32))
-    assert TUNED_VAD_PARAMETERS == before
+    assert before == TUNED_VAD_PARAMETERS
 
 
 def test_decoder_vad_tier_agrees_with_the_decoder_on_silence():
@@ -392,7 +394,7 @@ def test_decoder_vad_tier_agrees_with_the_decoder_on_silence():
 
     before = dict(TUNED_VAD_PARAMETERS)
     assert ft._decoder_vad_span(np.zeros(5 * SR, dtype=np.float32), SR) is None
-    assert TUNED_VAD_PARAMETERS == before
+    assert before == TUNED_VAD_PARAMETERS
 
 
 # --- CLI wiring: gated files never reach the model ----------------------------
