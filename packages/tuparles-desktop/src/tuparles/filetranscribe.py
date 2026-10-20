@@ -27,8 +27,9 @@ an existing annotations dict), so a consumer written against v1 keeps working �
 the schema is designed for that growth without a version bump breaking readers.
 """
 
+import logging
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
@@ -42,7 +43,15 @@ from tuparles.engine import (
     cpu_preference,
     decode_language_opts,
 )
-from tuparles.preprocess import prepare_pcm
+from tuparles.preprocess import (
+    SilenceVerdict,
+    default_speech_detectors,
+    prepare_pcm,
+    silence_gate,
+)
+from tuparles.repeats import cut_loops
+
+_log = logging.getLogger("tuparles.filetranscribe")
 
 # CPU fallback model: `small` (not the realtime `base`) — a kept transcript is
 # worth the extra quality, and offline we're not racing a live preview. Override
@@ -78,7 +87,10 @@ class Segment:
     JSON sidecar's `low_confidence` heuristic, None when unknown. All are
     trailing + optional so positional construction (`Segment(s, e, text)` or
     `Segment(s, e, text, words)`) still works and the `_FakeSeg` decode fakes,
-    which carry none of them, degrade to None via getattr defaults."""
+    which carry none of them, degrade to None via getattr defaults.
+
+    `repetition` is set only by `guard_repetition` (#54): (phrase, copies) of a
+    decode loop it cut down to one copy in this segment, else None."""
 
     start: float
     end: float
@@ -87,6 +99,7 @@ class Segment:
     avg_logprob: float | None = None
     no_speech_prob: float | None = None
     compression_ratio: float | None = None
+    repetition: tuple[str, int] | None = None
 
 
 def decode_to_pcm(path: Path) -> np.ndarray:
@@ -250,7 +263,15 @@ class FileTranscriber:
             batch_size=16,
             beam_size=5,
             vad_filter=True,
-            vad_parameters=TUNED_VAD_PARAMETERS,
+            # A COPY: BatchedInferencePipeline pops "max_speech_duration_s" off
+            # the dict it is handed (faster-whisper 1.2.1), which would strip it
+            # from the shared module-level params for every later caller.
+            vad_parameters=dict(TUNED_VAD_PARAMETERS),
+            # No condition_on_previous_text / compression_ratio_threshold /
+            # no_speech_threshold here: the batched pipeline hardcodes the first
+            # to False and never acts on the other two (no temperature fallback,
+            # no segment skip), so passing them would only look like a guard.
+            # The loop guard is `guard_repetition`, after the decode (#54).
             # Word-level timings power the turn-seam heuristic (render_transcript):
             # a long word-to-word gap inside a fused block is a likely turn change.
             # If the engine can't supply them, `seg.words` is None and the seam
@@ -289,6 +310,123 @@ class FileTranscriber:
         return out, info
 
 
+# --- near-silence: the silence gate + the loop guard (#54) -------------------
+
+# BatchedInferencePipeline overrides the VAD's max_speech_duration_s with the
+# model's chunk length; every Whisper model's feature extractor uses 30 s.
+_DECODER_VAD_MAX_SPEECH_S = 30
+
+
+def _decoder_vad_span(audio_f: np.ndarray, sample_rate: int) -> tuple[int, int] | None:
+    """The decoder's OWN speech detector, as a gate tier: faster-whisper's
+    bundled silero VAD (ONNX, CPU) with the same parameters, on the same
+    `prepare_pcm` output `_decode` hands the batched pipeline. So when this
+    says "no speech", the decode would have had zero audio to work on and
+    returned nothing: on the file path the gate can never cost a transcript.
+    Raises ImportError without faster-whisper (the gate then falls through to
+    the trim tiers)."""
+    from faster_whisper.vad import VadOptions, get_speech_timestamps
+
+    params = {
+        k: v for k, v in TUNED_VAD_PARAMETERS.items() if k != "max_speech_duration_s"
+    }
+    opts = VadOptions(**params, max_speech_duration_s=_DECODER_VAD_MAX_SPEECH_S)
+    ts = get_speech_timestamps(prepare_pcm(audio_f), opts, sampling_rate=sample_rate)
+    if not ts:
+        return None
+    return int(ts[0]["start"]), int(ts[-1]["end"])
+
+
+def check_silence(pcm: np.ndarray) -> SilenceVerdict:
+    """The pre-decode silence gate for one file (see `preprocess.silence_gate`),
+    with the decoder's own VAD as first detector. Every verdict is logged with
+    its levels — a skipped file is the one a reader will ask about."""
+    verdict = silence_gate(
+        pcm,
+        SAMPLE_RATE,
+        detectors=[
+            ("faster-whisper-vad", _decoder_vad_span),
+            *default_speech_detectors(),
+        ],
+    )
+    _log.info(
+        "silence gate: %s (%s, detector=%s, floor=%s dBFS, level=%s dBFS, "
+        "peak=%s dBFS, active=%.2fs)",
+        "GATED" if verdict.gated else "decode",
+        verdict.reason,
+        verdict.detector,
+        verdict.floor_dbfs,
+        verdict.level_dbfs,
+        verdict.peak_dbfs,
+        verdict.active_s,
+    )
+    return verdict
+
+
+def guard_repetition(segments: list[Segment]) -> list[Segment]:
+    """Cut decode loops down to one copy (#54). The rule lives in
+    `repeats.find_loop` (a phrase repeated verbatim 4+ times over 12+ words);
+    here it runs over the whole decode as ONE word stream, so a loop that
+    Whisper split into many one-phrase segments is caught too.
+
+    Word timings ride along: a cut segment keeps the words it kept, its `end`
+    moves to the last kept word, segments left empty disappear, and the
+    segment holding the surviving copy carries `repetition=(phrase, copies)`.
+    Without word timings the text is split on whitespace and the span is left
+    as decoded. Untouched input comes back as the same objects."""
+    tokens: list[str] = []
+    owner: list[tuple[int, int]] = []
+    per_seg: list[list[str]] = []
+    for si, seg in enumerate(segments):
+        toks = [w.word for w in seg.words] if seg.words else seg.text.split()
+        per_seg.append(toks)
+        for ti, tok in enumerate(toks):
+            tokens.append(tok)
+            owner.append((si, ti))
+    kept, loops = cut_loops(tokens)
+    if not loops:
+        return list(segments)
+
+    keep: list[set[int]] = [set() for _ in segments]
+    for g in kept:
+        si, ti = owner[g]
+        keep[si].add(ti)
+    flags: dict[int, tuple[str, int]] = {}
+    for i, k, r in loops:
+        phrase = " ".join(t.strip() for t in tokens[i : i + k])
+        flags.setdefault(owner[i + k - 1][0], (phrase, r))
+
+    out: list[Segment] = []
+    for si, seg in enumerate(segments):
+        toks = per_seg[si]
+        if si not in flags and len(keep[si]) == len(toks):
+            out.append(seg)  # untouched
+            continue
+        if not keep[si]:
+            continue  # wholly inside a loop
+        idx = sorted(keep[si])
+        if seg.words:
+            words = tuple(seg.words[j] for j in idx)
+            out.append(
+                replace(
+                    seg,
+                    text="".join(w.word for w in words).strip(),
+                    words=words,
+                    end=words[-1].end,
+                    repetition=flags.get(si),
+                )
+            )
+        else:
+            out.append(
+                replace(
+                    seg,
+                    text=" ".join(toks[j] for j in idx),
+                    repetition=flags.get(si),
+                )
+            )
+    return out
+
+
 def format_ts(seconds: float) -> str:
     """Seconds → `mm:ss`, or `h:mm:ss` past the hour."""
     total = int(seconds)
@@ -298,6 +436,8 @@ def format_ts(seconds: float) -> str:
 
 
 TURN_SEAM = "— "  # visible, unlabelled turn boundary (language-neutral, FR-natural)
+LOOP_MARK = " […]"  # txt-only: a decode loop was cut here (guard_repetition)
+NO_SPEECH_NOTE = "aucune parole détectée"  # the txt's one-line verdict
 
 
 @dataclass(frozen=True)
@@ -370,9 +510,12 @@ def render_transcript(
     duration: float,
     date: str,
     turn_gap: float | None = None,
+    note: str | None = None,
 ) -> str:
     """Segments → the `[mm:ss] text` transcript body, with a one-line provenance
-    header. Each line gets the deterministic lexicon (known mishears) but no
+    header. `note` adds a `# note` line under it (e.g. "aucune parole
+    détectée", #54); a block whose segment `guard_repetition` cut ends with
+    `LOOP_MARK`, so the cut is visible where it happened. Each line gets the deterministic lexicon (known mishears) but no
     spoken-punctuation / repeat-collapse / command parsing — a meeting is not a
     dictation, so we stay faithful to what was said.
 
@@ -392,14 +535,19 @@ def render_transcript(
 
     lines = [
         f"# {source}  ·  {format_ts(duration)}  ·  {model} ({device})  ·  {date}",
-        "",
     ]
-    for seam, blk, _seg in _iter_blocks(segments, threshold):
+    if note:
+        lines.append(f"# {note}")
+    lines.append("")
+    blocks = list(_iter_blocks(segments, threshold))
+    for n, (seam, blk, seg) in enumerate(blocks):
         text = apply_lexicon(blk.text)
         if not text:
             continue
         prefix = TURN_SEAM if seam else ""
-        lines.append(f"[{format_ts(blk.start)}] {prefix}{text}")
+        last_of_seg = n + 1 == len(blocks) or blocks[n + 1][2] is not seg
+        mark = LOOP_MARK if seg.repetition and last_of_seg else ""
+        lines.append(f"[{format_ts(blk.start)}] {prefix}{text}{mark}")
     return "\n".join(lines) + "\n"
 
 
@@ -467,6 +615,13 @@ def _message(blk: _Block, seg: Segment, content: str, seam: bool) -> dict:
             "low_confidence": _low_confidence(
                 seg.avg_logprob, seg.no_speech_prob, words_per_s
             ),
+            # #54: a decode loop cut to one copy in this block's segment (shared
+            # across its turn-seam splits, like the QC above), else null.
+            "repetition": (
+                {"phrase": seg.repetition[0], "copies": int(seg.repetition[1])}
+                if seg.repetition
+                else None
+            ),
             "words": words_json,
         },
     }
@@ -482,6 +637,8 @@ def render_json(
     date: str,
     language: str | None = None,
     turn_gap: float | None = None,
+    language_probability: float | None = None,
+    no_speech: dict | None = None,
 ) -> dict:
     """Segments → the schema-v1 sidecar dict (see the module docstring for the
     shape and the diarization-ready `speakers` placeholder). `messages` are the
@@ -494,7 +651,13 @@ def render_json(
     Invents nothing: `language` is `info.language` or None; per-segment QC and
     per-word `p` are passed straight through (None where the decode was silent);
     only `words_per_s` and `duration_s` are computed, and are None / rounded, not
-    fabricated."""
+    fabricated.
+
+    #54 added three top-level keys, pure additions under schema v1:
+    `language_probability` (the decoder's own detection confidence, or null),
+    `no_speech` (null, or why the file has no messages: the silence gate's
+    verdict + levels, or `{"reason": "decoder_empty"}`), and
+    `truncated_repetition` (true when any message carries a `repetition`)."""
     from tuparles.lexicon import apply_lexicon
 
     if turn_gap is None:
@@ -515,7 +678,10 @@ def render_json(
         "model": model,
         "device": device,
         "language": language,
+        "language_probability": _f(language_probability),
         "created": date,
         "speakers": None,  # diarization lands here later (non-breaking; see docstring)
+        "no_speech": no_speech,
+        "truncated_repetition": any(s.repetition for s in segments),
         "messages": messages,
     }
