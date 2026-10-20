@@ -37,10 +37,15 @@
   0.5 s, on digital silence, when speech is under 8 dB over the floor (never
   amplify hiss), when fewer than 15 frames (0.3 s) sit 8 dB over the floor (a
   click or a few keystrokes are not speech), when speech is already at -30 dBFS
-  or louder, or when the lift would be under 3 dB. The -1 dBFS ceiling follows
-  a robust peak (99.9th percentile of |x|, never the single max), and the
-  output is clipped to +-0.99, so one push-to-talk clack no longer vetoes the
-  lift; the clack itself is clipped, which is harmless for decoding. On by
+  or louder, when the lift would be under 3 dB, or when the take has fewer than
+  3 syllable-rate jumps (5 dB frame to frame, 100 ms apart: a drifting fan, a
+  door slam or a flat burst have none or one or two). There is no peak-based
+  gain reduction; the output is only clipped to +-0.99, so no push-to-talk
+  clack (grid-tested: 1 to 3 clacks of 8 or 20 ms at 0.6 or 0.95, takes of 1.5
+  to 6 s, all within 3 dB of the clack-free lift) vetoes the lift; the clack
+  itself is clipped, which is harmless for decoding. Known limits: dense typing
+  (40 soft keystrokes in 4 s lift +17 dB) still reads as speech, and three or
+  more slams or bursts would pass the modulation rule. On by
   default; toggle in *Réglages › Décodage* (*« Micro lointain (gain
   automatique) »*). The applied gain is logged (`far-field gain +N dB`) and
   exposed as `preprocess.last_far_field_gain_db` for debugging; nothing

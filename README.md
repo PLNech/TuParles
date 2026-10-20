@@ -56,11 +56,12 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
   in *Réglages › Décodage* (*« Couper les silences en début/fin de prise »*).
 - **Lifts a far-away mic** — a meeting-room or laptop-array mic that records
   you at about -48 dBFS gets one automatic, linear boost (up to +36 dB, peak
-  held near full scale) before decode. It only acts when the voice is quiet
-  *and* there are at least 0.3 s of clear speech above the noise floor; normal
-  audio is never touched, and hiss or a few keystrokes are left alone rather
-  than amplified (heavy sustained typing can still pass for speech). One loud
-  push-to-talk clack does not stop the lift; it is simply clipped. The silence
+  clipped at 0.99) before decode. It only acts when the audio is quiet, stays
+  over the noise floor for at least 0.3 s, and its level jumps around the way
+  speech does (a steady fan, a door slam or hiss are left alone rather than
+  amplified); normal audio is never touched. Dense typing can still pass for
+  speech. A loud push-to-talk clack does not stop the lift; the clack itself is
+  clipped, which does not hurt decoding. The silence
   trim judges speech on the lifted audio too, so a quiet take trims like a
   normal one. On by default; toggle in *Réglages › Décodage* (*« Micro lointain
   (gain automatique) »*). It also amplifies the room's own noise, and is not yet

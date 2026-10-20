@@ -113,7 +113,8 @@ def far_field_gain(
 
     Returns (pcm, gain_db); the input object untouched and 0.0 when it does
     nothing: disabled, under 0.5 s, digital silence, no sustained speech over
-    the floor (amplifying noise is what makes decoders hallucinate), audio
+    the floor (amplifying noise is what makes decoders hallucinate), fewer than
+    3 syllable-rate level jumps (a steady fan, a slam: see `_modulation_events`), audio
     already at -30 dBFS or louder, or a lift under 3 dB. int16 in gives int16
     out, floating in gives the same floating dtype out. Pure, never mutates.
     """
