@@ -119,7 +119,8 @@ def test_a_bat_directory_without_a_type_file_still_counts(tmp_path):
 def test_the_probe_caches_so_per_take_polling_is_free(tmp_path):
     _supply(tmp_path, "BAT0", type="Battery", status="Discharging")
     now = [100.0]
-    probe = PowerProbe(root=tmp_path, ttl_s=5.0, clock=lambda: now[0])
+    # settle_s=0: this test is about the TTL alone; hysteresis is pinned below.
+    probe = PowerProbe(root=tmp_path, ttl_s=5.0, settle_s=0.0, clock=lambda: now[0])
     assert probe.on_battery() is True
 
     (tmp_path / "BAT0" / "status").write_text("Charging\n", encoding="utf-8")
@@ -127,3 +128,74 @@ def test_the_probe_caches_so_per_take_polling_is_free(tmp_path):
     assert probe.on_battery() is True  # still cached
     now[0] += 0.2
     assert probe.on_battery() is False  # cache expired, re-read sysfs
+
+
+class TestReplugHysteresis:
+    """A marginal charger flips BAT0 Discharging<->Charging; each return to the
+    GPU costs a ~1.6 s CUDA rebuild. So unplug is honoured at once (CPU is the
+    safe side), but mains must hold steady for `settle_s` before we report it."""
+
+    @staticmethod
+    def _rig(tmp_path, status, settle_s=30.0):
+        _supply(tmp_path, "BAT0", type="Battery", status=status)
+        now = [1000.0]
+        probe = PowerProbe(
+            root=tmp_path, ttl_s=0.0, settle_s=settle_s, clock=lambda: now[0]
+        )
+
+        def set_status(value):
+            (tmp_path / "BAT0" / "status").write_text(value + "\n", encoding="utf-8")
+
+        return probe, now, set_status
+
+    def test_cold_start_on_ac_trusts_the_first_reading(self, tmp_path):
+        probe, _now, _set = self._rig(tmp_path, "Charging")
+        assert probe.on_battery() is False  # no 30 s wait at launch
+
+    def test_cold_start_on_battery_trusts_the_first_reading(self, tmp_path):
+        probe, _now, _set = self._rig(tmp_path, "Discharging")
+        assert probe.on_battery() is True
+
+    def test_unplug_is_immediate(self, tmp_path):
+        probe, now, set_status = self._rig(tmp_path, "Charging")
+        assert probe.on_battery() is False
+        set_status("Discharging")
+        now[0] += 0.1
+        assert probe.on_battery() is True
+
+    def test_replug_waits_for_a_stable_window(self, tmp_path):
+        probe, now, set_status = self._rig(tmp_path, "Discharging")
+        assert probe.on_battery() is True
+        set_status("Charging")
+        assert probe.on_battery() is True  # t=0 of the calm window
+        now[0] += 29.9
+        assert probe.on_battery() is True  # not yet
+        now[0] += 0.1
+        assert probe.on_battery() is False  # 30 s of steady mains
+
+    def test_a_discharging_blip_resets_the_window(self, tmp_path):
+        probe, now, set_status = self._rig(tmp_path, "Discharging")
+        assert probe.on_battery() is True
+        set_status("Charging")
+        assert probe.on_battery() is True  # calm since t=0
+        now[0] += 20.0
+        set_status("Discharging")  # the weak charger sags
+        assert probe.on_battery() is True
+        set_status("Charging")
+        now[0] += 1.0
+        assert probe.on_battery() is True  # calm restarts at t=21
+        now[0] += 29.0
+        assert probe.on_battery() is True  # t=50: only 29 s calm
+        now[0] += 1.0
+        assert probe.on_battery() is False  # t=51: 30 s calm
+
+    def test_steady_ac_stays_false(self, tmp_path):
+        probe, now, _set = self._rig(tmp_path, "Full")
+        for _ in range(10):
+            assert probe.on_battery() is False
+            now[0] += 7.0
+
+    def test_settle_window_is_a_module_constant_of_30_s(self):
+        from tuparles import power
+
+        assert power.REPLUG_SETTLE_S == 30.0
