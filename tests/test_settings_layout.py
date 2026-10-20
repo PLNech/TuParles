@@ -92,14 +92,14 @@ class TestSettingsStillRoundTrip:
 
         dlg = SettingsDialog()
         dlg._trim_silence.setChecked(True)  # Décodage page
-        dlg._far_field_gain.setChecked(False)
+        dlg._far_field_gain.setChecked(True)
         dlg._tray_anim.setChecked(False)  # Bulle page
         dlg._clipboard_restore.setChecked(True)  # Écriture page
         dlg._ribbon_lines.setValue(3)
         dlg._save()
 
         assert settings.get("trim_silence") is True
-        assert settings.get("far_field_gain") is False
+        assert settings.get("far_field_gain") is True
         assert settings.get("tray_animation") is False
         assert settings.get("clipboard_restore") is True
         assert settings.get("bubble_lines") == 3

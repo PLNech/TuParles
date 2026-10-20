@@ -234,10 +234,30 @@ class TestPrepareSeam:
         monkeypatch.setattr(settings, "get", lambda k: False)
         assert pp._far_field_gain_on() is False
 
-    def test_setting_defaults_on(self):
+    def test_setting_defaults_off(self):
+        # Experimental until validated on real room audio (#53): opt-in.
         from tuparles import settings
 
-        assert settings._DEFAULTS["far_field_gain"] is True
+        assert settings._DEFAULTS["far_field_gain"] is False
+        assert settings.get("far_field_gain") is False  # isolated, nothing stored
+
+    def test_unset_setting_does_not_lift(self, monkeypatch):
+        import tuparles.preprocess as pp
+
+        monkeypatch.setattr(pp, "_speech_leveler_on", lambda: False)
+        pcm = _to_i16(_speech_like(8.0, speech_rms_db=-46.0))
+        out = prepare_pcm(pcm)
+        assert pp.last_far_field_gain_db == 0.0
+        assert np.array_equal(out, pp.normalize_audio(pcm.astype(np.float32) / 32768.0))
+
+    def test_setting_true_lifts(self, monkeypatch):
+        import tuparles.preprocess as pp
+        from tuparles import settings
+
+        monkeypatch.setattr(pp, "_speech_leveler_on", lambda: False)
+        settings.put("far_field_gain", True)
+        prepare_pcm(_to_i16(_speech_like(8.0, speech_rms_db=-46.0)))
+        assert pp.last_far_field_gain_db > 3.0
 
 
 class TestTrimSeam:
