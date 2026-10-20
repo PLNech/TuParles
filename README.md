@@ -340,6 +340,49 @@ centred and unable to pin to all desktops. The X11 path also works under
 XWayland. If you force native Wayland (`QT_QPA_PLATFORM=wayland`), the daemon
 still runs but the compositor controls the bubble's position and stickiness.
 
+### Run as a background service
+
+Rather than launching it by hand, let systemd run TuParles as a *user* service:
+it comes up with your graphical session (X11 or Wayland), stops at logout,
+returns at the next login, restarts if it crashes, and logs to the journal.
+
+```bash
+tuparles service install          # writes ~/.config/systemd/user/tuparles.service — starts nothing
+tuparles service install --now    # …and enable + start it (every session from now on)
+tuparles service install --enable # …or enable it from the next login only
+tuparles service status           # systemctl --user status tuparles
+tuparles service logs             # journalctl --user -u tuparles -f
+tuparles service uninstall        # disable --now, then remove the unit if you never edited it
+```
+
+Plain systemd works just as well: `systemctl --user enable --now tuparles`,
+`systemctl --user disable --now tuparles`, `journalctl --user -u tuparles -f`.
+
+- **Install is install-only.** The daemon takes the microphone and the global
+  hotkey, so nothing starts until you say `--now` (or `--enable`).
+- **Your edits are safe.** If a `tuparles.service` already exists and differs,
+  it is left alone and the fresh one is written beside it as
+  `tuparles.service.new` for you to compare. `uninstall` only deletes a unit
+  that is still exactly what it would render.
+- **Battery:** the service is the normal daemon, so `battery_aware` and
+  « Préférer le CPU » still decide: on battery it decodes on CPU and never
+  touches the GPU. The unit itself sets nothing about the engine.
+- **Quit stays quit.** Quitting from the tray exits cleanly and systemd leaves
+  it stopped until the next login; only a crash restarts it (5 tries in 2 min,
+  then it gives up). Starting a second copy from the app launcher is harmless:
+  the single-instance lock makes it step aside.
+- **Session environment.** GNOME and KDE hand `DISPLAY`, `WAYLAND_DISPLAY`,
+  `XAUTHORITY` and `XDG_SESSION_TYPE` to the systemd user manager at login. A
+  bare X11 session (`~/.xsession`, `startx`) may do neither. Without the
+  display variables the unit refuses to start, with a journal line saying so;
+  without `graphical-session.target` it never autostarts. Put both in your
+  session start-up script:
+  `systemctl --user import-environment DISPLAY WAYLAND_DISPLAY XAUTHORITY XDG_SESSION_TYPE`
+  then `systemctl --user start tuparles`.
+- Wayland: after `setup_wayland.sh` added you to the `input` group, log out of
+  *every* session (or reboot) once. The user manager keeps the groups it
+  started with, so a service started before that can't read the hotkey.
+
 ### Compatibility & troubleshooting
 
 TuParles probes what your box can do at boot and logs a one-line capability
@@ -374,6 +417,7 @@ tuparles vocab suggest    # mine your history for glossary candidates
 tuparles vocab review     # accept/reject them interactively
 tuparles report "bug…"    # open a prefilled GitHub issue (no account data sent)
 tuparles diag             # this box's capability report (paste into a bug report)
+tuparles service install  # background service (systemd user unit); --now to start it
 tuparles update           # check GitHub for a newer release (no token)
 tuparles whatsnew         # the latest changelog section
 tuparles cheatsheet       # every voice command & syntax phrase (searchable)

@@ -27,6 +27,17 @@
   and offer Retry; download controls fit on narrow screens.
 
 ### Added
+- **Background service** (#48): `tuparles service install` renders
+  `packaging/tuparles.service.in` into `~/.config/systemd/user/tuparles.service`,
+  a systemd user unit bound to `graphical-session.target` (starts with the
+  session on X11 and Wayland, stops at logout, back at next login),
+  `Restart=on-failure` with a start limit, `Nice=5`/`CPUWeight=50`, logs in
+  journald under `tuparles`. Install-only by default; `--enable` / `--now` opt
+  in. A different existing unit is never overwritten (the render goes to
+  `tuparles.service.new`), and `uninstall` removes only an unedited unit. Also
+  `tuparles service status|logs`. The unit leaves the engine choice alone, so
+  `battery_aware` still means CPU on battery. Build note:
+  `docs/research/2026-10-20-user-service.md`.
 - **Battery-aware engine** (`battery_aware`, on by default; Réglages › Décodage
   › « Économiser la batterie (CPU sur batterie) »). While the laptop is
   discharging, dictation behaves exactly as if « Préférer le CPU » were ticked:
