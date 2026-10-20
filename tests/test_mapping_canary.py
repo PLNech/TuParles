@@ -2,6 +2,9 @@
 tested with a faked event stream — no real X display — and the module is
 fail-open by design (Wayland / no Xlib / dead display never affects delivery)."""
 
+import sys
+import types
+
 from tuparles import mapping_canary
 
 
@@ -70,7 +73,14 @@ def test_enabled_only_after_a_clean_arm(monkeypatch):
         "Thread",
         lambda *a, **k: type("T", (), {"start": lambda self: started.append(True)})(),
     )
-    monkeypatch.setattr("Xlib.display.Display", lambda *a, **k: object(), raising=False)
+    # A fake `Xlib.display` in sys.modules, so the arm path runs whether or not
+    # python-xlib is installed (CI doesn't install it).
+    fake_display = types.ModuleType("Xlib.display")
+    fake_display.Display = lambda *a, **k: object()  # type: ignore[attr-defined]
+    fake_xlib = types.ModuleType("Xlib")
+    fake_xlib.display = fake_display  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "Xlib", fake_xlib)
+    monkeypatch.setitem(sys.modules, "Xlib.display", fake_display)
     mapping_canary.start()
     assert mapping_canary.enabled() is True
     assert started == [True]
