@@ -21,7 +21,9 @@ Two things this module does own:
   diverge between rungs.
 - **dead lead/tail** — `trim_silence`: the *whole-buffer* silence the in-decode
   VAD doesn't help with on the CPU rungs (qwen/whisper.cpp decode every silent
-  second). Trimmed once at capture handoff, upstream of the engines.
+  second). Trimmed once at capture handoff, upstream of the engines. Speech is
+  detected on a far-field-lifted copy (see `far_field_gain`) so trim and decode
+  agree on what is speech; the slice returned is of the original audio.
 """
 
 import logging
@@ -331,7 +333,10 @@ def _rms_speech_span(audio_f: np.ndarray, sample_rate: int) -> tuple[int, int] |
 
 def trim_silence(pcm: np.ndarray, sample_rate: int = SAMPLE_RATE) -> np.ndarray:
     """Trim leading + trailing silence off a mono take (int16 or float32) before
-    decode. Returns a slice of the ORIGINAL buffer (dtype preserved).
+    decode. Returns a slice of the ORIGINAL buffer (dtype preserved, never
+    amplified). Speech is DETECTED on a `far_field_gain`-lifted float copy
+    (when the setting is on), so the trim sees the same speech the decode will:
+    the later `prepare_pcm` lift applies to the trimmed slice.
 
     Three-tier, GPU-or-CPU by construction: (a) silero-vad batch API on the ONNX
     CPU runtime when importable; (b) a deterministic RMS lead/tail cut, no new
@@ -351,7 +356,11 @@ def trim_silence(pcm: np.ndarray, sample_rate: int = SAMPLE_RATE) -> np.ndarray:
         return pcm
     n = pcm.size
     try:
-        audio_f = _to_float32(pcm)
+        # Detect on the far-field-LIFTED copy so trim and decode agree on what
+        # counts as speech (a -48 dBFS take trims like the same take 29 dB
+        # louder; a faint take is not judged "silent" by an absolute floor).
+        # `pcm` itself is never modified: we slice and return the original.
+        audio_f, _ = far_field_gain(_to_float32(pcm), enabled=_far_field_gain_on())
         if not _silero_unavailable:
             try:
                 span = _silero_speech_span(audio_f, sample_rate)
