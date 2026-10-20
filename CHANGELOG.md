@@ -40,8 +40,11 @@
   unknown states keep the GPU, and peripheral (mouse) batteries are ignored.
   Unplugging is honoured at once, but returning to the GPU waits for 30 s of
   steady mains (any Discharging blip restarts the window), so a marginal
-  charger flipping Discharging/Charging doesn't cost a CUDA rebuild per take. `tuparles transcribe --device auto` honours it too, and
-  the one-time GPU→CPU toast names the battery as the reason. Build note:
+  charger flipping Discharging/Charging doesn't cost a CUDA rebuild per take.
+  A read more than 30 s after the previous one is trusted at once, so the
+  first take after a long idle on mains is back on the GPU.
+  `tuparles transcribe --device auto` honours it too, and the one-time GPU→CPU
+  toast names the battery as the reason. Build note:
   `docs/research/2026-10-20-power-aware-engine.md`.
 
 ### Changed

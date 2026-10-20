@@ -76,10 +76,12 @@ rebuild. `PowerProbe` is therefore asymmetric in time too. Unplugging is
 honoured at the next read, since CPU is the safe side. Returning to mains
 needs "not discharging" to hold for 30 s (`REPLUG_SETTLE_S`), and any
 Discharging read restarts the window. The first reading has no history and is
-trusted as-is, so a cold start on AC doesn't wait. The window is measured
-between reads, and reads only happen at takes. So after a long idle on mains,
-the first take still runs on CPU and starts the window, and the GPU comes back
-for takes 30 s later.
+trusted as-is, so a cold start on AC doesn't wait. The same goes for any read
+taken more than 30 s after the previous sysfs read. Hysteresis absorbs
+flapping between close reads, and a gap longer than the window carries no
+flapping evidence. Reads only happen at takes, so this rule is what puts the
+first take after a long idle on mains straight back on the GPU, without a
+poller. (A cache hit inside the 5 s TTL is not a read and doesn't count.)
 
 **A 5 s cache.** The probe is a directory walk with a few small reads, and it
 runs twice per take: at take start (`supports_partials`) and at the final
