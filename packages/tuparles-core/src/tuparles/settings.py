@@ -109,6 +109,14 @@ _DEFAULTS: dict[str, object] = {
     # transcribe` honours it too on `--device auto`; an explicit `--device cuda`
     # still wins, because a flag you just typed beats a preference you once set.
     "prefer_cpu": False,
+    # Power-state aware (on by default): while the machine is DISCHARGING on its
+    # battery, behave exactly as if prefer_cpu were ticked — no CUDA engine, CPU
+    # decode, blue tray — and go back to the GPU on mains, from the next take,
+    # no restart. A laptop on a customer's desk would otherwise burn the dGPU for
+    # every take. Positive evidence only (power.py): a desktop with no battery,
+    # or a probe that can't read sysfs, keeps the GPU. prefer_cpu still wins on
+    # mains; untick this to keep the GPU on battery too.
+    "battery_aware": True,
     # Which whisper.cpp weight the promptable CPU rung loads for its FINAL decode
     # (#4) — distinct from cpu_partials_model (the small *preview* model). "base"
     # is the interactive default; "small"/"medium-q5" trade latency for accuracy

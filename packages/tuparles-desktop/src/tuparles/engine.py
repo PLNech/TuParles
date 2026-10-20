@@ -23,7 +23,7 @@ from pathlib import Path
 
 import numpy as np
 
-from tuparles import settings
+from tuparles import power, settings
 from tuparles.config import (
     PARTIAL_WINDOW_S,
     QWEN_BINARY,
@@ -515,6 +515,23 @@ class WhisperCppEngine(_CpuPartialsMixin):
         )
 
 
+def cpu_preference() -> str | None:
+    """Why the settings want the CPU right now, or None for "use the GPU".
+
+    "prefer_cpu" — the user asked to leave the card alone (#137).
+    "battery" — `battery_aware` is on and the machine is discharging; the GPU
+    would drain it for a faster decode nobody asked to pay for.
+
+    Both are *preferences*: reversible the moment they lift. A GPU that failed
+    is tracked separately by ResilientEngine and is never revived from here.
+    """
+    if settings.get("prefer_cpu"):
+        return "prefer_cpu"
+    if settings.get("battery_aware") and power.on_battery():
+        return "battery"
+    return None
+
+
 def _cpu_fallback_factory():
     """The CPU rung chooser: prefer the promptable whisper.cpp engine when it's
     installed AND a model loads, else qwen. Restores glossary bias on CPU where
@@ -553,7 +570,10 @@ class ResilientEngine:
         self._gpu_factory = gpu_factory
         self._cpu_factory = cpu_factory
         self._cpu = None  # built lazily, only when CPU actually serves a take
-        self._on_cpu = bool(settings.get("prefer_cpu"))
+        # Which preference holds us on CPU ("prefer_cpu" | "battery"), for the
+        # log line and the toast; None when not on CPU by preference.
+        self._preference_source = cpu_preference()
+        self._on_cpu = self._preference_source is not None
         # WHY we are on CPU, not just that we are: a preference can be undone,
         # a dead card cannot. Without this, toggling "prefer CPU" off would try
         # to resurrect a GPU that genuinely died and break every take after.
@@ -583,6 +603,16 @@ class ResilientEngine:
         (green=GPU, blue=CPU). The fallback is sticky for the session, so this
         flips to "cpu" exactly when the GPU has truly given up and stays there."""
         return "cpu" if self._on_cpu else "gpu"
+
+    @property
+    def cpu_reason(self) -> str | None:
+        """Why we're on CPU, for the user: "battery" | "preference" (Réglages'
+        prefer-CPU) | "failure" (the card died) | None while on GPU."""
+        if not self._on_cpu:
+            return None
+        if self._on_cpu_reason == "preference":
+            return "battery" if self._preference_source == "battery" else "preference"
+        return self._on_cpu_reason
 
     @property
     def supports_partials(self) -> bool:
@@ -663,7 +693,10 @@ class ResilientEngine:
             return ""
 
     def _sync_cpu_preference(self) -> None:
-        """Apply the "prefer CPU" setting, from the next take onward.
+        """Apply the CPU preference — "prefer CPU", or `battery_aware` while
+        discharging — from the next take onward. The battery case behaves
+        exactly like the checkbox: unplugging releases the card, plugging back
+        in rebuilds it lazily, here, at the next take.
 
         Turning it **on** drops the CUDA engine so the card is genuinely
         released rather than merely idle — someone else wants the VRAM. It
@@ -676,17 +709,24 @@ class ResilientEngine:
         it as a failure and stop retrying — otherwise every take would pay
         ~1.6 s to rediscover the same dead GPU.
         """
-        prefer_cpu = bool(settings.get("prefer_cpu"))
-        if prefer_cpu and not self._on_cpu:
+        source = cpu_preference()
+        if source and not self._on_cpu:
             self._release_gpu()
             self._on_cpu = True
             self._on_cpu_reason = "preference"
-            print("CPU préféré (Réglages) — le GPU est libéré")
-        elif not prefer_cpu and self._on_cpu_reason == "preference":
+            self._preference_source = source
+            if source == "battery":
+                print("Sur batterie — décodage CPU, le GPU est libéré (Réglages)")
+            else:
+                print("CPU préféré (Réglages) — le GPU est libéré")
+        elif source and self._on_cpu_reason == "preference":
+            self._preference_source = source  # e.g. unplugged with the box ticked
+        elif not source and self._on_cpu_reason == "preference":
+            self._preference_source = None
             if self._rebuild_gpu():
                 self._on_cpu = False
                 self._on_cpu_reason = None
-                print("Préférence CPU levée — retour au GPU")
+                print("Préférence CPU levée (Réglages ou secteur) — retour au GPU")
             else:
                 self._on_cpu_reason = "failure"
                 print("Préférence CPU levée mais le GPU ne répond pas — on reste CPU")

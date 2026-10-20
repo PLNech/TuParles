@@ -39,6 +39,7 @@ from tuparles.engine import (
     TUNED_VAD_PARAMETERS,
     _preload_cuda_libs,
     _vocab_prompt,
+    cpu_preference,
     decode_language_opts,
 )
 from tuparles.preprocess import prepare_pcm
@@ -131,9 +132,10 @@ def pick_device(prefer: str = "auto") -> tuple[str, str, str]:
     `auto` uses the GPU when a CUDA device answers, else CPU — the same
     "GPU if it answers, CPU otherwise" rule the daemon follows, and it honours
     the same `prefer_cpu` setting: a batch transcription is precisely when
-    you'd notice the card being taken out from under whoever else wants it. An
-    explicit `--device cuda` still wins, because a flag you just typed beats a
-    preference you once set.
+    you'd notice the card being taken out from under whoever else wants it. It
+    honours `battery_aware` too (CPU while discharging), via the same
+    `cpu_preference()` the daemon's engine reads. An explicit `--device cuda`
+    still wins, because a flag you just typed beats a preference you once set.
 
     We probe via ctranslate2, not torch: ct2 is what actually decodes here, and
     torch was pulling in ~2 GB of wheels for a single boolean — a lean-install /
@@ -146,7 +148,7 @@ def pick_device(prefer: str = "auto") -> tuple[str, str, str]:
     if prefer == "auto":
         # Ahead of the probe on purpose: the preferred path then never imports
         # ctranslate2 at all, which is also a faster start.
-        if settings.get("prefer_cpu"):
+        if cpu_preference():
             return "cpu", "int8", CPU_FILE_MODEL
         try:
             import ctranslate2
