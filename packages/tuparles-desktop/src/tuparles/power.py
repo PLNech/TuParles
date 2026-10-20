@@ -28,11 +28,14 @@ costs the engine a ~1.6 s CUDA rebuild. So going *to* battery is honoured at
 the next read (CPU is the conservative side), but going back to mains needs
 "not discharging" to hold for `REPLUG_SETTLE_S` (30 s); any Discharging read
 inside the window restarts it. The very first reading is trusted as-is, so a
-cold start on AC never waits — and so is any reading taken more than
-`REPLUG_SETTLE_S` after the previous sysfs read: hysteresis absorbs flapping
-between close reads, and a longer gap carries no flapping evidence. Reads only
-happen at takes, so this is what puts the first take after a long idle on
-mains straight back on the GPU, with no poller.
+cold start on AC never waits — and so is any reading taken `COLD_START_GAP_S`
+(5 min) or more after the previous sysfs read: a gap that long carries no
+flapping evidence. Reads only happen at takes, so this is what puts the first
+take after a long idle on mains straight back on the GPU, with no poller. The
+gap is its own constant, much longer than the settle window, because takes
+30-60 s apart are normal dictation spacing: keyed on 30 s, they would bypass
+the hysteresis on the very charger it exists for. So the protection holds
+while takes are under 5 min apart.
 """
 
 from __future__ import annotations
@@ -44,6 +47,7 @@ from pathlib import Path
 POWER_SUPPLY_ROOT = Path("/sys/class/power_supply")
 CACHE_TTL_S = 5.0
 REPLUG_SETTLE_S = 30.0  # mains must hold this long before we leave the CPU
+COLD_START_GAP_S = 300.0  # a gap this long between reads: trust the next one
 
 
 def _read(path: Path) -> str | None:
@@ -74,18 +78,20 @@ def read_on_battery(root: Path = POWER_SUPPLY_ROOT) -> bool:
 
 class PowerProbe:
     """`read_on_battery` behind a short TTL cache and a replug settle window.
-    Root, TTL, settle window and clock are injectable."""
+    Root, TTL, settle window, cold-start gap and clock are injectable."""
 
     def __init__(
         self,
         root: Path = POWER_SUPPLY_ROOT,
         ttl_s: float = CACHE_TTL_S,
         settle_s: float = REPLUG_SETTLE_S,
+        cold_start_gap_s: float = COLD_START_GAP_S,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._root = root
         self._ttl_s = ttl_s
         self._settle_s = settle_s
+        self._cold_start_gap_s = cold_start_gap_s
         self._clock = clock
         self._value = False
         # Time of the last *sysfs* read (cache hits don't move it): both the
@@ -100,7 +106,7 @@ class PowerProbe:
         if self._read_at is not None and now - self._read_at < self._ttl_s:
             return self._value  # cache hit: no read, `_read_at` unchanged
         reading = read_on_battery(self._root)
-        if self._read_at is None or now - self._read_at >= self._settle_s:
+        if self._read_at is None or now - self._read_at >= self._cold_start_gap_s:
             # No history, or none recent enough to show flapping: trust it.
             self._value = reading
             self._calm_since = None
