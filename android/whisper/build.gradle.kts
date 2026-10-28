@@ -4,12 +4,11 @@
 // add x86_64 when we want the emulator.
 plugins {
     id("com.android.library")
-    id("org.jetbrains.kotlin.android")
 }
 
 android {
     namespace = "com.whispercpp"
-    compileSdk = 36
+    compileSdk = 37
     ndkVersion = "27.1.12297006"
 
     defaultConfig {
@@ -27,9 +26,6 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-    }
-    kotlinOptions {
-        jvmTarget = "17"
     }
 
     externalNativeBuild {

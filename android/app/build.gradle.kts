@@ -4,7 +4,6 @@
 // download from huggingface.co — no user data ever leaves the device.
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
@@ -19,7 +18,7 @@ val hasUploadSigning = uploadKeystorePath != null && uploadKeyAlias != null && u
 
 android {
     namespace = "pl.nech.tuparles"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "pl.nech.tuparles"
@@ -69,9 +68,6 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-    }
-    kotlinOptions {
-        jvmTarget = "17"
     }
 
     testOptions {
@@ -127,7 +123,6 @@ dependencies {
 
     // Room
     implementation(libs.room.runtime)
-    implementation(libs.room.ktx)
     ksp(libs.room.compiler)
 
     // Tests (pure JVM)

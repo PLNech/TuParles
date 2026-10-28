@@ -93,21 +93,22 @@ wrapper fetches it).
 
 | Component | Version |
 |---|---|
-| Android Gradle Plugin | 8.9.0 |
-| Gradle | 8.11.1 |
-| Kotlin | 2.0.21 |
-| KSP | 2.0.21-1.0.28 |
+| Android Gradle Plugin | 9.1.1 (built-in Kotlin; no `kotlin-android` plugin) |
+| Gradle | 9.3.1 |
+| Kotlin | 2.2.10 |
+| KSP | 2.2.10-2.0.2 |
 | JDK | 21 |
-| compileSdk / targetSdk | 36 |
+| compileSdk | 37 (Compose BOM 2026.09 requires it) |
+| targetSdk | 36 |
 | minSdk | 26 |
-| Hilt | 2.52 · Room 2.6.1 · Compose BOM 2024.10.01 |
+| Hilt | 2.59 · Room 2.8.5 · Compose BOM 2026.09.00 |
 | NDK (for `:whisper`, Phase B) | 27.1.12297006 |
 
 ## Build
 
 ```bash
-export JAVA_HOME=$HOME/.sdkman/candidates/java/current   # JDK 21
-export ANDROID_HOME=$HOME/Android/Sdk
+export JAVA_HOME="$(/usr/libexec/java_home -v 21 2>/dev/null || echo "$HOME/.sdkman/candidates/java/current")"
+export ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}"
 cd android
 ./gradlew assembleDebug        # → app/build/outputs/apk/debug/app-debug.apk (~45 MB, no model)
 

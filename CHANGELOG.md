@@ -2,6 +2,13 @@
 
 ## Unreleased — performance and responsiveness
 
+### Infra
+- **Android toolchain caught up.** AGP 8.9 / Gradle 8.11 / Kotlin 2.0 was only
+  tested through compileSdk 35, and the app already compiled against 36. Now
+  AGP 9.1.1, Gradle 9.3.1, Kotlin 2.2.10 built into AGP, KSP 2.2.10, Hilt 2.59,
+  Room 2.8.5, Compose BOM 2026.09. compileSdk is 37 because that BOM requires
+  it; targetSdk stays 36. The unused `room-ktx` dependency is gone.
+
 ### Added
 - **Apple Silicon GPU rung.** On a Mac with the optional `mlx` group installed,
   `load_engine` builds `MlxEngine` (mlx-whisper on Metal, `large-v3-turbo` by
