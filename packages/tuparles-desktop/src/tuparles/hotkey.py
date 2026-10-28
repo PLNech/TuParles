@@ -1,13 +1,20 @@
-"""Global hotkey: Right Ctrl + Right Alt pressed together.
+"""Global hotkey.
+
+Linux: Right Ctrl + Right Alt pressed together.
+macOS: Right Option + Right Command — the same corner of the keyboard. A
+built-in Mac keyboard has no right Control, so the Linux chord cannot be
+pressed there; the two right-hand modifiers sit where Right Ctrl and Right
+Alt sit on the Linux board.
 
 Tap = toggle (recording continues until the next tap). Hold = push-to-talk
 (releasing the combo stops the take) — the listener only reports *what the
 keys did* (combo engaged / combo released after N seconds); deciding what
 that means for the recorder is the Controller's job.
 
-Two backends, one contract:
-- X11: pynput (XRecord) hears every key. X11 reports Right Alt as alt_r
-  or alt_gr depending on layout, so both are accepted.
+Three backends, one contract:
+- X11 and macOS: pynput hears every key (on macOS that needs Accessibility
+  permission; without it the listener starts and hears nothing). X11 reports
+  Right Alt as alt_r or alt_gr depending on layout, so both are accepted.
 - Wayland: the compositor never forwards global keys to clients (that's
   the security model, not a bug), so pynput is deaf there. The evdev
   backend reads /dev/input *below* the compositor instead — needs the
@@ -20,7 +27,7 @@ import time
 from collections.abc import Callable
 from typing import Any, cast
 
-from tuparles.config import HOTKEY_DEBOUNCE_S, IS_WAYLAND
+from tuparles.config import HOTKEY_DEBOUNCE_S, IS_MACOS, IS_WAYLAND
 
 # evdev keycodes are layout-blind: AltGr on an azerty keyboard is still
 # KEY_RIGHTALT at this level, so no alt_r/alt_gr split like X11 has.
@@ -75,8 +82,14 @@ class _PynputListener:
     ) -> None:
         from pynput import keyboard
 
-        self._right_ctrl = {keyboard.Key.ctrl_r}
-        self._right_alt = {keyboard.Key.alt_r, keyboard.Key.alt_gr}
+        if IS_MACOS:
+            # Right Option + Right Command. pynput names the right Command
+            # key cmd_r; alt_r is Right Option.
+            self._right_ctrl = {keyboard.Key.cmd_r}
+            self._right_alt = {keyboard.Key.alt_r}
+        else:
+            self._right_ctrl = {keyboard.Key.ctrl_r}
+            self._right_alt = {keyboard.Key.alt_r, keyboard.Key.alt_gr}
         self._esc = keyboard.Key.esc  # _on_press runs after __init__ returns,
         # where the local `keyboard` is gone — capture the key object now.
         self._state = _ComboState(on_toggle, on_combo_release)
@@ -245,6 +258,9 @@ def HotkeyListener(
     on_cancel: Callable[[], None] | None = None,
 ):
     """Pick the backend that can actually hear the keys in this session."""
+    if IS_MACOS:
+        print("Hotkey: pynput (macOS, Right Option + Right Command)")
+        return _PynputListener(on_toggle, on_combo_release, on_cancel)
     if IS_WAYLAND:
         try:
             if _EvdevListener.keyboard_paths():

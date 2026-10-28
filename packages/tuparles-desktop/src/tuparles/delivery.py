@@ -20,6 +20,10 @@ On Wayland there is no xdotool: everything goes through the clipboard
 attempted there — ydotool assumes a US keymap, so on an azerty layout `a`
 lands as `q`.
 
+On macOS the clipboard is `pbcopy` and the paste keystroke is Cmd+V via
+`osascript` (System Events), which needs Accessibility permission. No
+keystroke tool → the text stays on the clipboard and the user pastes.
+
 Long or multi-line text is pasted PROGRESSIVELY — several small single-line
 pastes instead of one big one. Editors like Claude Code collapse a single
 large/multi-line paste into a "[Pasted text]" placeholder you can't reread
@@ -35,7 +39,21 @@ import time
 from dataclasses import dataclass
 
 from tuparles import settings
+from tuparles.config import IS_MACOS as _MACOS
 from tuparles.config import IS_WAYLAND as _WAYLAND
+
+# Which display session the paste path follows. Defaults track the host, and
+# a test pins the pair explicitly: setting only one flag used to leave a Mac
+# run on the Mac path while it thought it was testing X11.
+_SESSION = {"macos": _MACOS, "wayland": _WAYLAND}
+
+
+def _on_macos() -> bool:
+    return _SESSION["macos"] and not _SESSION["wayland"]
+
+
+def _on_wayland() -> bool:
+    return _SESSION["wayland"] and not _SESSION["macos"]
 
 # Every modifier the stop-tap (RCtrl+RAlt/AltGr) or a hasty hand might hold
 # when typing starts. Released explicitly *before* typing instead of using
@@ -77,8 +95,12 @@ def capture_target() -> DeliveryTarget:
     the calls are short-capped. Wayland has no id — clients can't refocus, so
     origin-window paste stays X11-only for now (the GNOME extension would need an
     ActivateById, #14). Empty fields when unreadable; delivery re-reads live."""
-    if _WAYLAND:
+    if _on_wayland():
         return DeliveryTarget(wm_class=_focus_wm_class(timeout=0.5))
+    if _on_macos():
+        # No window id we can refocus by. Paste lands in whatever holds focus
+        # at delivery time; the bubble hides first so it isn't that window.
+        return DeliveryTarget()
     try:
         wid = subprocess.run(
             ["xdotool", "getactivewindow"],
@@ -98,7 +120,7 @@ def current_window_id() -> str:
     """The focused X11 window's id right now, or '' (unreadable / Wayland). Used
     to remember where the user is before a queued take steals focus to its origin
     window, so we can hand focus back afterward (#14). Short-capped, best-effort."""
-    if _WAYLAND:
+    if _on_wayland() or _on_macos():
         return ""
     try:
         return subprocess.run(
@@ -146,7 +168,7 @@ def activate_window(window_id: str) -> bool:
     the activation to take so the paste that follows lands in the right window.
     Wayland has no client-facing "activate by id", so this is X11-only; a missing
     id or a since-closed window just leaves focus where it is (graceful)."""
-    if _WAYLAND or not window_id:
+    if _on_wayland() or _on_macos() or not window_id:
         return False
     try:
         subprocess.run(
@@ -624,10 +646,54 @@ def _paste_into_focus(focus_class: str = "", seq: "int | None" = None) -> None:
     print(f"deliver: {_seq_tag(seq)}paste: {combo} into '{wm_class.strip() or '?'}'")
 
 
+# Press, then release, with nothing between them. `keystroke "v" using
+# command down` holds the key for as long as System Events takes to return,
+# and macOS key repeat then inserts the paste once per repeat — one take
+# landed four copies of itself. key down / key up is one tap.
+_MACOS_PASTE = (
+    'tell application "System Events"\n'
+    "key down command\n"
+    "key down (ASCII character 118)\n"
+    "key up (ASCII character 118)\n"
+    "key up command\n"
+    "end tell"
+)
+
+
+def _macos_paste(seq: "int | None" = None) -> None:
+    """One Cmd+V into whatever holds focus. The clipboard already holds the text.
+
+    System Events needs Accessibility. A refusal is logged and the text stays
+    on the clipboard — the same degrade as a missing xsel."""
+    try:
+        subprocess.run(
+            ["osascript", "-e", _MACOS_PASTE],
+            check=True,
+            timeout=10,
+            capture_output=True,
+        )
+    except (subprocess.SubprocessError, OSError) as exc:
+        print(
+            f"deliver: {_seq_tag(seq)}paste macOS échoué ({str(exc)[:80]}) — "
+            f"transcript au presse-papiers, colle avec Cmd+V "
+            f"(Réglages Système › Confidentialité › Accessibilité)"
+        )
+        return
+    print(f"deliver: {_seq_tag(seq)}paste (macos): cmd+v")
+
+
 def _type_into_focus(
     text: str, focus_class: str = "", before_paste=None, seq: "int | None" = None
 ) -> None:
-    if _WAYLAND:
+    if _on_macos():
+        if before_paste is not None:
+            try:
+                before_paste()
+            except Exception:
+                pass
+        _macos_paste(seq)
+        return
+    if _on_wayland():
         # Wayland always pastes (typing garbles azerty). Chunk the long/
         # multi-line ones so the editor doesn't fold them into "[Pasted text]".
         if _should_chunk(text):
@@ -724,8 +790,62 @@ _DELETE_KEYS = {
 }
 
 
+# Voice-edit key names → the macOS key code System Events understands.
+# cmd is the Mac equivalent of the ctrl these chords use on Linux.
+_MACOS_KEY_CODES = {
+    "BackSpace": 51,
+    "delete": 51,
+    "Home": 115,
+    "Return": 36,
+    "enter": 36,
+    "z": 6,
+    "a": 0,
+    "v": 9,
+}
+
+
+def _macos_keystroke(combo: str) -> None:
+    """One chord via System Events, pressed and released with no gap.
+
+    `key code N using {modifier down}` holds the key for the whole call, and
+    key repeat fires it again. down/up is one tap. Best-effort: a refused
+    keystroke is logged, never raised — the same contract as xdotool/ydotool."""
+    parts = combo.split("+")
+    key = parts[-1]
+    code = _MACOS_KEY_CODES.get(key)
+    if code is None:
+        print(f"deliver: touche macOS inconnue « {key} » — ignorée")
+        return
+    modifiers = []
+    for mod in parts[:-1]:
+        name = {
+            "ctrl": "command",
+            "cmd": "command",
+            "shift": "shift",
+            "alt": "option",
+        }.get(mod.lower())
+        if name:
+            modifiers.append(name)
+    # Modifiers go down, the key taps once, modifiers come up. `key code`
+    # while a modifier is held is one tap; a `using` clause holds the key
+    # for the whole call and key repeat fires it again.
+    lines = [f"key down {name}" for name in modifiers]
+    lines.append(f"key code {code}")
+    lines.extend(f"key up {name}" for name in reversed(modifiers))
+    script = 'tell application "System Events"\n' + "\n".join(lines) + "\nend tell"
+    try:
+        subprocess.run(["osascript", "-e", script], check=False, timeout=10)
+    except (subprocess.SubprocessError, OSError) as exc:
+        print(f"deliver: touche macOS échouée ({str(exc)[:80]})")
+
+
 def _send_key(combo: str) -> None:
-    (_wayland_paste_key if _WAYLAND else _x11_paste_key)(combo)
+    if _on_macos():
+        _macos_keystroke(combo)
+    elif _on_wayland():
+        _wayland_paste_key(combo)
+    else:
+        _x11_paste_key(combo)
 
 
 def _send_key_n(combo: str, n: int) -> None:
@@ -844,11 +964,15 @@ def _show_help() -> str:
 
 
 def to_clipboard(text: str) -> None:
+    # macOS: pbcopy owns the general pasteboard. Cmd+V reads it.
+    if _on_macos():
+        subprocess.run(["pbcopy"], input=text.encode(), check=True, timeout=10)
+        return
     # On Wayland only wl-copy reaches the clipboard ydotool pastes from; xsel
     # writes the XWayland clipboard, which GNOME doesn't sync back, so the
     # paste would deliver stale/empty text. Don't fall through to it silently
     # — warn and bail (a broken setup, since setup_wayland.sh installs it).
-    if _WAYLAND:
+    if _on_wayland():
         if shutil.which("wl-copy") is None:
             print("wl-copy absent — installe wl-clipboard, sinon le collage échoue")
             return
@@ -914,8 +1038,11 @@ def _clipboard_targets() -> "list[str] | None":
     """The types currently on the clipboard, or None if we can't enumerate them
     (tool missing / error). Wayland via `wl-paste --list-types`; X11 via `xclip
     -t TARGETS` when present (xsel can't list targets, so no xclip → None → we
-    skip restore rather than guess)."""
-    if _WAYLAND:
+    skip restore rather than guess). macOS has no type probe here, so restore
+    declines and the dictated text stays on the pasteboard."""
+    if _on_macos():
+        return None
+    if _on_wayland():
         cmd = ["wl-paste", "--list-types"]
     elif shutil.which("xclip"):
         cmd = ["xclip", "-selection", "clipboard", "-o", "-t", "TARGETS"]
@@ -940,11 +1067,12 @@ def from_clipboard() -> "str | None":
     the clipboard alone rather than destroy a non-text payload (#28)."""
     if not is_text_clipboard(_clipboard_targets()):
         return None
-    read = (
-        ["wl-paste", "--no-newline"]
-        if _WAYLAND
-        else ["xsel", "--clipboard", "--output"]
-    )
+    if _on_macos():
+        read = ["pbpaste"]
+    elif _on_wayland():
+        read = ["wl-paste", "--no-newline"]
+    else:
+        read = ["xsel", "--clipboard", "--output"]
     try:
         out = subprocess.run(read, capture_output=True, check=False, timeout=10)
     except (OSError, subprocess.SubprocessError):

@@ -58,6 +58,45 @@ def test_chatter_within_guard_is_dropped(monkeypatch):
     assert fires == [100.0]  # the bounce did not double-fire
 
 
+def test_macos_chord_is_right_option_and_right_command(monkeypatch):
+    """The built-in keyboard has no right Control. The two right-hand
+    modifiers are Right Option and Right Command."""
+    import sys
+    import types
+
+    keys = types.SimpleNamespace(
+        cmd_r="cmd_r", alt_r="alt_r", alt_gr="alt_gr", ctrl_r="ctrl_r", esc="esc"
+    )
+    keyboard = types.SimpleNamespace(Key=keys, Listener=lambda **k: None)
+    monkeypatch.setitem(sys.modules, "pynput", types.SimpleNamespace(keyboard=keyboard))
+    monkeypatch.setitem(
+        sys.modules, "pynput.keyboard", types.SimpleNamespace(Key=keys, Listener=lambda **k: None)
+    )
+    monkeypatch.setattr(hotkey, "IS_MACOS", True)
+    listener = hotkey._PynputListener(lambda: None)
+    assert listener._right_ctrl == {"cmd_r"}
+    assert listener._right_alt == {"alt_r"}
+
+
+def test_linux_chord_stays_right_ctrl_and_right_alt(monkeypatch):
+    import sys
+    import types
+
+    keys = types.SimpleNamespace(
+        cmd_r="cmd_r", alt_r="alt_r", alt_gr="alt_gr", ctrl_r="ctrl_r", esc="esc"
+    )
+    monkeypatch.setitem(
+        sys.modules, "pynput.keyboard", types.SimpleNamespace(Key=keys, Listener=lambda **k: None)
+    )
+    monkeypatch.setitem(
+        sys.modules, "pynput", types.SimpleNamespace(keyboard=sys.modules["pynput.keyboard"])
+    )
+    monkeypatch.setattr(hotkey, "IS_MACOS", False)
+    listener = hotkey._PynputListener(lambda: None)
+    assert listener._right_ctrl == {"ctrl_r"}
+    assert listener._right_alt == {"alt_r", "alt_gr"}
+
+
 def test_held_combo_does_not_retrigger(monkeypatch):
     """Holding the combo (push-to-talk) is one fire; partial key wiggle while
     still holding both must not re-fire."""

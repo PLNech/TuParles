@@ -26,7 +26,7 @@ import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from tuparles.config import IS_WAYLAND
+from tuparles.config import IS_MACOS, IS_WAYLAND
 
 # (returncode, stdout, stderr) — best-effort; a missing/again tool is just absent.
 RunResult = tuple[int, str, str]
@@ -200,7 +200,8 @@ def probe(
     """Detect the environment's tools + resolve the fallback chains. Inject `run`
     / `present` / `wayland` to test any environment headlessly."""
     is_wayland = IS_WAYLAND if wayland is None else wayland
-    server = "wayland" if is_wayland else "x11"
+    is_macos = IS_MACOS and wayland is None and not is_wayland
+    server = "macos" if is_macos else "wayland" if is_wayland else "x11"
 
     tools: dict[str, Tool] = {"xdotool": _xdotool_tool(present, run)}
     for name in (
@@ -213,6 +214,8 @@ def probe(
         "ydotoold",
         "notify-send",
         "gdbus",
+        "pbcopy",
+        "osascript",
     ):
         tools[name] = _simple_tool(name, present, run)
 
@@ -225,7 +228,17 @@ def probe(
     # server are listed, native path first — so `resolved`/`degraded` describe the
     # box we're on, not a hypothetical one. The cross-env story lives in both
     # branches being visible here (and in the research note), not in mixing them.
-    if is_wayland:
+    if is_macos:
+        class_layers = (Layer("frontmost-app", False, "no window id on macOS"),)
+        paste_layers = (
+            Layer(
+                "pbcopy+osascript",
+                tools["pbcopy"].present and tools["osascript"].present,
+                "pasteboard + Cmd+V (needs Accessibility)",
+            ),
+        )
+        activate_layers = (Layer("no-refocus", False, "paste where focus is"),)
+    elif is_wayland:
         class_layers = (
             Layer(
                 "gnome-extension", tools["gdbus"].present, "org.tuparles FocusWindow"

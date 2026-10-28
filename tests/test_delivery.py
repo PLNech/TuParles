@@ -175,7 +175,8 @@ class TestNoTypeFallback:
         # a Wayland dev machine too (where _type_into_focus would otherwise
         # take the ydotool branch). Pin xsel presence too so the paste-vs-type
         # branch is deterministic regardless of what's installed on the runner.
-        monkeypatch.setattr(delivery, "_WAYLAND", False)
+        monkeypatch.setitem(delivery._SESSION, "wayland", False)
+        monkeypatch.setitem(delivery._SESSION, "macos", False)
         monkeypatch.setattr(
             delivery.shutil,
             "which",
@@ -367,10 +368,70 @@ class TestYdotoolArgv:
         ]
 
 
+class TestMacosDelivery:
+    def test_clipboard_uses_pbcopy(self, monkeypatch):
+        calls = []
+        monkeypatch.setitem(delivery._SESSION, "macos", True)
+        monkeypatch.setitem(delivery._SESSION, "wayland", False)
+        monkeypatch.setattr(
+            delivery.subprocess,
+            "run",
+            lambda argv, *a, **kw: calls.append(argv)
+            or subprocess.CompletedProcess(argv, 0),
+        )
+        delivery.to_clipboard("bonjour")
+        assert calls == [["pbcopy"]]
+
+    def test_paste_is_cmd_v_never_xdotool(self, monkeypatch):
+        calls = []
+        monkeypatch.setitem(delivery._SESSION, "macos", True)
+        monkeypatch.setitem(delivery._SESSION, "wayland", False)
+        monkeypatch.setattr(
+            delivery.subprocess,
+            "run",
+            lambda argv, *a, **kw: calls.append(argv)
+            or subprocess.CompletedProcess(argv, 0),
+        )
+        delivery._type_into_focus("juste un essai")
+        assert calls == [["osascript", "-e", delivery._MACOS_PASTE]]
+        # One tap: the key goes down and up in the same tell, so key repeat
+        # cannot insert the paste a second time.
+        assert "key down" in delivery._MACOS_PASTE and "key up" in delivery._MACOS_PASTE
+        assert not any(c[:1] == ["xdotool"] for c in calls)
+
+    def test_paste_failure_leaves_text_and_does_not_raise(self, monkeypatch):
+        monkeypatch.setitem(delivery._SESSION, "macos", True)
+        monkeypatch.setitem(delivery._SESSION, "wayland", False)
+
+        def boom(argv, *a, **kw):
+            raise subprocess.TimeoutExpired(argv, 10)
+
+        monkeypatch.setattr(delivery.subprocess, "run", boom)
+        delivery._type_into_focus("encore un essai")  # must not raise
+
+    def test_voice_edit_uses_key_code(self, monkeypatch):
+        calls = []
+        monkeypatch.setitem(delivery._SESSION, "macos", True)
+        monkeypatch.setitem(delivery._SESSION, "wayland", False)
+        monkeypatch.setattr(
+            delivery.subprocess,
+            "run",
+            lambda argv, *a, **kw: calls.append(argv)
+            or subprocess.CompletedProcess(argv, 0),
+        )
+        delivery._send_key("ctrl+z")
+        script = calls[0][2]
+        assert "key down command" in script
+        assert "key code 6" in script
+        assert "key up command" in script
+        assert "using" not in script
+
+
 class TestWaylandClipboard:
     def test_wayland_without_wl_copy_does_not_use_xsel(self, monkeypatch):
         calls = []
-        monkeypatch.setattr(delivery, "_WAYLAND", True)
+        monkeypatch.setitem(delivery._SESSION, "wayland", True)
+        monkeypatch.setitem(delivery._SESSION, "macos", False)
         monkeypatch.setattr(delivery.shutil, "which", lambda _: None)
         monkeypatch.setattr(
             delivery.subprocess,
@@ -384,7 +445,8 @@ class TestWaylandClipboard:
 
     def test_wayland_uses_wl_copy(self, monkeypatch):
         calls = []
-        monkeypatch.setattr(delivery, "_WAYLAND", True)
+        monkeypatch.setitem(delivery._SESSION, "wayland", True)
+        monkeypatch.setitem(delivery._SESSION, "macos", False)
         monkeypatch.setattr(delivery.shutil, "which", lambda _: "/usr/bin/wl-copy")
         monkeypatch.setattr(
             delivery.subprocess,
@@ -474,7 +536,8 @@ class TestBeforePasteHook:
 
     def test_deliver_threads_hook_to_wayland_paste(self, monkeypatch):
         seen = {}
-        monkeypatch.setattr(delivery, "_WAYLAND", True)
+        monkeypatch.setitem(delivery._SESSION, "wayland", True)
+        monkeypatch.setitem(delivery._SESSION, "macos", False)
         monkeypatch.setattr(delivery, "to_clipboard", lambda t: None)
         monkeypatch.setattr(
             delivery,
@@ -499,7 +562,8 @@ class TestChunkedDelivery:
 
     def test_x11_long_text_pastes_in_pieces_never_types(self, monkeypatch):
         self._no_sleep(monkeypatch)
-        monkeypatch.setattr(delivery, "_WAYLAND", False)
+        monkeypatch.setitem(delivery._SESSION, "wayland", False)
+        monkeypatch.setitem(delivery._SESSION, "macos", False)
         monkeypatch.setattr(delivery.shutil, "which", lambda name: f"/usr/bin/{name}")
         clips, keys, typed = [], [], []
 
@@ -524,7 +588,8 @@ class TestChunkedDelivery:
 
     def test_wayland_chunked_hides_bubble_once_then_pastes_pieces(self, monkeypatch):
         self._no_sleep(monkeypatch)
-        monkeypatch.setattr(delivery, "_WAYLAND", True)
+        monkeypatch.setitem(delivery._SESSION, "wayland", True)
+        monkeypatch.setitem(delivery._SESSION, "macos", False)
         monkeypatch.setattr(delivery, "_YDOTOOL_MODERN", False)
         monkeypatch.setattr(delivery.shutil, "which", lambda _: "/usr/bin/ydotool")
         hides, keys = [], []
@@ -553,7 +618,8 @@ class TestCaptureTarget:
     """DeliveryTarget snapshot at take-start (#13): class + (X11) window id."""
 
     def test_x11_captures_class_and_id(self, monkeypatch):
-        monkeypatch.setattr(delivery, "_WAYLAND", False)
+        monkeypatch.setitem(delivery._SESSION, "wayland", False)
+        monkeypatch.setitem(delivery._SESSION, "macos", False)
 
         def fake_run(argv, *a, **kw):
             if argv == ["xdotool", "getactivewindow"]:
@@ -570,7 +636,8 @@ class TestCaptureTarget:
         assert t.window_id == "12345" and t.wm_class == "alacritty|Alacritty"
 
     def test_x11_capture_failure_is_empty(self, monkeypatch):
-        monkeypatch.setattr(delivery, "_WAYLAND", False)
+        monkeypatch.setitem(delivery._SESSION, "wayland", False)
+        monkeypatch.setitem(delivery._SESSION, "macos", False)
 
         def boom(*a, **k):
             raise OSError("no xdotool")
@@ -580,7 +647,8 @@ class TestCaptureTarget:
         assert t.window_id == "" and t.wm_class == ""
 
     def test_wayland_captures_class_only(self, monkeypatch):
-        monkeypatch.setattr(delivery, "_WAYLAND", True)
+        monkeypatch.setitem(delivery._SESSION, "wayland", True)
+        monkeypatch.setitem(delivery._SESSION, "macos", False)
         monkeypatch.setattr(
             delivery, "_focus_wm_class", lambda timeout=0.5: "Slack|slack"
         )
@@ -603,7 +671,8 @@ class TestOriginFocus:
     """X11 refocus-by-id helpers for origin-window delivery (#14)."""
 
     def test_current_window_id_reads_active(self, monkeypatch):
-        monkeypatch.setattr(delivery, "_WAYLAND", False)
+        monkeypatch.setitem(delivery._SESSION, "wayland", False)
+        monkeypatch.setitem(delivery._SESSION, "macos", False)
         monkeypatch.setattr(
             delivery.subprocess,
             "run",
@@ -612,11 +681,13 @@ class TestOriginFocus:
         assert delivery.current_window_id() == "98765"
 
     def test_current_window_id_empty_on_wayland(self, monkeypatch):
-        monkeypatch.setattr(delivery, "_WAYLAND", True)
+        monkeypatch.setitem(delivery._SESSION, "wayland", True)
+        monkeypatch.setitem(delivery._SESSION, "macos", False)
         assert delivery.current_window_id() == ""
 
     def test_activate_window_calls_xdotool_sync(self, monkeypatch):
-        monkeypatch.setattr(delivery, "_WAYLAND", False)
+        monkeypatch.setitem(delivery._SESSION, "wayland", False)
+        monkeypatch.setitem(delivery._SESSION, "macos", False)
         calls = []
         monkeypatch.setattr(
             delivery.subprocess,
@@ -628,7 +699,8 @@ class TestOriginFocus:
         assert calls == [["xdotool", "windowactivate", "--sync", "42"]]
 
     def test_activate_window_noop_without_id(self, monkeypatch):
-        monkeypatch.setattr(delivery, "_WAYLAND", False)
+        monkeypatch.setitem(delivery._SESSION, "wayland", False)
+        monkeypatch.setitem(delivery._SESSION, "macos", False)
         called = []
         monkeypatch.setattr(
             delivery.subprocess, "run", lambda *a, **k: called.append(a)
@@ -637,7 +709,8 @@ class TestOriginFocus:
         assert called == []
 
     def test_activate_window_false_on_wayland(self, monkeypatch):
-        monkeypatch.setattr(delivery, "_WAYLAND", True)
+        monkeypatch.setitem(delivery._SESSION, "wayland", True)
+        monkeypatch.setitem(delivery._SESSION, "macos", False)
         assert delivery.activate_window("42") is False
 
 
@@ -688,7 +761,8 @@ class TestExecuteCommand:
     X11 here (dev machine); _send_key dispatches to xdotool, captured below."""
 
     def _record(self, monkeypatch):
-        monkeypatch.setattr(delivery, "_WAYLAND", False)
+        monkeypatch.setitem(delivery._SESSION, "wayland", False)
+        monkeypatch.setitem(delivery._SESSION, "macos", False)
         keys = []
         monkeypatch.setattr(delivery, "_send_key", keys.append)
         return keys
