@@ -1,16 +1,19 @@
 """Transcription engines — the GPU→CPU gradient.
 
-Primary: faster-whisper large-v3-turbo, float16, persistent on the RTX 4080
-(~0.5-1 s per utterance, 29x realtime measured — see docs/spike-backend.md).
-CPU rung (when the GPU is unavailable — driver issues, VRAM pressure, no card):
-the promptable, portable `WhisperCppEngine` (whisper.cpp via pywhispercpp) when
-it's installed, else the vendored qwen-asr C binary. whisper.cpp is preferred
+Primary on NVIDIA: faster-whisper large-v3-turbo, float16, persistent on the
+RTX 4080 (~0.5-1 s per utterance, 29x realtime measured — see
+docs/spike-backend.md). Primary on Apple Silicon: the same weights through
+`MlxEngine` (mlx-whisper on Metal). CPU rung (when the GPU is unavailable —
+driver issues, VRAM pressure, no card, or MLX missing): the promptable,
+portable `WhisperCppEngine` (whisper.cpp via pywhispercpp) when it's
+installed, else the vendored qwen-asr C binary. whisper.cpp is preferred
 because it takes an initial_prompt — restoring the glossary/vocab bias on CPU
 that qwen structurally can't — and because ggml's runtime SIMD dispatch makes
 one source span no-AVX2 x86 and ARM NEON (#4/#9,
 docs/research/2026-06-28-stt-host-decision.md). Both CPU finals share one small
 faster-whisper for live partials (`_CpuPartialsMixin`). The chooser is
-`_cpu_fallback_factory`; every rung degrades, never X-or-nothing.
+`load_engine` then `_cpu_fallback_factory`; every rung degrades, never
+X-or-nothing.
 """
 
 import ctypes
@@ -25,6 +28,8 @@ import numpy as np
 
 from tuparles import power, settings
 from tuparles.config import (
+    IS_MACOS,
+    MLX_MODEL,
     PARTIAL_WINDOW_S,
     QWEN_BINARY,
     QWEN_MODEL_DIR,
@@ -37,7 +42,7 @@ from tuparles.partials import StickyLanguage, pick_language, sanitize_partial
 from tuparles.preprocess import prepare_pcm, to_int16
 from tuparles.transcription import (  # result types + Protocol now live in core
     Transcription,
-    Word,  # noqa: F401  re-exported for back-compat (tests import it from here)
+    Word,
     words_from_segments,
 )
 
@@ -243,6 +248,156 @@ class GpuEngine:
             multilingual=False,
         )
         return sanitize_partial(segments)
+
+
+class MlxEngine:
+    """Persistent large-v3-turbo on Apple Silicon, via mlx-whisper (Metal).
+
+    Same weight family as `GpuEngine`, so a code-switched take hears the same
+    model on the Mac that it hears on the 4080. The package is imported lazily:
+    a Linux install never resolves `mlx`, and a Mac without the optional group
+    falls through to the CPU rung instead of crashing at startup.
+
+    mlx-whisper's `transcribe` detects one language for the whole buffer (the
+    upstream Whisper loop, not faster-whisper's per-segment `multilingual`).
+    Forcing that language on every window keeps a short partial from flipping
+    into translator mode — the same guard the CUDA partial path uses. Word
+    timings come back without a probability, so the doubt UI degrades to
+    no-dimming, the contract `Transcription.words` already allows.
+    """
+
+    supports_partials = True
+    active_backend = "gpu"
+    partial_window_s = PARTIAL_WINDOW_S
+
+    def __init__(self, model: str | None = None) -> None:
+        import mlx_whisper
+
+        self._mlx = mlx_whisper
+        name = model or settings.get("mlx_model") or MLX_MODEL
+        # Load once. The library's own holder reloads on every call when the
+        # caller passes a different dtype; pinning fp16 here matches the CUDA
+        # rung and keeps the weights resident.
+        mlx_whisper.transcribe(
+            np.zeros(SAMPLE_RATE, dtype=np.float32),
+            path_or_hf_repo=name,
+            verbose=None,
+            fp16=True,
+            temperature=0.0,
+            condition_on_previous_text=False,
+        )
+        self._repo = name
+        self._partial_lang = StickyLanguage()
+        self.last_segments: list = []
+
+    def reset_partial_language(self) -> None:
+        self._partial_lang.reset()
+
+    def _language(self, pcm: np.ndarray) -> tuple[str | None, float | None]:
+        """(language, detection prob) for this buffer.
+
+        One selected language is forced. Zero or several: detect on this
+        buffer, then the sticky tracker holds the pick so one noisy window
+        cannot flip the preview. A failed detection keeps the tracker's
+        current language and reports no probability.
+        """
+        language, _multilingual = decode_language_opts(settings.get("languages") or [])
+        if language is not None:
+            return language, None
+        try:
+            model = self._mlx.transcribe.ModelHolder.model
+            mel = self._mlx.audio.log_mel_spectrogram(
+                pcm, n_mels=model.dims.n_mels, padding=self._mlx.audio.N_SAMPLES
+            )
+            window = self._mlx.audio.pad_or_trim(
+                mel, self._mlx.audio.N_FRAMES, axis=-2
+            )
+            _, probs = model.detect_language(window)
+            pairs = [(lang, float(prob)) for lang, prob in dict(probs).items()]
+        except Exception:
+            return self._partial_lang.language, None
+        lang, prob = pick_language(pairs, settings.get("languages") or [])
+        return self._partial_lang.update(lang, prob), prob
+
+    def _decode(
+        self,
+        audio: np.ndarray,
+        *,
+        context: str | None,
+        word_timestamps: bool,
+        language: str | None,
+    ) -> dict:
+        result = self._mlx.transcribe(
+            prepare_pcm(audio),
+            path_or_hf_repo=self._repo,
+            verbose=None,
+            fp16=True,
+            temperature=0.0,
+            condition_on_previous_text=False,
+            word_timestamps=word_timestamps,
+            initial_prompt=_compose_prompt(_vocab_prompt(), context),
+            language=language,
+        )
+        # The file path wants the segment list (timestamps); the live path
+        # only wants text. Kept on the engine so both read one decode.
+        self.last_segments = result.get("segments") or []
+        return result
+
+    def transcribe(
+        self, audio: np.ndarray, context: str | None = None
+    ) -> Transcription:
+        if audio.size == 0:
+            return Transcription("")
+        language, prob = self._language(audio)
+        result = self._decode(
+            audio, context=context, word_timestamps=True, language=language
+        )
+        return Transcription(
+            (result.get("text") or "").strip(),
+            language=result.get("language") or language,
+            language_prob=prob,
+            words=_words_from_mlx(result.get("segments") or []),
+        )
+
+    def transcribe_partial(self, audio: np.ndarray) -> str:
+        if audio.size == 0:
+            return ""
+        language, _prob = self._language(audio)
+        result = self._decode(
+            audio, context=None, word_timestamps=False, language=language
+        )
+        text = (result.get("text") or "").strip()
+        return sanitize_partial([_PartialSeg(text)]) if text else ""
+
+
+class _PartialSeg:
+    """The one field `sanitize_partial` reads when an engine has no per-segment
+    confidence. Missing confidence defaults to keep — a rough partial beats a
+    blank bubble."""
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+
+
+def _words_from_mlx(segments) -> list[Word]:
+    """mlx-whisper segments carry word text and timings, not a probability.
+    Probability 1.0 is the contract's 'no score' value: the doubt UI dims
+    nothing rather than inventing a confidence."""
+    words: list[Word] = []
+    for seg in segments:
+        for w in seg.get("words") or []:
+            text = w.get("word")
+            if not text:
+                continue
+            words.append(
+                Word(
+                    text=text,
+                    probability=float(w.get("probability", 1.0)),
+                    start=w.get("start"),
+                    end=w.get("end"),
+                )
+            )
+    return words
 
 
 class CpuPartialsEngine:
@@ -759,18 +914,46 @@ class ResilientEngine:
         return self._cpu
 
 
+def apple_gpu_available() -> bool:
+    """True on Apple Silicon when the optional MLX group is installed.
+
+    Probed by import, not by architecture alone: an Intel Mac, or an arm64 Mac
+    whose install skipped `--with mlx`, has no Metal rung and should land on
+    the CPU fallback without a traceback at startup.
+    """
+    if not IS_MACOS:
+        return False
+    try:
+        import mlx_whisper  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
 def load_engine():
-    """GPU (self-healing) if it answers, CPU fallback otherwise. Never crash
-    at startup, and never get stuck with no STT after a suspend/resume. The CPU
-    rung is whisper.cpp when installed (promptable, portable), else qwen —
-    chosen by `_cpu_fallback_factory`, here and inside ResilientEngine.
+    """The best rung this box can actually run.
+
+    Apple Silicon with mlx-whisper installed → `MlxEngine` (Metal, same
+    large-v3-turbo family as the CUDA rung). Otherwise the CUDA engine,
+    self-healing, with the CPU rung behind it. Never crash at startup, and
+    never get stuck with no STT after a suspend/resume. The CPU rung is
+    whisper.cpp when installed (promptable, portable), else qwen — chosen by
+    `_cpu_fallback_factory`, here and inside ResilientEngine.
 
     Note that "prefer CPU" is handled *inside* ResilientEngine, not by
     returning a bare CPU engine here. A bare engine has nowhere to notice the
     setting changing back, so the toggle would be one-way: off the GPU forever,
     until a restart. ResilientEngine with a lazily-unbuilt GPU gives us both
-    directions and still never touches CUDA while the preference holds.
+    directions and still never touches CUDA while the preference holds. On a
+    Mac the preference is moot: there is no CUDA card to lend back, and the
+    Metal rung is the GPU.
     """
+    if apple_gpu_available() and not settings.get("prefer_cpu"):
+        try:
+            return MlxEngine()
+        except Exception as exc:
+            print(f"MLX engine unavailable ({exc}); falling back to CPU rung")
+            return _cpu_fallback_factory()
     try:
         return ResilientEngine()
     except Exception as exc:

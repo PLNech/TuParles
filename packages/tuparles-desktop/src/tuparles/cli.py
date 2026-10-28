@@ -78,7 +78,7 @@ def main() -> None:
     )
     tr.add_argument(
         "--device",
-        choices=["auto", "cuda", "cpu"],
+        choices=["auto", "cuda", "cpu", "mlx"],
         default="auto",
         help="silicium à utiliser (défaut : auto — GPU si dispo, sinon CPU)",
     )

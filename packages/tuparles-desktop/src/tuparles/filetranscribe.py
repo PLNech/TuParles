@@ -38,8 +38,10 @@ from tuparles import settings
 from tuparles.config import SAMPLE_RATE
 from tuparles.engine import (
     TUNED_VAD_PARAMETERS,
+    MlxEngine,
     _preload_cuda_libs,
     _vocab_prompt,
+    apple_gpu_available,
     cpu_preference,
     decode_language_opts,
 )
@@ -159,14 +161,19 @@ def pick_device(prefer: str = "auto") -> tuple[str, str, str]:
     mobile portability blocker and a slow import. This mirrors the eval harness's
     `_cuda_available()` probe (tests/test_codeswitch_eval.py).
     """
-    if prefer == "cpu":
+    if prefer == "cpu" or (prefer == "auto" and cpu_preference()):
         return "cpu", "int8", CPU_FILE_MODEL
+    # Apple Silicon: the file path rides the same Metal rung as the daemon.
+    # An explicit `--device mlx` asks for it even when `prefer_cpu` is set;
+    # `auto` follows the daemon and stays on CPU when that preference holds.
+    if prefer == "mlx" or (prefer == "auto" and apple_gpu_available()):
+        from tuparles.config import MLX_MODEL
+
+        return "mlx", "float16", settings.get("mlx_model") or MLX_MODEL
     want_gpu = prefer == "cuda"
     if prefer == "auto":
-        # Ahead of the probe on purpose: the preferred path then never imports
-        # ctranslate2 at all, which is also a faster start.
-        if cpu_preference():
-            return "cpu", "int8", CPU_FILE_MODEL
+        # The CPU preference already returned above, so this probe only runs
+        # when the user wants the GPU and this box isn't an MLX Mac.
         try:
             import ctranslate2
 
@@ -215,10 +222,19 @@ class FileTranscriber:
     def _load(self, dev: str, compute: str, model_name: str) -> None:
         self.device = dev
         self.model_name = model_name
+        if dev == "mlx":
+            # The daemon's engine, reused so a file and a live take cannot
+            # diverge. BatchedInferencePipeline is a CUDA concept; the MLX
+            # loop already windows the buffer itself.
+            self._mlx = MlxEngine(model=model_name)
+            self._model = None
+            self._batched = None
+            return
         if dev == "cuda":
             _preload_cuda_libs()
         from faster_whisper import BatchedInferencePipeline, WhisperModel
 
+        self._mlx = None
         self._model = WhisperModel(model_name, device=dev, compute_type=compute)
         self._batched = BatchedInferencePipeline(model=self._model)
 
@@ -253,9 +269,54 @@ class FileTranscriber:
             self._load(cpu_dev, cpu_compute, self._model_override or cpu_model)
             return self._decode(pcm, progress)
 
+    def _decode_mlx(self, pcm, progress=None) -> tuple[list[Segment], object]:
+        """One MLX decode of the whole file, one Segment per library segment.
+
+        Timestamps survive. Per-segment QC does not (the library's word list
+        carries no probability unless the conversion stored one), so those
+        fields stay None — the JSON contract for a value the decode didn't
+        supply."""
+        result = self._mlx.transcribe(pcm.astype(np.float32))
+        out: list[Segment] = []
+        for raw in self._mlx.last_segments:
+            raw_words = raw.get("words") or []
+            words = tuple(
+                Word(
+                    float(w.get("start") or 0.0),
+                    float(w.get("end") or 0.0),
+                    w.get("word") or "",
+                    w.get("probability"),
+                )
+                for w in raw_words
+                if w.get("word")
+            )
+            out.append(
+                Segment(
+                    start=float(raw.get("start") or 0.0),
+                    end=float(raw.get("end") or 0.0),
+                    text=(raw.get("text") or "").strip(),
+                    words=words or None,
+                )
+            )
+        if not out and result.text:
+            out.append(Segment(start=0.0, end=0.0, text=result.text))
+        if progress is not None and pcm.size:
+            progress(pcm.size / SAMPLE_RATE)
+        info = type(
+            "Info",
+            (),
+            {
+                "language": result.language,
+                "language_probability": result.language_prob,
+            },
+        )()
+        return out, info
+
     def _decode(self, pcm, progress=None) -> tuple[list[Segment], object]:
         """The actual decode + generator drain — factored out so transcribe()
         can retry the whole thing on a fresh (CPU) pipeline after a GPU wedge."""
+        if self.device == "mlx":
+            return self._decode_mlx(pcm, progress)
         language, multilingual = decode_language_opts(settings.get("languages") or [])
         # Same "prepare PCM for decode" seam the daemon engines use (#131): the
         # ffmpeg f32le output is normalized level, but DC-removal + peak-normalize

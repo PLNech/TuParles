@@ -1,0 +1,48 @@
+{
+  "voices": {
+    "fr": "Thomas",
+    "en": "Daniel"
+  },
+  "rows": [
+    {
+      "model": "mlx-community/whisper-large-v3-turbo",
+      "clip": "en",
+      "seconds": 3.62,
+      "decode_s": 0.168,
+      "rtf": 0.046,
+      "language": "en",
+      "hypothesis": "Ship this feature before Friday. The pull request is green.",
+      "reference": "Ship this feature before Friday, the pull request is green."
+    },
+    {
+      "model": "mlx-community/whisper-large-v3-turbo",
+      "clip": "fr",
+      "seconds": 4.17,
+      "decode_s": 0.177,
+      "rtf": 0.042,
+      "language": "fr",
+      "hypothesis": "Il faut livrer cette fonctionnalité avant vendredi, la requête est verte.",
+      "reference": "Il faut livrer cette fonctionnalité avant vendredi, la requête est verte."
+    },
+    {
+      "model": "mlx-community/whisper-large-v3-turbo",
+      "clip": "blend",
+      "seconds": 4.01,
+      "decode_s": 0.172,
+      "rtf": 0.043,
+      "language": "fr",
+      "hypothesis": "On disait fan out les agents, puis ship cette féature avant vendredi.",
+      "reference": "On disait fan out les agents, puis ship cette feature avant vendredi."
+    },
+    {
+      "model": "mlx-community/whisper-large-v3-turbo",
+      "clip": "blend-hard",
+      "seconds": 5.13,
+      "decode_s": 0.176,
+      "rtf": 0.034,
+      "language": "fr",
+      "hypothesis": "Je review le pull request, le cachet chaud, et le déploiement part en staging.",
+      "reference": "Je review le pull request, le cache est chaud, et le déploiement part en staging."
+    }
+  ]
+}

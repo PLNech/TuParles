@@ -125,6 +125,11 @@ _DEFAULTS: dict[str, object] = {
     # weight; an absolute path to a .bin also works. Only consulted when the
     # whisper.cpp rung is the live CPU engine; faster-whisper on GPU is untouched.
     "whispercpp_model": "base",
+    # Which MLX weight the Apple Silicon GPU rung loads (darwin arm64). Same
+    # family as the CUDA rung — large-v3-turbo — so a code-switched take hears
+    # the same model on both boxes. A HF repo id, or an absolute path to a
+    # local conversion. Only consulted when the MLX rung is live.
+    "mlx_model": "mlx-community/whisper-large-v3-turbo",
     # CPU partials decode only this tail of the take (#3 follow-up). Shorter than
     # the GPU window (PARTIAL_WINDOW_S=20) on purpose: the small `base` model
     # picks ONE language per window, so a long French-dominant tail Frenchifies

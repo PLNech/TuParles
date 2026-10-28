@@ -1,6 +1,7 @@
 """Central knobs. One place to retune when the hardware or taste changes."""
 
 import os
+import sys
 from pathlib import Path
 
 from tuparles import config_core as _core
@@ -54,6 +55,10 @@ REPO_ROOT = _repo_root()
 # both modules so they can never disagree and leave a half-Wayland setup.
 IS_WAYLAND = os.environ.get("XDG_SESSION_TYPE") == "wayland"
 
+# macOS has neither X11 nor Wayland. Paste is pbcopy + Cmd+V, and the chord
+# is Right Option + Right Command (the built-in keyboard has no right Ctrl).
+IS_MACOS = sys.platform == "darwin"
+
 QWEN_BINARY = REPO_ROOT / "vendor" / "qwen-asr" / "qwen_asr"
 QWEN_MODEL_DIR = REPO_ROOT / "models" / "qwen3-asr-0.6b"
 
@@ -69,6 +74,11 @@ QWEN_THREADS = 14
 # bundled ggml weight by name, or pass an absolute path to a .bin.
 WHISPERCPP_MODEL = "base"
 WHISPERCPP_THREADS = QWEN_THREADS
+
+# Apple Silicon GPU rung. mlx-community ships the same large-v3-turbo weights
+# the CUDA rung uses, converted for MLX. Overridable via the `mlx_model`
+# setting; an absolute path to a local conversion also works.
+MLX_MODEL = "mlx-community/whisper-large-v3-turbo"
 
 # Chatter guard: ignore a SECOND combo-engage within this span of the last one.
 # The edge detector (_ComboState._combo_since) already collapses a single

@@ -18,6 +18,17 @@ def test_format_ts_minutes_and_hours():
     assert ft.format_ts(3725) == "1:02:05"  # rolls over to h:mm:ss past the hour
 
 
+def test_pick_device_explicit_mlx(monkeypatch):
+    monkeypatch.setattr(
+        ft.settings, "get", lambda key: "mlx-community/whisper-large-v3-turbo"
+    )
+    assert ft.pick_device("mlx") == (
+        "mlx",
+        "float16",
+        "mlx-community/whisper-large-v3-turbo",
+    )
+
+
 def test_pick_device_cpu_is_int8_small():
     assert ft.pick_device("cpu") == ("cpu", "int8", ft.CPU_FILE_MODEL)
 
@@ -78,6 +89,7 @@ def _poison_torch(monkeypatch):
 
 
 def test_pick_device_auto_uses_ctranslate2_not_torch_cpu(monkeypatch):
+    monkeypatch.setattr(ft, "apple_gpu_available", lambda: False)
     ctranslate2 = pytest.importorskip("ctranslate2")
 
     _poison_torch(monkeypatch)
@@ -86,6 +98,7 @@ def test_pick_device_auto_uses_ctranslate2_not_torch_cpu(monkeypatch):
 
 
 def test_pick_device_auto_uses_ctranslate2_not_torch_cuda(monkeypatch):
+    monkeypatch.setattr(ft, "apple_gpu_available", lambda: False)
     ctranslate2 = pytest.importorskip("ctranslate2")
 
     _poison_torch(monkeypatch)
@@ -649,6 +662,7 @@ class TestPreferCpuSetting:
     def test_preference_off_falls_through_to_the_probe(self, monkeypatch):
         from tuparles import settings
 
+        monkeypatch.setattr(ft, "apple_gpu_available", lambda: False)
         settings.put("prefer_cpu", False)
         probed = []
 
