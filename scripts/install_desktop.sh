@@ -10,7 +10,7 @@ ICON_DIR="$HOME/.local/share/icons/hicolor/256x256/apps"
 
 VENV="$(cd "$REPO" && poetry env info --path)"
 EXEC="$VENV/bin/tuparles"
-[[ -x "$EXEC" ]] || { echo "error: $EXEC not found — run 'poetry install' first"; exit 1; }
+[[ -x "$EXEC" ]] || { echo "error: $EXEC not found — run 'poetry install --with cuda --with wayland' first"; exit 1; }
 
 if [[ ! -f "$REPO/packaging/tuparles.png" ]]; then
     (cd "$REPO" && QT_QPA_PLATFORM=offscreen poetry run python scripts/app_icon.py)

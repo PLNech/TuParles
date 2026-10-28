@@ -32,6 +32,11 @@
   for the whole System Events call, and key repeat inserted the paste again
   (one take landed four copies). The chord is now key down, key up, with
   nothing between them.
+- **Linux install pulls the optional groups.** `install.sh` and the README
+  manual setup run `poetry install --with cuda --with wayland`, so a Linux
+  box still gets the GPU wheels and the Wayland chord after those moved out
+  of the hard dependencies. A Mac stays on plain `poetry install`, plus
+  `--with mlx` for the Metal rung.
 
 ### Fixed
 - **The tray no longer floods the desktop shell.** The glyph used to repaint at

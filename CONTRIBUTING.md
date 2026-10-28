@@ -7,8 +7,10 @@ they keep it small and opinionated.
 
 ```bash
 git clone https://github.com/PLNech/TuParles && cd TuParles
+# Lean install works on macOS and Linux. On Linux, add the GPU wheels and
+# the Wayland chord: poetry install --with cuda --with wayland
 poetry install
-poetry run pytest          # 109 tests, sub-second
+poetry run pytest
 poetry run ruff check src tests scripts
 ```
 
@@ -19,7 +21,7 @@ codebase without ever loading a model.
 ## Architecture in one breath
 
 `hotkey` fires → `daemon` orchestrates → `audio` records → `engine`
-transcribes (GPU faster-whisper primary, vendored qwen-asr CPU fallback) →
+transcribes (NVIDIA faster-whisper, Apple Silicon mlx-whisper, then CPU) →
 `punctuation` + `lexicon` + `repeats` post-process → `delivery` types into
 focus → `history` remembers. `ui` (bubble) and `tray` watch via Qt signals.
 

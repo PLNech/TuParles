@@ -69,7 +69,10 @@ fi
 cd "$DIR"
 
 say "Python environment…"
-poetry install --quiet
+# CUDA wheels and evdev are optional groups (they have no macOS wheels, so a
+# hard dep would break a Mac resolve). This script is Linux-only: pull both
+# so the GPU rung and the Wayland chord are present after a one-liner install.
+poetry install --with cuda --with wayland --quiet
 
 say "CPU fallback engine (antirez/qwen-asr)…"
 if [[ ! -d vendor/qwen-asr ]]; then

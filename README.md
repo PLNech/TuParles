@@ -324,7 +324,8 @@ sudo pacman -S --needed openblas xdotool xsel portaudio ffmpeg       # Arch
 sudo dnf install openblas-devel xdotool xsel portaudio ffmpeg        # Fedora
 
 git clone https://github.com/PLNech/TuParles && cd TuParles
-poetry install
+# Linux: CUDA wheels + Wayland chord. On a Mac, `poetry install --with mlx`.
+poetry install --with cuda --with wayland
 git clone --depth 1 https://github.com/antirez/qwen-asr vendor/qwen-asr
 make -C vendor/qwen-asr blas
 # model weights: see install.sh for the five files to fetch into models/
