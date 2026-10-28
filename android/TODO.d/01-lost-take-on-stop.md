@@ -39,9 +39,11 @@ never reached disk become a visible `FAILED` row; an empty instant-stop
 still deletes the note. The log line is `take <path>: note= durationS= pcm=`
 and carries no transcript text.
 
-On-device check still open: start a long take, background the app behind
-another activity, stop, and see the note. No device was attached when this
-landed.
+On-device: the debug install sits beside the Play copy. `drive-debug.sh`
+started and stopped a take over adb; the status line reported a visible
+note (`visible=2 recording=0 newest=2 state=RUNNING durationS=5.0`) with no
+model on the device, so decode stays queued. The destroy-under-a-system-screen
+path is still a field check.
 
 ## Completion criteria
 

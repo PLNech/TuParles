@@ -127,9 +127,18 @@ keep the APK lean you can instead `adb push` a model into the app's files dir.
 ## Install / use
 
 ```bash
+# Debug uses applicationId pl.nech.tuparles.debug and the launcher name
+# "TuParles debug", so it sits beside the Play install. Do not uninstall
+# pl.nech.tuparles to make room: that wipes its notes.
 adb install -r app/build/outputs/apk/debug/app-debug.apk
-adb shell am start -n pl.nech.tuparles/.ui.MainActivity
+adb shell am start -n pl.nech.tuparles.debug/pl.nech.tuparles.ui.MainActivity
 adb logcat -s TuParles         # follow the mic lifecycle
+
+# Drive a take without tapping the screen. Debug build only: the service and
+# the status receiver are exported behind android.permission.DUMP, which the
+# shell uid holds and a normal app does not. The status line is counts and
+# states, never transcript text.
+bash scripts/drive-debug.sh 3
 ```
 
 The app requests `RECORD_AUDIO` (and notifications on Android 13+) on first tap.

@@ -58,7 +58,7 @@
              ourselves — the receiving app does any sending, the user drives it. -->
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="pl.nech.tuparles.fileprovider"
+            android:authorities="${applicationId}.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data

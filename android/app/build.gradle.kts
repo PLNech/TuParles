@@ -41,6 +41,12 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Sits beside the Play install. A debug signature cannot update
+            // pl.nech.tuparles, and uninstalling that copy would wipe the notes.
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+        }
         release {
             isMinifyEnabled = false
             signingConfig = if (hasUploadSigning) signingConfigs.getByName("release") else null

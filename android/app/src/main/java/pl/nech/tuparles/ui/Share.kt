@@ -6,7 +6,7 @@ import androidx.core.content.FileProvider
 import pl.nech.tuparles.data.Note
 import java.io.File
 
-private const val AUTHORITY = "pl.nech.tuparles.fileprovider"
+private fun fileProviderAuthority(context: Context) = "${context.packageName}.fileprovider"
 
 /**
  * Share a note's WAV through the system share sheet. The receiving app does any
@@ -15,7 +15,7 @@ private const val AUTHORITY = "pl.nech.tuparles.fileprovider"
 fun shareNote(context: Context, note: Note) {
     val file = File(note.wavPath)
     if (!file.exists()) return
-    val uri = FileProvider.getUriForFile(context, AUTHORITY, file)
+    val uri = FileProvider.getUriForFile(context, fileProviderAuthority(context), file)
     val intent = Intent(Intent.ACTION_SEND).apply {
         type = "audio/wav"
         putExtra(Intent.EXTRA_STREAM, uri)

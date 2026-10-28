@@ -3,6 +3,12 @@
 ## Unreleased — performance and responsiveness
 
 ### Infra
+- **A debug install sits beside the Play copy.** `pl.nech.tuparles.debug`,
+  launcher name "TuParles debug". A debug signature cannot update the
+  signed app, and uninstalling that copy would wipe its notes. The debug
+  build exports the recording service and a status receiver behind
+  `android.permission.DUMP`, so `android/scripts/drive-debug.sh` can start
+  and stop a take from adb. The status line is counts and states.
 - **A destroyed recording no longer vanishes from the Android notes list.**
   The mic now spills into a growing WAV as samples arrive. If the service is
   destroyed mid-take (a system approval screen, a low-memory kill), the row
