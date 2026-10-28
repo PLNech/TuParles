@@ -25,6 +25,10 @@ class FakeNotesRepository : NotesRepository {
         // Mirror Room: a note still recording is hidden from the list until it finalises.
         notes.map { list -> list.filter { it.transcriptState != TranscriptState.RECORDING } }
 
+    /** What the notes list would show right now. */
+    fun visibleNow(): List<Note> =
+        notes.value.filter { it.transcriptState != TranscriptState.RECORDING }
+
     override suspend fun add(note: Note): Long {
         notes.value = notes.value + note
         return note.id

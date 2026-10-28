@@ -12,6 +12,7 @@ import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -20,7 +21,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import pl.nech.tuparles.core.NotesRepository
@@ -102,10 +102,12 @@ class RecordingService : Service() {
                 // If the live transcript is wanted but the model is too slow, degrade honestly
                 // and tell the UI (a one-line hint), rather than piling decodes behind speech.
                 stateHolder.setLiveDegraded(rolling.isLiveDegraded())
+                // The spill file exists before the mic opens, on both paths. A destroyed
+                // service then has the audio that reached the mic, not just a hidden row.
+                val createdAt = System.currentTimeMillis()
+                val file = File(File(filesDir, "notes").apply { mkdirs() }, "note_$createdAt.wav")
                 var sink: SegmentationSink? = null
                 if (rolling.shouldArm()) {
-                    val createdAt = System.currentTimeMillis()
-                    val file = File(File(filesDir, "notes").apply { mkdirs() }, "note_$createdAt.wav")
                     val id = notes.add(
                         Note(
                             wavPath = file.absolutePath,
@@ -117,18 +119,23 @@ class RecordingService : Service() {
                     if (!recording || myToken != startToken) {
                         // Stopped during the insert: don't leave the mic running / a stray note.
                         notes.get(id)?.let { notes.delete(it) }
+                        file.delete()
                         return@launch
                     }
                     activeNoteId = id
-                    activeWav = file
                     rolling.begin(id)
                     sink = SegmentationSink(SegmentationConfig()) { seg -> rolling.submit(seg) }
                 }
-                if (!recording || myToken != startToken) return@launch
-                recorder.start(onLevel, sink)
+                if (!recording || myToken != startToken) {
+                    file.delete()
+                    return@launch
+                }
+                activeWav = file
+                recorder.start(onLevel, sink, spillTo = file)
                 // Live tail preview (#42), now covering only the audio after the last segment.
                 partials.start { recorder.snapshotRecentSamples() }
             } catch (e: Throwable) {
+                Log.w(TAG, "take arm failed: note=$activeNoteId", e)
                 recording = false
                 partials.stop()
                 rolling.cancel()
@@ -164,27 +171,27 @@ class RecordingService : Service() {
                 val pcm = recorder.stop()
                 val remainder = recorder.flushOpenSegment() // tail after the last committed segment
                 when {
-                    // Rolling path: the note exists (RECORDING) with its committed segments.
+                    // Rolling path: the spill file already holds the audio. Rewrite the
+                    // canonical WAV from the joined buffer, then decode only the remainder.
                     noteId != 0L && pcm.isNotEmpty() && wav != null -> {
-                        // WAV written once, at stop — the write path is untouched. Then the
-                        // remainder is the only new decode; committed segments are never redone.
                         writeWav(wav, pcm)
                         rolling.finish(remainder, pcm.size.toFloat() / SAMPLE_RATE)
+                        logTake("saved", noteId, pcm.size.toFloat() / SAMPLE_RATE, pcm.size)
                     }
                     // Rolling armed but nothing captured (instant stop): drop the empty note.
                     noteId != 0L -> {
                         rolling.cancel()
                         notes.get(noteId)?.let { notes.delete(it) }
+                        wav?.delete()
+                        logTake("dropped-empty", noteId, 0f, pcm.size)
                     }
-                    // Legacy path (feature off / no model): create the note now, decode post-hoc.
-                    pcm.isNotEmpty() -> {
-                        val createdAt = System.currentTimeMillis()
-                        val file = File(File(filesDir, "notes").apply { mkdirs() }, "note_$createdAt.wav")
-                        writeWav(file, pcm)
+                    // Post-hoc path: the spill file is the note. Queue the decode.
+                    pcm.isNotEmpty() && wav != null -> {
+                        writeWav(wav, pcm)
                         val id = notes.add(
                             Note(
-                                wavPath = file.absolutePath,
-                                createdAt = createdAt,
+                                wavPath = wav.absolutePath,
+                                createdAt = System.currentTimeMillis(),
                                 durationS = pcm.size.toFloat() / SAMPLE_RATE,
                                 // Enqueued for STT; the manager flips this to RUNNING→DONE,
                                 // or leaves it PENDING (waiting for a model) on a lean APK.
@@ -192,6 +199,11 @@ class RecordingService : Service() {
                             ),
                         )
                         transcription.onNoteSaved(id)
+                        logTake("saved", id, pcm.size.toFloat() / SAMPLE_RATE, pcm.size)
+                    }
+                    else -> {
+                        wav?.delete()
+                        logTake("dropped-empty", noteId, 0f, pcm.size)
                     }
                 }
             } finally {
@@ -248,9 +260,43 @@ class RecordingService : Service() {
 
     override fun onDestroy() {
         partials.stop()
-        if (recording) recorder.stop()
-        scope.cancel()
+        // A system screen covering the app, or a low-memory kill, takes this path
+        // instead of stop. The spill file already holds the audio; abandon releases
+        // the mic without copying the whole take on the main thread. The row leaves
+        // RECORDING so the list can show it.
+        if (recording) {
+            recording = false
+            startToken++
+            capJob?.cancel()
+            val kept = runCatching { recorder.abandon() }.getOrDefault(0)
+            rolling.cancel()
+            salvage("destroyed-while-recording", pcmSamples = kept)
+        }
         super.onDestroy()
+    }
+
+    /** Leave a row the list can show, or delete an empty one. */
+    private fun salvage(path: String, pcmSamples: Int) {
+        val noteId = activeNoteId
+        val wav = activeWav
+        val samples = maxOf(pcmSamples, wav?.let { wavSampleCount(it) } ?: 0)
+        val outcome = runCatching {
+            kotlinx.coroutines.runBlocking {
+                salvageInterruptedTake(notes, noteId, wav, samples) { id ->
+                    transcription.onNoteSaved(id)
+                }
+            }
+        }.getOrElse { e ->
+            Log.w(TAG, "salvage failed: note=$noteId pcm=$samples", e)
+            "destroyed-while-recording"
+        }
+        logTake(path, noteId, samples.toFloat() / SAMPLE_RATE, samples)
+        activeNoteId = 0
+        activeWav = null
+    }
+
+    private fun logTake(path: String, noteId: Long, durationS: Float, pcm: Int) {
+        Log.i(TAG, "take $path: note=$noteId durationS=$durationS pcm=$pcm")
     }
 
     companion object {
@@ -266,6 +312,7 @@ class RecordingService : Service() {
         private const val MAX_RECORD_MS = 7_200_000L
         private const val NOTIF_ID = 1001
         private const val CHANNEL = "recording"
+        private const val TAG = "TuParles"
 
         /** Start (or stop, if already recording) a note. */
         fun toggle(c: Context) {

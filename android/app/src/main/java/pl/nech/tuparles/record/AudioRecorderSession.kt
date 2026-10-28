@@ -20,6 +20,7 @@ class AudioRecorderSession @Inject constructor() : RecorderSession {
     @Volatile private var recording = false
     private var thread: Thread? = null
     private val samples = PcmAccumulator()
+    private var spill: GrowingWav? = null
 
     // Most-recent audio kept alongside the full capture, for the live-partials preview (#42).
     // Reads never disturb the recording; if nothing ever snapshots it, it costs one array copy.
@@ -38,6 +39,7 @@ class AudioRecorderSession @Inject constructor() : RecorderSession {
     override fun start(
         onLevel: (rms: Float, elapsedMs: Long) -> Unit,
         segmentation: SegmentationSink?,
+        spillTo: java.io.File?,
     ) {
         val minBuf = AudioRecord.getMinBufferSize(
             SAMPLE_RATE,
@@ -61,6 +63,8 @@ class AudioRecorderSession @Inject constructor() : RecorderSession {
         }
         samples.clear()
         ring.clear()
+        spill?.close()
+        spill = spillTo?.let { GrowingWav(it) }
         segmenter = segmentation?.let { SilenceSegmenter(it.config) }
         record = rec
         recording = true
@@ -77,7 +81,10 @@ class AudioRecorderSession @Inject constructor() : RecorderSession {
                     break
                 }
                 // The WAV accumulation comes first and unconditionally — recording is sacred.
+                // The spill file is the same audio, written as it arrives, so a destroyed
+                // service still has what the mic heard.
                 samples.append(chunk, n)
+                spill?.append(chunk, n)
                 ring.append(chunk, n)
                 // Segmentation is a guarded observer: a fault here never breaks the recording.
                 if (segmentation != null && n > 0) {
@@ -105,6 +112,22 @@ class AudioRecorderSession @Inject constructor() : RecorderSession {
     }
 
     override fun stop(): ShortArray {
+        releaseMic()
+        spill?.close()
+        spill = null
+        return samples.toShortArray()
+    }
+
+    override fun abandon(): Int {
+        releaseMic()
+        val kept = spill?.samples ?: 0
+        spill?.close()
+        spill = null
+        samples.clear()
+        return kept
+    }
+
+    private fun releaseMic() {
         recording = false
         thread?.join()
         thread = null
@@ -113,7 +136,6 @@ class AudioRecorderSession @Inject constructor() : RecorderSession {
             release()
         }
         record = null
-        return samples.toShortArray()
     }
 
     private companion object {

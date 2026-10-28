@@ -3,6 +3,13 @@
 ## Unreleased — performance and responsiveness
 
 ### Infra
+- **A destroyed recording no longer vanishes from the Android notes list.**
+  The mic now spills into a growing WAV as samples arrive. If the service is
+  destroyed mid-take (a system approval screen, a low-memory kill), the row
+  leaves `RECORDING`: audio on disk is queued for decode, committed text is
+  kept, and a take that never reached disk shows as failed. An empty
+  instant-stop still drops the empty note. The log line names the path and
+  carries no transcript text.
 - **Android toolchain caught up.** AGP 8.9 / Gradle 8.11 / Kotlin 2.0 was only
   tested through compileSdk 35, and the app already compiled against 36. Now
   AGP 9.1.1, Gradle 9.3.1, Kotlin 2.2.10 built into AGP, KSP 2.2.10, Hilt 2.59,

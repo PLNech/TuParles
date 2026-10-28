@@ -35,10 +35,19 @@ interface RecorderSession {
     fun start(
         onLevel: (rms: Float, elapsedMs: Long) -> Unit,
         segmentation: SegmentationSink? = null,
+        spillTo: java.io.File? = null,
     )
 
     /** Stops the mic and returns the captured PCM16 samples. */
     fun stop(): ShortArray
+
+    /**
+     * Stop the mic without copying the whole take. Used when the service is
+     * destroyed: the spill file already holds what reached the mic, and building
+     * the contiguous array here would run on the main thread. Returns how many
+     * samples the spill file holds. Default is a no-op for fakes.
+     */
+    fun abandon(): Int = 0
 
     /**
      * The most recent few seconds of captured audio as normalised floats ([-1, 1], 16 kHz

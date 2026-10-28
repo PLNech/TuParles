@@ -1,6 +1,6 @@
 ---
 id: 1
-status: pending
+status: done
 created: 2026-10-28
 owner: pln
 ---
@@ -27,6 +27,21 @@ it, and the audio is gone.
 `RollingTranscriber` already recovers committed segments after a process death.
 That recovery does not cover a take whose WAV was never written, and nothing
 logs the destroy-while-recording path, so the field report has no trail.
+
+## What landed
+
+The mic spills into a growing WAV from the first sample, on both the rolling
+path and the post-hoc path. `onDestroy` while recording abandons the mic
+(no whole-take copy on the main thread) and runs `salvageInterruptedTake`:
+audio on disk with no committed text becomes `PENDING` and is queued for
+decode; committed text becomes `DONE` and is not rewritten; samples that
+never reached disk become a visible `FAILED` row; an empty instant-stop
+still deletes the note. The log line is `take <path>: note= durationS= pcm=`
+and carries no transcript text.
+
+On-device check still open: start a long take, background the app behind
+another activity, stop, and see the note. No device was attached when this
+landed.
 
 ## Completion criteria
 

@@ -16,6 +16,7 @@ import pl.nech.tuparles.record.ClosedSegment
 import pl.nech.tuparles.record.RecorderPreferences
 import pl.nech.tuparles.record.RecorderStateHolder
 import pl.nech.tuparles.record.SAMPLE_RATE
+import pl.nech.tuparles.record.wavSampleCount
 import pl.nech.tuparles.record.decodeWavToFloats
 import java.io.File
 import javax.inject.Inject
@@ -178,7 +179,9 @@ class RollingTranscriber @Inject constructor(
 
         var durationS = segments.maxOfOrNull { it.endSample }?.let { it.toFloat() / SAMPLE_RATE } ?: 0f
 
-        if (wav.exists() && engine.available) {
+        // A spill file can be a header with no samples (destroyed before the first
+        // read). That is not audio to decode.
+        if (wav.exists() && wavSampleCount(wav) > 0 && engine.available) {
             runCatching {
                 val floats = decodeWavToFloats(wav)
                 durationS = floats.size.toFloat() / SAMPLE_RATE
