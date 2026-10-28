@@ -190,15 +190,19 @@ def test_idle_emits_zero_updates_in_real_time(make_tray):
 
 
 @pytest.mark.parametrize("state", ["recording", "processing"])
-def test_active_rate_is_capped_at_two_hz(make_tray, state):
+def test_active_rate_follows_speech(make_tray, state):
+    """8 Hz while a take is live, never at rest. The old 2 Hz cap made the
+    menu-bar glyph look stuck on a Mac, where a setIcon is a local pixmap
+    and not a D-Bus round trip. Rest stays at zero either way."""
     tray, spy = make_tray(animate=True)
     tray.set_state(state)
     assert tray._timer.isActive(), f"{state} animates when the setting is on"
-    assert 1000 / tray._timer.interval() <= 2.0
+    hz = 1000 / tray._timer.interval()
+    assert 6 <= hz <= 10
     spy.reset()
-    _advance(tray, 10)
-    assert spy.count <= 2 * 10
-    assert spy.count >= 10, "the animation must still be alive while active"
+    _advance(tray, 2)
+    assert spy.count <= hz * 2 + 1
+    assert spy.count >= 8, "the animation must still be alive while active"
 
 
 @pytest.mark.parametrize("state", ["recording", "processing"])
@@ -310,7 +314,7 @@ def test_live_toggle_on_off_on(make_tray):
     assert tray._timer.isActive(), "re-enabled mid-take: the take animates again"
     spy.reset()
     _advance(tray, 5)
-    assert 5 <= spy.count <= 10
+    assert 20 <= spy.count <= 45
 
     _set_anim(False)
     tray.apply_live_settings()
@@ -387,6 +391,16 @@ def test_dev_capture_toggle_at_rest_is_one_update(make_tray):
     assert spy.count == 1
     tray.apply_live_settings()
     assert spy.count == 1
+
+
+def test_recording_pose_lifts_with_the_mic():
+    from tuparles.tray import frame_pose
+
+    quiet = frame_pose("recording", 0, level=0.0)[0]
+    loud = frame_pose("recording", 0, level=1.0)[0]
+    assert all(a < b for a, b in zip(quiet, loud, strict=True))
+    # A default call (no recorder wired) keeps the old signature working.
+    assert frame_pose("recording", 0)[0] == quiet
 
 
 def test_frame_cache_is_bounded(make_tray):

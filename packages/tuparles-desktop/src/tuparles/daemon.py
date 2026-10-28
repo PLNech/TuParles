@@ -35,6 +35,7 @@ from tuparles.commands import Command
 from tuparles.commands import parse as parse_command
 from tuparles.config import (
     HOTKEY_HOLD_S,
+    IS_MACOS,
     IS_WAYLAND,
     PARTIAL_MIN_AUDIO_S,
     PARTIAL_PERIOD_S,
@@ -210,24 +211,18 @@ class Controller(QObject):
             self._press_started_take = True
             self._last_partial = ""  # fresh take, no preview shown yet (#10)
             self._preview_generation += 1
-            # Snapshot the destination window NOW, while it still has focus and
-            # gnome-shell is calm — before the bubble shows and (on Wayland)
-            # steals focus. Captures class + (X11) window id, so a take can paste
-            # back where it was dictated even after focus moves (#13, the queue's
-            # keystone). Empty fields fall back to a live read at delivery.
-            self._target = capture_target()
-            self._recorder.start()
-            cue.play_start()  # opt-in soft tick: capture is live, speak now
-            telemetry.event("entry.dictation", source=self._entry_source)
-            # Lifecycle forensics (#14): one line per ARMED take (a request), so
-            # the journal pairs requests with the `take #N delivered` lines below
-            # — a missing pair is a delivery that was lost, not a decode that was.
-            print(
-                f"take armed: src={self._entry_source} "
-                f"target={self._target.wm_class or '?'!r} @{self._target.window_id or '?'}"
-            )
+            # The bubble and the tray go live NOW, before the mic opens.
+            # Opening the stream on this thread stalled the whole UI 2.7 s on
+            # the first Mac take (the watchdog logged it): the press felt dead
+            # and the glyph froze until the stream answered. The open runs on
+            # a worker; _stopping holds re-entry until it frees, the same guard
+            # the teardown already uses.
+            self._stopping = True
             self._bubble.start_recording()
             self._bridge.state.emit("recording")
+            threading.Thread(
+                target=self._arm_capture, daemon=True, name="arm-capture"
+            ).start()
             if getattr(self._engine, "supports_partials", False):
                 # This event belongs only to this take. A later start never
                 # clears it, even if the old worker is still decoding.
@@ -240,6 +235,30 @@ class Controller(QObject):
                 ).start()
             else:
                 self._partial_stop = None
+
+    def _arm_capture(self) -> None:
+        """Open the mic off the GUI thread, then say the take is armed.
+
+        The destination window is snapshotted here, on the worker, while the
+        bubble is still fading in and has not taken focus. Captures class +
+        (X11) window id, so a take can paste back where it was dictated even
+        after focus moves. Empty fields fall back to a live read at delivery.
+        """
+        try:
+            self._target = capture_target()
+            self._recorder.start()
+            cue.play_start()  # opt-in soft tick: capture is live, speak now
+            telemetry.event("entry.dictation", source=self._entry_source)
+            print(
+                f"take armed: src={self._entry_source} "
+                f"target={self._target.wm_class or '?'!r} @{self._target.window_id or '?'}"
+            )
+        except Exception as exc:
+            print(f"take arm failed: {str(exc)[:120]}")
+            self._bridge.error.emit("Micro indisponible")
+            self._bridge.state.emit("idle")
+        finally:
+            self._stopping = False
 
     @Slot()
     def cancel(self) -> None:
@@ -445,6 +464,10 @@ class Controller(QObject):
         `seq` is threaded into delivery so every `deliver:` log carries the take
         id — `journalctl | grep 'deliver:'` then tells the whole delivery story."""
         if IS_WAYLAND:
+            # Wayland can't refocus a window by id, and the bubble steals
+            # focus, so hide it before the paste. macOS does not: the bubble
+            # is a no-focus overlay, and a blocking hide there stalled the
+            # paste behind the GUI thread.
             deliver(text, target, before_paste=self._hide_bubble_for_paste, seq=seq)
             return
         origin = target.window_id
@@ -733,7 +756,7 @@ class Controller(QObject):
                 self._bridge.command.emit("rien à ajuster")
                 return
             cmd = resolved
-        if IS_WAYLAND:
+        if IS_WAYLAND or IS_MACOS:
             self._hide_bubble_for_paste()
         label = execute_command(cmd)
         # Remember the last destructive edit so a later "un peu plus" can chain;
@@ -835,7 +858,9 @@ def run() -> None:
     bridge.queued.connect(bubble.on_queued)  # queue chips (#15)
     bridge.delivered.connect(bubble.on_delivered)
 
-    tray = Tray(backend_source=backend_source)
+    tray = Tray(
+        backend_source=backend_source, level_source=lambda: recorder.level
+    )
     bridge.state.connect(tray.set_state)
     bridge.final.connect(tray.on_final)
     tray.toggle_requested.connect(controller.toggle_from_tray)
@@ -860,7 +885,12 @@ def run() -> None:
     )
     listener.start()
     app.aboutToQuit.connect(listener.stop)
-    print("TuParles daemon up — Right Ctrl + Right Alt to dictate. Ctrl-C quits.")
+    chord = (
+        "Right Option + Right Command"
+        if IS_MACOS
+        else "Right Ctrl + Right Alt"
+    )
+    print(f"TuParles daemon up — {chord} to dictate. Ctrl-C quits.")
 
     # Cross-env capability report (#29): probe what this box can actually do and
     # log it ONCE, so a gap (an absent xdotool subcommand, no paste tool) is

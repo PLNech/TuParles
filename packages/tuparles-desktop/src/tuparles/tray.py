@@ -40,10 +40,12 @@ _REST_HEIGHTS = (0.45, 0.85, 0.60)  # the glyph's pose when not animating
 # decodes a fresh pixmap ON ITS MAIN THREAD. The old 10 Hz breath, running
 # around the clock even at rest, grew gnome-shell's heap ~450 MiB/12 h and
 # stalled its main loop 0.4-0.7 s every ~11 s (system-wide freezes, stuck key
-# repeat). So: rest never animates (zero updates, the timer is off), and a live
-# take animates at 2 Hz — slow enough that a take's few seconds cost the shell a
-# handful of pixmaps, fast enough that the glyph visibly moves while you speak.
-_TRAY_FRAME_MS = 500  # 2 Hz, and ONLY while recording/decoding
+# repeat). So: rest never animates (zero updates, the timer is off). A live
+# take steps at 8 Hz through a handful of cached frames — a take lasts seconds,
+# so the shell sees a few dozen pixmaps, and the bars visibly follow speech.
+# macOS menu-bar icons are local pixmaps, not a D-Bus round trip, so the same
+# rate is cheap there and is what makes the glyph feel alive.
+_TRAY_FRAME_MS = 125  # 8 Hz, and ONLY while recording/decoding
 # The live animation is a loop of a few precomputed poses, not a free-running
 # phase: frames repeat exactly, so they cache (no paint per tick) and dedupe.
 # 6 frames at 2 Hz = one 3 s cycle, close to the old breath's ~2.2 s period.
@@ -106,7 +108,9 @@ def state_color(state: str, backend: str) -> QColor:
     return QColor(_CPU_IDLE) if on_cpu else QColor(_IDLE)
 
 
-def frame_pose(kind: str, frame: int) -> tuple[tuple[float, ...], float]:
+def frame_pose(
+    kind: str, frame: int, level: float = 0.0
+) -> tuple[tuple[float, ...], float]:
     """(bar heights, vertical lift) for animation frame `frame` of `kind`. Pure
     and periodic over `_ANIM_FRAMES`, so a frame index fully names a picture.
 
@@ -115,8 +119,17 @@ def frame_pose(kind: str, frame: int) -> tuple[tuple[float, ...], float]:
     else ("rest"): the static rest pose."""
     theta = 2 * math.pi * (frame % _ANIM_FRAMES) / _ANIM_FRAMES
     if kind == "recording":
+        # The breath stays, so a quiet moment still moves. The mic level rides
+        # on top: a spoken syllable lifts the bars, silence lets them rest.
+        # `level` is the recorder's 0..1 RMS, already perceptually mapped.
+        speech = max(0.0, min(1.0, level))
         heights = tuple(
-            0.42 + 0.45 * (0.5 + 0.5 * math.sin(theta + i * 2 * math.pi / 3))
+            min(
+                0.95,
+                0.28
+                + 0.22 * (0.5 + 0.5 * math.sin(theta + i * 2 * math.pi / 3))
+                + 0.45 * speech,
+            )
             for i in range(3)
         )
         return heights, 0.9 * math.sin(theta)
@@ -141,10 +154,14 @@ class Tray(QObject):
         self,
         parent: QObject | None = None,
         backend_source: Callable[[], str] | None = None,
+        level_source: Callable[[], float] | None = None,
     ) -> None:
         super().__init__(parent)
         # Pull source for the ambient engine colour ("gpu"|"cpu"), as the bubble.
         self._backend_source = backend_source or (lambda: "gpu")
+        # Mic level, 0..1, so the recording glyph follows speech instead of
+        # breathing on its own. None on a caller that has no recorder.
+        self._level_source = level_source
         self._state = "idle"
         self._frame = 0  # index into the live animation loop (0.._ANIM_FRAMES-1)
         self._animate = bool(settings.get("tray_animation"))
@@ -226,7 +243,12 @@ class Tray(QObject):
         kind = self._pose_kind()
         frame = self._frame if kind != "rest" else 0
         color = state_color(self._state, self._backend_source())
-        return kind, frame, color.rgba(), self._dev_dot
+        # Four steps of loudness. Enough for the bars to answer speech, few
+        # enough that the icon cache stays inside _ICON_CACHE_MAX.
+        level = 0
+        if kind == "recording" and self._level_source is not None:
+            level = max(0, min(3, int(self._level_source() * 4)))
+        return kind, frame, color.rgba(), self._dev_dot, level
 
     def _icon_for(self, key: tuple) -> QIcon:
         """The cached QIcon for `key`, painted once on first sight. LRU-bounded
@@ -235,8 +257,8 @@ class Tray(QObject):
         if icon is not None:
             self._icon_cache.move_to_end(key)
             return icon
-        kind, frame, rgba, dev_dot = key
-        heights, lift = frame_pose(kind, frame)
+        kind, frame, rgba, dev_dot, level = key
+        heights, lift = frame_pose(kind, frame, level / 3)
         icon = _glyph(QColor.fromRgba(rgba), heights, lift, dev_dot=dev_dot)
         self._icon_cache[key] = icon
         while len(self._icon_cache) > _ICON_CACHE_MAX:
@@ -265,7 +287,14 @@ class Tray(QObject):
         """Spell out dev capture in the tooltip whenever it's armed, so the red
         dot has words next to it on hover. Only re-sent when the text changes
         (a setToolTip is a NewToolTip D-Bus signal too)."""
-        base = "TuParles — Ctrl droit + Alt droit pour dicter"
+        from tuparles.config import IS_MACOS
+
+        chord = (
+            "Option droit + Commande droit"
+            if IS_MACOS
+            else "Ctrl droit + Alt droit"
+        )
+        base = f"TuParles — {chord} pour dicter"
         if self._dev_dot:
             base += "\n⚠ Mode dev : audio brut (non masqué) enregistré sur le disque"
         if base != self._tooltip:

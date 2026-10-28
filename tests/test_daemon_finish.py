@@ -99,6 +99,37 @@ def _controller(engine, recorder, bridge):
     return Controller(engine, recorder, _Bubble(), bridge)
 
 
+def test_start_returns_before_the_mic_opens(monkeypatch):
+    """The press must not wait on the mic. Opening the stream on the GUI
+    thread stalled the first Mac take 2.7 s; the arm runs on a worker and
+    the bubble is already recording when toggle() returns."""
+    gate = threading.Event()
+    monkeypatch.setattr(
+        "tuparles.daemon.capture_target", lambda: DeliveryTarget(wm_class="term")
+    )
+
+    class _SlowRecorder:
+        recording = False
+        start_calls = 0
+
+        def start(self):
+            # Held shut until the press has returned, so the assertion below
+            # observes the guard still held — the proof the open is off-thread.
+            assert gate.wait(3)
+            self.start_calls += 1
+
+    rec = _SlowRecorder()
+    c = _controller(SimpleNamespace(supports_partials=False), rec, _Bridge())
+    c._entry_source = "hotkey"
+    c.toggle()
+    assert c._bubble.events[0] == "start_recording"  # painted before returning
+    assert c._stopping  # the mic has not answered yet
+    gate.set()
+    _wait_for(lambda: rec.start_calls == 1)
+    assert c._target.wm_class == "term"
+    assert not c._stopping
+
+
 def test_toggle_ignores_press_while_stopping(monkeypatch):
     """A second press during teardown must not race stop() (#10 guard)."""
     rec = _Recorder(recording=True)
@@ -208,6 +239,13 @@ def _wait_for(predicate):
     pytest.fail("timed out waiting for preview worker")
 
 
+def _start_take(controller):
+    """toggle() returns once the bubble is up; the mic opens on a worker.
+    A test that then stops the take waits for that arm to free the guard."""
+    controller.toggle()
+    _wait_for(lambda: not controller._stopping)
+
+
 def test_rapid_stop_start_drops_inflight_preview(monkeypatch):
     """A blocked old decode cannot paint into the next recording or reset its
     language state after the next worker starts."""
@@ -220,7 +258,7 @@ def test_rapid_stop_start_drops_inflight_preview(monkeypatch):
         c._stopping = False
 
     monkeypatch.setattr(c, "_stop_and_enqueue", drain)
-    c.toggle()
+    _start_take(c)
     old_generation = c._preview_generation
     assert engine.entered.wait(3)
     c.toggle()
@@ -247,7 +285,7 @@ def test_rapid_stop_start_drops_inflight_preview(monkeypatch):
 
 def test_cancel_drops_inflight_and_queued_preview(monkeypatch):
     c, engine, rec, bridge = _preview_controller(monkeypatch)
-    c.toggle()
+    _start_take(c)
     generation = c._preview_generation
     assert engine.entered.wait(3)
     c.cancel()

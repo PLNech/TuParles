@@ -163,7 +163,7 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
 ## Architecture
 
 ```
-            hotkey (Right Ctrl + Right Alt)
+            hotkey (Right Ctrl + Right Alt · Mac: Right Option + Right Command)
                           │
    mic ── 16 kHz mono ────┤
     │                     ▼
@@ -173,14 +173,22 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
     ▼              └─────────────┘   partials: ~1 Hz greedy │ (GPU, persistent)   │
  waveform              │      │                            └─────────────────────┘
   bubble UI ◄──────────┘      ├─► punctuation → lexicon → repeat-collapse
-  (live transcript)           ├─► paste into focus (X11 xsel+xdotool · Wayland wl-copy+ydotool) + clipboard
+  (live transcript)           ├─► paste into focus (X11 xsel+xdotool · Wayland wl-copy+ydotool · macOS pbcopy+Cmd+V) + clipboard
                               └─► history + telemetry + usage events (SQLite)
 ```
 
-- **Primary engine**: [faster-whisper](https://github.com/SYSTRAN/faster-whisper)
+- **Primary engine, NVIDIA**: [faster-whisper](https://github.com/SYSTRAN/faster-whisper)
   `large-v3-turbo` in float16, persistent on the GPU (~29x realtime
   measured on an RTX 4080). Finals go through the batched pipeline;
-  partials are cheap greedy decodes of a sliding window.
+  partials are cheap greedy decodes of a sliding window. The CUDA wheels
+  are an optional group (`poetry install --with cuda`); they have no macOS
+  build.
+- **Primary engine, Apple Silicon**: the same `large-v3-turbo` weights through
+  [mlx-whisper](https://github.com/ml-explore/mlx-examples/tree/main/whisper)
+  on Metal (`poetry install --with mlx`). The chord there is **Right Option +
+  Right Command** (a built-in Mac keyboard has no right Control), and the take
+  pastes with Cmd+V. Accessibility permission is required for both the chord
+  and the paste. See `docs/research/2026-10-28-mlx-apple-silicon.md`.
 - **CPU fallback**: used automatically when no GPU answers. Two rungs, chosen
   by what's installed:
   - [whisper.cpp](https://github.com/ggml-org/whisper.cpp) via

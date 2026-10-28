@@ -2,6 +2,37 @@
 
 ## Unreleased — performance and responsiveness
 
+### Added
+- **Apple Silicon GPU rung.** On a Mac with the optional `mlx` group installed,
+  `load_engine` builds `MlxEngine` (mlx-whisper on Metal, `large-v3-turbo` by
+  default, `mlx_model` in settings) instead of the CUDA engine. Same weight
+  family as the 4080 rung, so a code-switched take hears the same model.
+  Missing MLX, or a load that fails, falls through to the CPU rung. The CUDA
+  wheels and `evdev` moved to optional groups (`cuda`, `wayland`) so
+  `poetry install` resolves on macOS. Build note:
+  `docs/research/2026-10-28-mlx-apple-silicon.md`. On an M5 Max the warm
+  turbo decode of a 4 s synthetic blend clip was 0.17 s and kept "fan out"
+  and "ship"; tiny and small mangled both. The 5-bit turbo conversion does
+  not load on mlx-whisper 0.4.3.
+- **macOS delivery and chord.** Paste is `pbcopy` + Cmd+V (`osascript`, needs
+  Accessibility). The chord is Right Option + Right Command — the same corner
+  of the keyboard as Right Ctrl + Right Alt, which a built-in Mac keyboard
+  cannot press. Linux is unchanged.
+
+### Changed
+- **A take starts before the mic answers.** Opening the stream used to run on
+  the GUI thread, which stalled the first Mac take 2.7 s (the watchdog logged
+  it: press, then `GUI stall`, then `take armed`). The bubble and the tray go
+  live on the press; the mic opens on a worker. The menu-bar glyph steps at
+  8 Hz during a take and its bars follow the mic level, so a spoken syllable
+  lifts them. At rest it stays static. macOS no longer hides the bubble before
+  the paste: that hide blocked the delivery worker on the GUI thread, and the
+  overlay does not take focus there.
+- **macOS paste is one tap.** `keystroke "v" using command down` holds the key
+  for the whole System Events call, and key repeat inserted the paste again
+  (one take landed four copies). The chord is now key down, key up, with
+  nothing between them.
+
 ### Fixed
 - **The tray no longer floods the desktop shell.** The glyph used to repaint at
   10 Hz around the clock, even at rest, and every repaint is a
