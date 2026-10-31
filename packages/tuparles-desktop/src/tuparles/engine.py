@@ -82,6 +82,26 @@ def _sticky_window_language(model, tracker, pcm):
     return tracker.update(lang, prob), prob
 
 
+def _replace_segment_text(seg, new_text: str):
+    """Return a copy of *seg* with text replaced, preserving all other attrs.
+
+    Works with faster-whisper's named-tuple–based Segment (immutable fields).
+    """
+    import dataclasses
+
+    if dataclasses.is_dataclass(seg):
+        return dataclasses.replace(seg, text=new_text)
+    # Fallback for named-tuple segments: rebuild from _asdict.
+    if hasattr(seg, "_asdict"):
+        d = seg._asdict()
+        d["text"] = new_text
+        return seg.__class__(**d)
+    # Last resort: attribute copy.
+    result = type(seg)(seg.text, seg.start, seg.end) if not hasattr(seg, "text") else seg
+    result.text = new_text  # type: ignore[attr-defined]
+    return result
+
+
 def decode_language_opts(selected: list[str]) -> tuple[str | None, bool]:
     """Map the user's language selection to faster-whisper's
     (language, multilingual) arguments.
@@ -204,6 +224,9 @@ class GpuEngine:
             word_timestamps=True,
         )
         segs = list(segments)  # consume once: needed for both text and words
+        # Post-decode language validation: fix segment-level translation flips.
+        selected = settings.get("languages") or []
+        segs = self._validate_and_correct_segments(segs, info, selected, audio)
         text = " ".join(s.text.strip() for s in segs).strip()
         return Transcription(
             text,
@@ -215,6 +238,82 @@ class GpuEngine:
     def _decode_language_opts(self) -> tuple[str | None, bool]:
         """(language, multilingual) from the user's selection, hot-reloaded."""
         return decode_language_opts(settings.get("languages") or [])
+
+    # ── Post-decode language validation (translation-flip guard) ───────────
+
+    def _validate_and_correct_segments(
+        self,
+        segments: list,
+        info,
+        selected_languages: list[str],
+        audio: np.ndarray,
+    ) -> list:
+        """Detect and fix segment-level translation flips.
+
+        After a batched multilingual decode, Whisper may mis-detect the
+        language on short/noisy segments — producing a coherent sentence in
+        an unexpected language (e.g. Chinese output when the user speaks
+        French). This checks each segment's detected language against the
+        overall dominant detection and re-encodes mismatches, forcing the
+        dominant language.
+
+        A segment is considered flipped when its detected language is neither
+        in the user's selected set nor the dominant language. `audio` is the
+        raw int16 take — the same 16 kHz sample clock the segments' seconds
+        map back onto.
+        """
+        if not segments:
+            return segments
+
+        # Determine the dominant language from overall detection.
+        dominant = getattr(info, "language", None)
+        if not dominant:
+            return segments
+
+        sel_set = set(selected_languages) if selected_languages else None
+
+        # Collect indices of flipped segments.
+        flipped_indices: list[int] = []
+        for i, seg in enumerate(segments):
+            seg_lang = getattr(seg, "language", None)
+            if seg_lang is None:
+                continue
+            # Flip = language outside the user's selection AND not dominant.
+            if sel_set is not None and seg_lang not in sel_set and seg_lang != dominant:
+                flipped_indices.append(i)
+            elif sel_set is None and seg_lang != dominant:
+                # Auto-detect mode (0 or 100 langs): anything ≠ dominant is suspect.
+                flipped_indices.append(i)
+
+        if not flipped_indices:
+            return segments
+
+        # Re-encode flipped segments with dominant language forced.
+        for i in flipped_indices:
+            seg = segments[i]
+            start_s = seg.start
+            end_s = seg.end
+            # Extract audio chunk (samples).
+            start_sample = int(start_s * 16000)
+            end_sample = int(end_s * 16000)
+            chunk = audio[start_sample:end_sample]
+            if chunk.size < 160:  # too short to decode meaningfully (~0.01 s)
+                continue
+            try:
+                chunk_segments, _ = self._model.transcribe(
+                    prepare_pcm(chunk),
+                    beam_size=3,
+                    language=dominant,
+                    multilingual=False,
+                    without_timestamps=True,
+                )
+                corrected_text = " ".join(s.text.strip() for s in chunk_segments).strip()
+                if corrected_text:
+                    segments[i] = _replace_segment_text(seg, corrected_text)
+            except Exception:
+                pass  # keep original on re-encode failure
+
+        return segments
 
     def transcribe_partial(self, audio: np.ndarray) -> str:
         """Fast greedy decode of the growing buffer for live partials.
@@ -873,9 +972,9 @@ class ResilientEngine:
             self._on_cpu_reason = "preference"
             self._preference_source = source
             if source == "battery":
-                print("Sur batterie — décodage CPU, le GPU est libéré (Réglages)")
+                print("Sur batterie : décodage CPU, le GPU est libéré (Réglages)")
             else:
-                print("CPU préféré (Réglages) — le GPU est libéré")
+                print("CPU préféré (Réglages) : le GPU est libéré")
         elif source and self._on_cpu_reason == "preference":
             self._preference_source = source  # e.g. unplugged with the box ticked
         elif not source and self._on_cpu_reason == "preference":
@@ -883,10 +982,10 @@ class ResilientEngine:
             if self._rebuild_gpu():
                 self._on_cpu = False
                 self._on_cpu_reason = None
-                print("Préférence CPU levée (Réglages ou secteur) — retour au GPU")
+                print("Préférence CPU levée (Réglages ou secteur) : retour au GPU")
             else:
                 self._on_cpu_reason = "failure"
-                print("Préférence CPU levée mais le GPU ne répond pas — on reste CPU")
+                print("Préférence CPU levée mais le GPU ne répond pas, on reste CPU")
 
     def _release_gpu(self) -> None:
         """Drop the CUDA engine and the VRAM with it.
