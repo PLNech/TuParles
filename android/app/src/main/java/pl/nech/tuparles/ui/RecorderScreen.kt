@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import android.view.inputmethod.InputMethodManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
@@ -83,6 +84,34 @@ import pl.nech.tuparles.record.RecorderState
 import pl.nech.tuparles.record.RecordingService
 import pl.nech.tuparles.util.Format
 import pl.nech.tuparles.util.TranscriptSnippet
+
+@Composable
+private fun KeyboardCard() {
+    val context = LocalContext.current
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Clavier de dictée", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Active TuParles dans les claviers. Le micro de SwiftKey ouvre " +
+                    "cette dictée si tu la choisis quand Android demande une appli. " +
+                    "HeliBoard bascule sur le clavier vocal. Gboard appelle Google, " +
+                    "pas nous. La saisie vocale du système, dans Langues et saisie, " +
+                    "peut aussi pointer ici.",
+            )
+            Button(onClick = {
+                context.startActivity(Intent(Settings.ACTION_INPUT_METHOD_SETTINGS))
+            }) { Text("Activer le clavier") }
+            TextButton(onClick = {
+                val imm = context.getSystemService(InputMethodManager::class.java)
+                imm?.showInputMethodPicker()
+            }) { Text("Choisir le clavier") }
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -167,6 +196,8 @@ fun RecorderScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             RecordControl(state.recorder, state.committed, state.partial, state.liveDegraded, onRecordTap)
+
+            KeyboardCard()
 
             if (modelState.showFirstRunCard) {
                 FirstRunModelCard(

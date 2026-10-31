@@ -24,8 +24,8 @@ android {
         applicationId = "pl.nech.tuparles"
         minSdk = 26 // no more Chaquopy floor; covers ~95% of devices
         targetSdk = 36
-        versionCode = 7
-        versionName = "1.0.1" // Long dictation takes: 2 h safety cap, unboxed PCM, streamed WAV write
+        versionCode = 8
+        versionName = "1.0.2" // A destroyed take stays in the notes list
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

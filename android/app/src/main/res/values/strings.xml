@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">TuParles</string>
+    <string name="keyboard_name">TuParles</string>
+    <string name="keyboard_subtype">Dictée</string>
+    <string name="voice_input_name">TuParles</string>
 </resources>

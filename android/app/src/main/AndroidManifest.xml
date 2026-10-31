@@ -37,6 +37,18 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.TuParles">
 
+        <!-- SwiftKey's mic starts this. HeliBoard prefers the voice IME subtype. -->
+        <activity
+            android:name=".input.RecognizeSpeechActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.TuParles">
+            <intent-filter>
+                <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
         <activity
             android:name=".ui.MainActivity"
             android:exported="true"
@@ -53,6 +65,36 @@
             android:name=".record.RecordingService"
             android:exported="false"
             android:foregroundServiceType="microphone" />
+
+        <!-- System voice input. Settings → Saisie vocale lists this. SwiftKey's
+             own mic does not bind it; the TuParles keyboard is the path that does. -->
+        <service
+            android:name=".input.TuParlesRecognizer"
+            android:exported="true"
+            android:foregroundServiceType="microphone"
+            android:label="@string/voice_input_name">
+            <intent-filter>
+                <action android:name="android.speech.RecognitionService" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <meta-data
+                android:name="android.speech"
+                android:resource="@xml/recognition_service" />
+        </service>
+
+        <!-- Dictation strip. Enable it in Settings → Claviers, then globe to it. -->
+        <service
+            android:name=".input.TuParlesKeyboard"
+            android:exported="true"
+            android:label="@string/keyboard_name"
+            android:permission="android.permission.BIND_INPUT_METHOD">
+            <intent-filter>
+                <action android:name="android.view.InputMethod" />
+            </intent-filter>
+            <meta-data
+                android:name="android.view.im"
+                android:resource="@xml/method" />
+        </service>
 
         <!-- Shares a note's WAV to another app via a content:// URI. We never send it
              ourselves — the receiving app does any sending, the user drives it. -->
