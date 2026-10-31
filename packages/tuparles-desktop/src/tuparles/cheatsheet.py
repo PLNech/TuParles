@@ -100,14 +100,14 @@ def _command_entries() -> list[CheatEntry]:
             "Commandes",
             "Effacer",
             tuple(v["delete_triggers"]),
-            f"DOUBLE le mot pour activer (« efface efface ») — l'interlock "
+            f"DOUBLE le mot pour activer (« efface efface ») : l'interlock "
             f"anti-prose. Unités : {units}. Ex : « delete delete deux mots ».",
         ),
         CheatEntry(
             "Commandes",
             "Annuler",
             tuple(v["undo"]),
-            "Annule la dernière action — réversible, donc aucun doublage requis.",
+            "Annule la dernière action (réversible, donc aucun doublage requis).",
         ),
         CheatEntry(
             "Commandes",

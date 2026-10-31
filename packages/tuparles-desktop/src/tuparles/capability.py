@@ -252,7 +252,7 @@ def probe(
                 "Wayland clipboard + uinput Ctrl+V",
             ),
         )
-        activate_layers = (Layer("gnome-ActivateById", False, "extension — not yet"),)
+        activate_layers = (Layer("gnome-ActivateById", False, "extension, not yet"),)
     else:
         class_layers = (
             Layer(
@@ -298,7 +298,7 @@ def probe(
         Chain(
             "window_activate",
             activate_layers,
-            fallback="no refocus — paste where focus is",
+            fallback="no refocus: paste where focus is",
             short="activate",
         ),
     )

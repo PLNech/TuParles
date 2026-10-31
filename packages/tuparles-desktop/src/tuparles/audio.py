@@ -194,7 +194,7 @@ class Recorder:
             _refresh_portaudio()
             self._stream = self._open(None)
             self._stream.start()
-            print("micro choisi indisponible — micro par défaut")
+            print("micro choisi indisponible, micro par défaut")
 
     def _open(self, device, env: dict | None = None):
         with _env_overrides(env):

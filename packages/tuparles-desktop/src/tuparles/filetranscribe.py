@@ -136,7 +136,7 @@ def decode_to_pcm(path: Path) -> np.ndarray:
         )
     except FileNotFoundError as exc:
         raise RuntimeError(
-            "ffmpeg introuvable — installe-le (`sudo apt install ffmpeg`)."
+            "ffmpeg introuvable : installe-le (`sudo apt install ffmpeg`)."
         ) from exc
     except subprocess.CalledProcessError as exc:
         msg = exc.stderr.decode("utf-8", "replace").strip().splitlines()
@@ -213,7 +213,7 @@ class FileTranscriber:
             import sys
 
             print(
-                f"GPU indisponible ({str(exc)[:120]}) — repli sur CPU.",
+                f"GPU indisponible ({str(exc)[:120]}), repli sur CPU.",
                 file=sys.stderr,
             )
             cpu_dev, cpu_compute, cpu_model = pick_device("cpu")
@@ -260,7 +260,7 @@ class FileTranscriber:
             import sys
 
             print(
-                f"GPU indisponible en cours de décodage ({str(exc)[:120]}) — "
+                f"GPU indisponible en cours de décodage ({str(exc)[:120]}), "
                 "repli sur CPU.",
                 file=sys.stderr,
             )

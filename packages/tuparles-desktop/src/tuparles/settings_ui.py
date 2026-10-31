@@ -86,7 +86,7 @@ class PrivacyDialog(QDialog):
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("TuParles — Pare-feu PII")
+        self.setWindowTitle("TuParles · Pare-feu PII")
         self.setMinimumSize(460, 520)
         self.setStyleSheet(theme.stylesheet())
         layout = QVBoxLayout(self)
@@ -112,7 +112,7 @@ class PrivacyDialog(QDialog):
         layout.addWidget(
             _hint(
                 "Ces termes sont <b>signalés</b> mais jamais masqués automatiquement "
-                "— tu gardes la main. Pour ce que tu veux surveiller sans l'effacer. "
+                ": tu gardes la main. Pour ce que tu veux surveiller sans l'effacer. "
                 "Un terme par ligne."
             )
         )
@@ -156,7 +156,7 @@ class PrivacyDialog(QDialog):
 class SettingsDialog(QDialog):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("TuParles — Réglages")
+        self.setWindowTitle("TuParles · Réglages")
         self.setMinimumSize(720, 480)
         self.resize(860, 600)
         self.setStyleSheet(theme.stylesheet())
@@ -256,7 +256,7 @@ class SettingsDialog(QDialog):
         layout.addWidget(_section("Repères de démarrage"))
         self._start_sound = QCheckBox("Bip au démarrage de la dictée")
         self._start_sound.setToolTip(
-            "Un petit son confirme que la dictée a démarré — tu peux parler. "
+            "Un petit son confirme que la dictée a démarré : tu peux parler. "
             "Le repère visuel (bulle + onde) est toujours actif."
         )
         self._start_sound.setChecked(bool(settings.get("start_cue_sound")))
@@ -343,10 +343,13 @@ class SettingsDialog(QDialog):
         layout.addWidget(self._ribbon_width)
 
         layout.addWidget(
-            _field_label("Lignes (1 = une seule ligne, sans historique compressé)")
+            _field_label(
+                "Lignes (0 = grandit jusqu'au tiers de l'écran, 1 = une seule ligne)"
+            )
         )
         self._ribbon_lines = QSpinBox()
-        self._ribbon_lines.setRange(1, 3)
+        self._ribbon_lines.setRange(0, 3)
+        self._ribbon_lines.setSpecialValueText("auto")
         self._ribbon_lines.setValue(int(settings.get("bubble_lines")))
         layout.addWidget(self._ribbon_lines)
 
@@ -398,7 +401,7 @@ class SettingsDialog(QDialog):
         layout.addWidget(
             _hint(
                 "TuParles colle via le presse-papiers, ce qui écrase ce que tu avais "
-                "copié. Coché, on le sauvegarde et on le remet après le collage — "
+                "copié. Coché, on le sauvegarde et on le remet après le collage, "
                 "uniquement s'il s'agit de texte (jamais une image ou des fichiers, "
                 "qu'un retour en texte détruirait). Contrepartie : le texte dicté "
                 "n'est plus laissé dans le presse-papiers pour un re-collage manuel."
@@ -421,8 +424,8 @@ class SettingsDialog(QDialog):
         layout.addWidget(_section("Silicium"))
         layout.addWidget(
             _hint(
-                "Quand quelqu'un d'autre veut la carte — entraînement d'un modèle, "
-                "jeu, rendu — la dictée peut tourner sur le CPU et ne réserver "
+                "Quand quelqu'un d'autre veut la carte (entraînement d'un modèle, "
+                "jeu, rendu), la dictée peut tourner sur le CPU et ne réserver "
                 "<b>aucune VRAM</b> : le moteur CUDA n'est alors même pas construit. "
                 "Plus lent, et le CPU ne suit pas le code-switching segment par "
                 "segment (le GPU reste le plafond de qualité). S'applique à la prise "
@@ -431,7 +434,7 @@ class SettingsDialog(QDialog):
                 "carte du tout."
             )
         )
-        self._prefer_cpu = QCheckBox("Préférer le CPU — laisser le GPU libre")
+        self._prefer_cpu = QCheckBox("Préférer le CPU (laisser le GPU libre)")
         self._prefer_cpu.setToolTip(
             "Décoche pour reprendre le GPU dès la prise suivante. Si le GPU a "
             "réellement lâché en cours de session, on reste sur CPU : la "
@@ -455,7 +458,7 @@ class SettingsDialog(QDialog):
         self._cpu_partials.setToolTip(
             "Affiche le texte au fil de la parole même sans GPU, via un petit "
             "modèle CPU (téléchargé une fois). Décoche sur une machine peu "
-            "puissante — la bulle garde alors l'onde sonore. (Le GPU n'est pas "
+            "puissante : la bulle garde alors l'onde sonore. (Le GPU n'est pas "
             "concerné : il a toujours l'aperçu.)"
         )
         self._cpu_partials.setChecked(bool(settings.get("cpu_partials_enabled")))
@@ -464,7 +467,7 @@ class SettingsDialog(QDialog):
         self._backend_toast = QCheckBox("Prévenir au passage GPU → CPU")
         self._backend_toast.setToolTip(
             "Si le GPU lâche en cours de session, une note te le dit une fois "
-            "(« Passé sur CPU — un peu plus lent »). Les barres passent de vert "
+            "(« Passé sur CPU, un peu plus lent »). Les barres passent de vert "
             "à bleu de toute façon ; ceci explique pourquoi."
         )
         self._backend_toast.setChecked(bool(settings.get("backend_toast")))
@@ -474,7 +477,7 @@ class SettingsDialog(QDialog):
         self._trim_silence = QCheckBox("Couper les silences en début/fin de prise")
         self._trim_silence.setToolTip(
             "Retire le silence avant le premier mot et après le dernier, pour "
-            "décoder plus vite — surtout sans GPU, où chaque seconde muette est "
+            "décoder plus vite, surtout sans GPU où chaque seconde muette est "
             "décodée pour rien. Prudent : garde une marge (0,2 s au début, 0,4 s "
             "à la fin), ne touche jamais aux pauses internes, et conserve la prise "
             "entière au moindre doute (résultat trop court ou trop rogné)."
@@ -539,7 +542,7 @@ class SettingsDialog(QDialog):
                 "(IBAN, n° de sécu, carte, clés d'API) <b>avant l'enregistrement</b> "
                 "dans l'historique. Le texte dicté est toujours collé tel quel : "
                 "seule la <i>copie conservée</i> est nettoyée. Attention, c'est "
-                "<b>irréversible</b> — la donnée masquée n'est pas gardée."
+                "<b>irréversible</b> : la donnée masquée n'est pas gardée."
             )
         )
         self._redact = QCheckBox("Masquer les PII dans l'historique")
@@ -556,12 +559,12 @@ class SettingsDialog(QDialog):
             _hint(
                 "Le <b>mode dev</b> enregistre l'<b>audio brut non masqué</b> de "
                 "chaque dictée sur le disque (local, jamais synchronisé) pour rejouer "
-                "un correctif. C'est ta <b>voix réelle</b>, pas le texte nettoyé — "
-                "laisse décoché sauf si tu déboggues. Quand c'est actif, un point "
+                "un correctif. C'est ta <b>voix réelle</b>, pas le texte nettoyé. "
+                "Laisse décoché sauf si tu déboggues. Quand c'est actif, un point "
                 "rouge reste affiché dans la barre des tâches."
             )
         )
-        self._dev_recording = QCheckBox("Mode dev — enregistrer l'audio brut")
+        self._dev_recording = QCheckBox("Mode dev (enregistrer l'audio brut)")
         self._dev_recording.setToolTip(
             "Enregistre ta voix non masquée localement (takes/<id>.wav), pour "
             "rejouer un correctif. La variable TUPARLES_DEV reste prioritaire."

@@ -38,12 +38,12 @@ def _bar(n: int, peak: int, width: int = 16) -> str:
 def _usage_html() -> str:
     s = introspect.usage_summary()
     if s["total"] == 0:
-        return "<p>Aucune donnée d'usage pour l'instant. Dicte un peu — tout reste sur ta machine.</p>"
+        return "<p>Aucune donnée d'usage pour l'instant. Dicte un peu : tout reste sur ta machine.</p>"
     out = [f"<h3>Ton usage</h3><p>{s['total']} évènements enregistrés, localement.</p>"]
 
     def _table(title: str, counts: dict) -> str:
         if not counts:
-            return f"<p><b>{title}</b> — rien encore.</p>"
+            return f"<p><b>{title}</b> : rien encore.</p>"
         peak = max(counts.values())
         rows = "".join(
             f"<tr><td><code>{k}</code></td><td align=right>{v}</td>"
@@ -62,8 +62,8 @@ def _usage_html() -> str:
     if never:
         items = "".join(f"<li><code>{n}</code></li>" for n in never)
         out.append(
-            "<p><b>Jamais utilisé</b> — des fonctions de syntaxe que tu n'as "
-            f"pas encore essayées :</p><ul>{items}</ul>"
+            "<p><b>Jamais utilisé</b> (des fonctions de syntaxe que tu n'as "
+            f"pas encore essayées) :</p><ul>{items}</ul>"
         )
     return "".join(out)
 
@@ -103,7 +103,7 @@ def _code_html() -> str:
         )
     repos = ", ".join(data.get("repos", [])) or "?"
     out = [
-        f"<h3>Ton code</h3><p><i>Dernière analyse — {repos} · "
+        f"<h3>Ton code</h3><p><i>Dernière analyse : {repos} · "
         f"{data.get('n_terms', 0):,} termes, "
         f"{data.get('n_candidates', 0):,} candidats.</i></p>"
     ]
@@ -162,12 +162,12 @@ class AnalyticsDialog(QDialog):
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("TuParles — Analytics")
+        self.setWindowTitle("TuParles · Analytics")
         self.setMinimumSize(460, 560)
         layout = QVBoxLayout(self)
         if not enabled():
             banner = QLabel(
-                "⚠ Le suivi d'usage est désactivé — « Ton usage » ne se "
+                "⚠ Le suivi d'usage est désactivé : « Ton usage » ne se "
                 "remplira pas tant qu'il l'est (Réglages › Confidentialité)."
             )
             banner.setWordWrap(True)
