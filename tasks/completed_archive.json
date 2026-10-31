@@ -825,5 +825,10 @@
     "task": "Ship the 2026-09-29 performance/responsiveness sprint to main",
     "date": "2026-09-29",
     "learnings": "A foreign repo checked out INSIDE your tree poisons every tool that walks the tree: ruff flags its files, and 'lint passed' silently depends on which paths you scoped. The catch: CI's contract (`ruff check packages tests scripts`) already ignored it — the poison only shows in a bare `ruff check .`, so local and CI can disagree without either being wrong. Fix is one line of extend-exclude + a gitignore entry, not a lint chase. Also: verify `git ls-files` before renaming a 'missing' file — the installer already existed as install.sh; the untracked `install` was a byte-identical stray duplicate."
+  },
+  {
+    "task": "macOS: tray-only bundle, boot permission gate, copy sweep",
+    "date": "2026-10-31",
+    "learnings": "Rebuilding TuParles.app swaps the executable and macOS TCC keys grants to that binary, so every reinstall silently deafens the chord (Input Monitoring) and mic — probe at every boot, not just first, and re-grant with a fresh launch (toggling a grant kills the running event tap; execv restart is not enough). CGPreflightMicrophoneAccess is gone from modern macOS and pyobjc never bound it: mic status goes through AVCaptureDevice (pyobjc-framework-AVFoundation). A listen-only CGEventTap probe from a terminal python hears keystrokes under the TERMINAL's identity, not the app's — TCC identity follows the bundle, so shell tests can't vouch for the app. And osascript notifications are attributed to Script Editor: clicking one opens an empty AppleScript doc; use NSUserNotification."
   }
 ]
