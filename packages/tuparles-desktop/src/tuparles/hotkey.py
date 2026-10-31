@@ -21,7 +21,9 @@ Three backends, one contract:
   user in the `input` group; scripts/setup_wayland.sh sets that up.
 """
 
+import os
 import selectors
+import subprocess
 import threading
 import time
 from collections.abc import Callable
@@ -73,6 +75,51 @@ class _ComboState:
                 self._on_combo_release(held)
 
 
+class _MacFocusWatcher:
+    """Ends a held chord when this app becomes the active one.
+
+    On macOS a click or Cmd-Tab that lands on TuParles swallows the key-up
+    of the chord that was still held in the previous app. pynput never sees
+    the release, so a push-to-talk take stays open and never pastes. The
+    activation itself is the release: the fingers left the other app.
+    """
+
+    def __init__(self, on_lost: Callable[[], None]) -> None:
+        self._on_lost = on_lost
+        self._stop = threading.Event()
+        self._thread = threading.Thread(
+            target=self._run, name="mac-focus-watch", daemon=True
+        )
+
+    def start(self) -> None:
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+
+    def _run(self) -> None:
+        was_front = False
+        while not self._stop.wait(0.2):
+            try:
+                out = subprocess.run(
+                    [
+                        "osascript",
+                        "-e",
+                        'tell application "System Events" to get unix id of first process whose frontmost is true',
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=1,
+                    check=False,
+                ).stdout.strip()
+                front = out == str(os.getpid())
+            except (OSError, subprocess.SubprocessError):
+                continue
+            if front and not was_front:
+                self._on_lost()
+            was_front = front
+
+
 class _PynputListener:
     def __init__(
         self,
@@ -98,15 +145,31 @@ class _PynputListener:
         self._listener = keyboard.Listener(
             on_press=self._on_press, on_release=self._on_release
         )
+        # Only the Mac chord loses its key-up across an app switch. Linux
+        # hears the release through evdev or X, below the focus change.
+        self._focus_watch: _MacFocusWatcher | None = (
+            _MacFocusWatcher(self.force_release) if IS_MACOS else None
+        )
 
     def start(self) -> None:
         self._listener.start()
+        if self._focus_watch is not None:
+            self._focus_watch.start()
 
     def join(self) -> None:
         self._listener.join()
 
     def stop(self) -> None:
+        if self._focus_watch is not None:
+            self._focus_watch.stop()
         self._listener.stop()
+
+    def force_release(self) -> None:
+        """The chord's key-up will not arrive. Treat both keys as up."""
+        if not self._pressed:
+            return
+        self._pressed.clear()
+        self._update()
 
     def _update(self) -> None:
         self._state.update(

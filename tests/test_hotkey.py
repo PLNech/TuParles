@@ -58,6 +58,30 @@ def test_chatter_within_guard_is_dropped(monkeypatch):
     assert fires == [100.0]  # the bounce did not double-fire
 
 
+def test_force_release_ends_a_held_chord(monkeypatch):
+    """A focus change that swallows the key-up must still report the hold.
+
+    That is the Mac click / Cmd-Tab case: the release never arrives, so the
+    listener clears the pressed set itself.
+    """
+    clock = [50.0]
+    st, fires, releases = _state(monkeypatch, clock)
+    listener = hotkey._PynputListener.__new__(hotkey._PynputListener)
+    listener._state = st
+    listener._pressed = {"cmd_r", "alt_r"}
+    listener._right_ctrl = {"cmd_r"}
+    listener._right_alt = {"alt_r"}
+    listener._focus_watch = None
+    listener._update()  # both keys down, the chord engages
+    clock[0] = 51.2
+    listener.force_release()
+    assert releases == [pytest.approx(1.2)]
+    assert fires == [50.0]
+    # A second focus blip with nothing held is a no-op.
+    listener.force_release()
+    assert releases == [pytest.approx(1.2)]
+
+
 def test_macos_chord_is_right_option_and_right_command(monkeypatch):
     """The built-in keyboard has no right Control. The two right-hand
     modifiers are Right Option and Right Command."""

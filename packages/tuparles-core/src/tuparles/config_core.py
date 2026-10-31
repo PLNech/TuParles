@@ -54,9 +54,13 @@ COMPRESS_MAX_MAKEUP = 60.0  # dB cap on the final peak makeup (hiss guard)
 # ~80-100, loud ~140-250) flat — normal speech sat *under* the floor. Lowered to
 # match: floor below normal speech, full-scale near a loud peak. (Per-mic
 # sensitivity / auto-gain would generalise this; the spectrum view AGCs anyway.)
-LEVEL_NOISE_FLOOR = 50.0  # RMS below this = silence: bars rest flat
-LEVEL_FULL_SCALE = 300.0  # RMS that should peg the meter
-LEVEL_GAMMA = 0.6  # <1 lifts quiet speech; 1.0 = linear
+LEVEL_NOISE_FLOOR = 40.0  # RMS below this = silence: bars rest flat
+# Soft speech on a Mac mic sits near 80–200 RMS. Full scale 1200 with a
+# near-linear gamma painted that as a stub, while the text was already
+# there. 700 is the loud end; gamma 0.55 lifts the quiet end into the
+# meter without pinning ordinary speech at the top (that was full scale 300).
+LEVEL_FULL_SCALE = 700.0  # RMS that should peg the meter
+LEVEL_GAMMA = 0.55  # <1 lifts quiet speech so a soft voice still moves the bars
 
 # Live-partials sanity filter (partials.py, #3): SUPPRESS decoder-flagged junk
 # from the provisional preview — never rewrite (a wrong autocorrect is worse

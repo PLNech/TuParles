@@ -188,7 +188,9 @@ regenerate with `QT_QPA_PLATFORM=offscreen poetry run python scripts/readme_scre
   on Metal (`poetry install --with mlx`). The chord there is **Right Option +
   Right Command** (a built-in Mac keyboard has no right Control), and the take
   pastes with Cmd+V. Accessibility permission is required for both the chord
-  and the paste. See `docs/research/2026-10-28-mlx-apple-silicon.md`.
+  and the paste. Spotlight finds it after `bash scripts/install_macos_app.sh`
+  (writes `/Applications/TuParles.app`). See
+  `docs/research/2026-10-28-mlx-apple-silicon.md`.
 - **CPU fallback**: used automatically when no GPU answers. Two rungs, chosen
   by what's installed:
   - [whisper.cpp](https://github.com/ggml-org/whisper.cpp) via
@@ -330,7 +332,8 @@ git clone --depth 1 https://github.com/antirez/qwen-asr vendor/qwen-asr
 make -C vendor/qwen-asr blas
 # model weights: see install.sh for the five files to fetch into models/
 cp vocab.example.txt vocab.txt           # then add your own names/jargon
-bash scripts/install_desktop.sh          # desktop launcher (optional)
+bash scripts/install_desktop.sh          # Linux launcher (optional)
+bash scripts/install_macos_app.sh        # macOS: /Applications/TuParles.app
 poetry run tuparles
 ```
 

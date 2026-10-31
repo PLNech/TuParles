@@ -33,6 +33,7 @@ from PySide6.QtGui import QColor, QCursor, QFont, QFontMetrics, QPainter
 from PySide6.QtWidgets import QApplication, QWidget
 
 from tuparles import settings
+from tuparles.config import IS_MACOS
 
 WIDTH, HEIGHT = 460, 56  # the pill; also the ribbon's min width + 1-line height
 V_PAD = 16  # full-view vertical text padding
@@ -181,8 +182,9 @@ def chip_color(state: str, base: QColor) -> QColor:
 # ── the ribbon (#132): the "full" view grows WIDE first ──────────────────────
 # The old full view was a 460×300 vertical tower planted over the code. The
 # ribbon spends the abundant axis instead: it widens along the bottom edge up to
-# a fraction of the screen BEFORE it ever adds a second line, then caps at
-# `bubble_lines` (default 2, ≈76 px). Older text drops into a dim, smaller,
+# a fraction of the screen BEFORE it ever adds a second line, then grows
+# upward to a third of the screen (`bubble_lines` 0). 2 or 3 pin the short
+# ribbon. Older text drops into a dim, slightly smaller,
 # left-aligned "history" register above the bright, larger, RIGHT-anchored live
 # tail — so recency reads as brightness + size (never a hue change, house
 # doctrine `feedback-signal-more-by-brightness-not-hue`) and the freshest words
@@ -195,8 +197,12 @@ def chip_color(state: str, base: QColor) -> QColor:
 # char budget are tested headless with a fake measurer — the paint pass only
 # draws what these return (the house pattern, like `chip_color`/`state_color`).
 
-RIBBON_MAX_CHARS = 750  # chars kept visible before the oldest trim behind "…"
-RIBBON_HIST_SCALE = 0.78  # history register font vs the live tail (recency=size)
+RIBBON_MAX_CHARS = 4000  # chars kept visible before the oldest trim behind "…"
+RIBBON_HIST_SCALE = 0.86  # history register font vs the live tail (recency=size)
+# The ribbon may climb this fraction of the screen, anchored at the bottom.
+# Past it, the oldest words trim. A third is enough to read a long take
+# without covering the window being dictated into.
+RIBBON_MAX_HEIGHT_FRAC = 1 / 3
 
 
 @dataclass(frozen=True)
@@ -283,7 +289,7 @@ def plan_ribbon(
     single_px = measure_live(text)
     width = ribbon_widen(chrome_px + single_px, fixed_w, ceiling)
     avail_live = width - chrome_px
-    if single_px <= avail_live or max_lines <= 1:
+    if single_px <= avail_live or max_lines == 1:
         # Fits by widening, or the user pinned a single strip: one line. When a
         # forced single strip overflows, paint elides-left (freshest visible).
         return RibbonLayout(width=width, live=text, history="", single_line=True)
@@ -310,7 +316,13 @@ class Bubble(QWidget):
             None,
             Qt.FramelessWindowHint
             | Qt.WindowStaysOnTopHint
-            | Qt.Tool,  # no taskbar entry
+            | Qt.WindowDoesNotAcceptFocus
+            # Tool is right on X11 (no taskbar entry). On macOS a Tool window
+            # is an NSPanel owned by the process, and with an activation
+            # policy of regular it never appears — the take recorded, the
+            # paste landed, the face stayed blank. ToolTip is the overlay
+            # that shows without taking focus or a Dock bounce.
+            | (Qt.ToolTip if IS_MACOS else Qt.Tool),
         )
         # Transparent corners + never steal focus from the dictation target.
         self.setAttribute(Qt.WA_TranslucentBackground)
@@ -497,13 +509,21 @@ class Bubble(QWidget):
             return 0.92
 
     def _max_lines(self) -> int:
-        """« Lignes du bandeau » (1..3): the ribbon's line cap. 1 = a single
-        strip, no history register."""
+        """« Lignes du bandeau ». 0 grows until a third of the screen. 1 is a
+        single strip. 2 or 3 pin the short ribbon."""
         try:
             n = int(settings.get("bubble_lines"))
         except (TypeError, ValueError):
-            return 2
+            return 0
+        if n <= 0:
+            return 0
         return max(1, min(3, n))
+
+    def _height_cap_px(self) -> int:
+        screen = self._target_screen()
+        geo = screen.availableGeometry() if screen is not None else None
+        screen_h = geo.height() if geo is not None else 800
+        return max(HEIGHT, round(screen_h * RIBBON_MAX_HEIGHT_FRAC))
 
     def _ribbon_layout(self) -> RibbonLayout:
         """Decide + memoize the ribbon layout for the current text/screen/
@@ -536,18 +556,23 @@ class Bubble(QWidget):
         return QFontMetrics(self._hist_font()).height() + 4
 
     def _history_lines(self, layout: RibbonLayout) -> int:
-        """How many compressed lines the history wraps to: ≥1 when there's
-        history, capped at `bubble_lines`-1 (the live tail owns the last line)."""
+        """How many compressed lines the history wraps to. The live tail owns
+        the last line. A pinned ribbon (2 or 3) keeps its old short cap. The
+        growing default fills up to a third of the screen, then stops."""
         if not layout.history:
             return 0
-        cap = max(1, self._max_lines() - 1)
         avail = max(1, layout.width - self._chrome_px())
         fm = QFontMetrics(self._hist_font())
         needed = fm.boundingRect(
             QRect(0, 0, avail, 10_000), Qt.TextWordWrap, layout.history
         ).height()
         line_h = max(1, fm.lineSpacing())
-        return max(1, min(cap, math.ceil(needed / line_h)))
+        wanted = max(1, math.ceil(needed / line_h))
+        pinned = self._max_lines()
+        if pinned >= 2:
+            return min(wanted, pinned - 1)
+        room = self._height_cap_px() - HEIGHT
+        return min(wanted, max(1, room // self._hist_line_h()))
 
     def _desired_size(self) -> tuple[int, int]:
         """(width, height) for the current view. Minimal (and empty full) → the
@@ -705,11 +730,19 @@ class Bubble(QWidget):
         if self._state != "recording":
             color = QColor(color)
             color.setAlpha(140)
+        # Voice that pegs the meter used to paint at full alpha, which reads as
+        # a shout. Keep the height, drop the ink, so a loud take stays legible
+        # next to the text.
+        if self._state == "recording":
+            color = QColor(color)
+            color.setAlpha(168)
         p.setBrush(color)
 
         x = 24.0
-        cy = self.height() / 2
-        max_half = (HEIGHT - 22) / 2
+        # Sit the bars on the live line, not the vertical centre of a ribbon
+        # that has grown a third of the screen tall.
+        cy = self.height() - HEIGHT / 2
+        max_half = (HEIGHT - 28) / 2
         for i in range(BAR_COUNT):
             if self._state == "recording":
                 lvl = self._levels[i]
@@ -872,7 +905,9 @@ class QueueChips(QWidget):
     ) -> None:
         super().__init__(
             None,
-            Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool,
+            Qt.FramelessWindowHint
+            | Qt.WindowStaysOnTopHint
+            | (Qt.ToolTip if IS_MACOS else Qt.Tool),
         )
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_ShowWithoutActivating)

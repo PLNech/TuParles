@@ -10,7 +10,7 @@ _DEFAULTS: dict[str, object] = {
     # a long take elided to ~5 words starves you of context. Minimal stays the
     # opt-in "discreet pill".
     "view": "full",
-    "languages": [],  # ISO codes; empty = auto-detect among all 100
+    "languages": ["fr", "en"],  # TuParles standard: French + English
     "input_device": None,  # mic name; None/empty = system default
     "telemetry_enabled": True,  # LOCAL usage introspection; opt-out, never leaves the box
     # PII firewall (#102) — minimize before persist / analyze. Block-tier only
@@ -71,11 +71,10 @@ _DEFAULTS: dict[str, object] = {
     # the total override for people who liked the small footprint. Read fresh
     # each layout pass, so a Réglages change lands on the next partial.
     "bubble_max_width": 0.92,
-    # « Lignes du bandeau » (1..3): the ribbon's line cap. 2 (default) = a bright
-    # live tail + one dim, smaller compressed-history line above it (recency =
-    # brightness + size, never a hue change). 1 = a single strip, no history
-    # register (least motion). 3 = two history lines for more overview.
-    "bubble_lines": 2,
+    # « Lignes du bandeau ». 0 (default) grows with the take, up to a third of
+    # the screen, so a long phrase stays readable. 1 = a single strip, no
+    # history. 2 or 3 pin the old short ribbon for people who want it small.
+    "bubble_lines": 0,
     # « Taille du texte »: the live tail's point size (the compressed history
     # renders smaller). The missing accessibility knob and the HiDPI escape
     # hatch — 10.5 is the historical default. Applies live, no restart.

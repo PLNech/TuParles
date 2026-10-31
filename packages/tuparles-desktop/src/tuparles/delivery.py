@@ -87,6 +87,10 @@ class DeliveryTarget:
 
     wm_class: str = ""
     window_id: str = ""
+    # macOS: pid of the frontmost app when the take started. Paste activates
+    # it first, so a click or Cmd-Tab onto TuParles mid-chord still delivers
+    # into the app the user was dictating into.
+    pid: str = ""
 
 
 def capture_target() -> DeliveryTarget:
@@ -98,9 +102,9 @@ def capture_target() -> DeliveryTarget:
     if _on_wayland():
         return DeliveryTarget(wm_class=_focus_wm_class(timeout=0.5))
     if _on_macos():
-        # No window id we can refocus by. Paste lands in whatever holds focus
-        # at delivery time; the bubble hides first so it isn't that window.
-        return DeliveryTarget()
+        # No window id. The frontmost pid is enough to activate that app
+        # again before Cmd+V, which is what a click onto TuParles breaks.
+        return DeliveryTarget(pid=_macos_front_pid())
     try:
         wid = subprocess.run(
             ["xdotool", "getactivewindow"],
@@ -160,6 +164,46 @@ def _x11_wm_class(window_id: str) -> str:
     # WM_CLASS(STRING) = "instance", "class"  → keep both, pipe-joined.
     vals = re.findall(r'"((?:[^"\\]|\\.)*)"', out)
     return "|".join(vals) if vals else ""
+
+
+def _macos_front_pid() -> str:
+    """Unix pid of the frontmost app, or '' if System Events will not say."""
+    try:
+        out = subprocess.run(
+            [
+                "osascript",
+                "-e",
+                'tell application "System Events" to get unix id of first process whose frontmost is true',
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=1,
+        ).stdout.strip()
+    except (subprocess.SubprocessError, OSError):
+        return ""
+    return out if out.isdigit() else ""
+
+
+def activate_pid(pid: str) -> bool:
+    """Raise the app that owns `pid`. macOS paste has no window id, so the
+    origin app is the unit we can hand focus back to. A dead pid is a no-op."""
+    if not pid or not pid.isdigit():
+        return False
+    try:
+        subprocess.run(
+            [
+                "osascript",
+                "-e",
+                f'tell application "System Events" to set frontmost of first process whose unix id is {int(pid)} to true',
+            ],
+            check=False,
+            timeout=2,
+            capture_output=True,
+        )
+        return True
+    except (subprocess.SubprocessError, OSError):
+        return False
 
 
 def activate_window(window_id: str) -> bool:
@@ -239,7 +283,7 @@ def deliver(
     # _recover_with_partial). to_clipboard uses check=True, so this can raise.
     to_clipboard(text)
     t1 = time.monotonic()
-    _type_into_focus(text, target.wm_class, before_paste, seq=seq)
+    _type_into_focus(text, target, before_paste, seq=seq)
     t2 = time.monotonic()
     if restore is not None:
         time.sleep(
@@ -660,11 +704,17 @@ _MACOS_PASTE = (
 )
 
 
-def _macos_paste(seq: "int | None" = None) -> None:
+def _macos_paste(seq: "int | None" = None, pid: str = "") -> None:
     """One Cmd+V into whatever holds focus. The clipboard already holds the text.
 
     System Events needs Accessibility. A refusal is logged and the text stays
-    on the clipboard — the same degrade as a missing xsel."""
+    on the clipboard — the same degrade as a missing xsel.
+
+    `pid` is the app that was frontmost when the take started. Activating it
+    first is what makes a mid-chord click onto TuParles still paste there.
+    """
+    if pid and pid != str(os.getpid()):
+        activate_pid(pid)
     try:
         subprocess.run(
             ["osascript", "-e", _MACOS_PASTE],
@@ -683,15 +733,25 @@ def _macos_paste(seq: "int | None" = None) -> None:
 
 
 def _type_into_focus(
-    text: str, focus_class: str = "", before_paste=None, seq: "int | None" = None
+    text: str,
+    target: "DeliveryTarget | str | None" = None,
+    before_paste=None,
+    seq: "int | None" = None,
 ) -> None:
+    # Callers used to pass a bare wm_class. Keep that shape working.
+    if isinstance(target, str) or target is None:
+        focus_class = target or ""
+        pid = ""
+    else:
+        focus_class = target.wm_class
+        pid = target.pid
     if _on_macos():
         if before_paste is not None:
             try:
                 before_paste()
             except Exception:
                 pass
-        _macos_paste(seq)
+        _macos_paste(seq, pid=pid)
         return
     if _on_wayland():
         # Wayland always pastes (typing garbles azerty). Chunk the long/

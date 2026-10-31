@@ -2,7 +2,75 @@
 
 ## Unreleased — performance and responsiveness
 
+### Added
+- **A macOS permission gate at boot.** Rebuilding TuParles.app swaps the
+  executable, and macOS TCC keys its grants to that binary: a reinstall
+  can silently reset Input Monitoring (the chord goes deaf) and
+  Microphone. The daemon now preflights both at every launch
+  (`permissions.py`), shows the system dialog only when a grant is
+  missing — before the hotkey listener starts, so a grant given on the
+  spot is used that boot — and names what to re-grant when the answer is
+  no. Accessibility (the auto-paste) is preflighted silently and named in
+  the tray note; missing pyobjc bindings degrade the gate to a no-op.
+  Toggling a grant in System Settings kills the running event tap: only
+  a fresh launch revives it, so quit and relaunch after touching
+  permissions.
+
+- **Android dictation, the three doors other Whisper apps use.** A voice
+  IME (HeliBoard switches to it, ABC returns), a system RecognitionService
+  (Settings → Saisie vocale), and ACTION_RECOGNIZE_SPEECH, which is what
+  SwiftKey's mic starts. Gboard ignores all three and calls Google. FUTO
+  and whisperIME are the references. No second model runtime: the existing
+  whisper.cpp engine decodes.
+
+### Released
+- **Android 1.0.2 (versionCode 8).** Same notes-list fix as the debug
+  install, signed with the upload key so it can replace the Play copy
+  without wiping notes. versionCode 7 was already on the device.
+
+### Changed
+- **The Mac bubble reads a long take.** Bars no longer peg on ordinary
+  speech, and a soft voice still lifts them (full scale 700, gamma 0.55). The ribbon grows upward
+  from the bottom of the screen, up to a third of it, so the whole phrase
+  stays visible: the live tail large, the earlier words a little smaller
+  above it. `bubble_lines` 0 is that growth; 1–3 still pin the short ribbon.
+
+### Fixed
+- **TuParles leaves the Cmd-Tab switcher.** The generated Info.plist said
+  `LSUIElement false`, so the tray daemon registered as a regular
+  application: Dock icon, switcher entry, all of it. It is now
+  `true`, with the same accessory activation policy set at runtime for
+  terminal runs; the menu-bar status item survives both.
+- **The translation-flip guard no longer crashes the GPU decode.**
+  `_validate_and_correct_segments` sliced an `audio` variable it never
+  received; a detected language flip would have raised NameError mid-take.
+  The take's samples are now passed in.
+- **The Mac bubble shows.** A `Tool` window never appeared: the take
+  recorded and the paste landed, and the face stayed blank. The overlay
+  is a tooltip-style window there, still without focus and without a
+  Dock bounce.
+- **A Mac chord that loses its key-up still finishes the take.** Clicking
+  TuParles, or Cmd-Tab onto it, while Right Option + Right Command are
+  held used to swallow the release: the take stayed open and never
+  pasted. Becoming the front app now counts as the release. The paste
+  activates the app that was frontmost when the take started, so the
+  text lands there.
+
 ### Infra
+- **No cadratins in the copy.** Every em dash is gone from user-facing
+  strings (notifications, toasts, tray tooltip, dialog and window titles,
+  cheat sheet, boot prints): colon to announce, comma to continue,
+  parentheses for asides, middle dot in titles. Comments and docstrings
+  keep theirs; the French dialogue-turn marker in exported transcripts
+  (`— Bonjour`) is typography, not a telltale.
+- **macOS Spotlight finds TuParles, and the tray is TuParles.**
+  `scripts/install_macos_app.sh` writes `/Applications/TuParles.app`.
+  The executable is a copy of the venv interpreter, not a shell that
+  execs it: a scripted exec makes macOS attribute the process to
+  Homebrew's `Python.app`, and the menu-bar icon then lands off-screen.
+  The chord permission prompt names TuParles. A second launch while one
+  is up exits on the instance lock, which reads as "I opened it twice
+  and nothing happened".
 - **A debug install sits beside the Play copy.** `pl.nech.tuparles.debug`,
   launcher name "TuParles debug". A debug signature cannot update the
   signed app, and uninstalling that copy would wipe its notes. The debug

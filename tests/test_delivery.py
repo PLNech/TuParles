@@ -664,7 +664,25 @@ class TestCaptureTarget:
             lambda text, fc="", bp=None, seq=None: seen.update(fc=fc),
         )
         delivery.deliver("hi", delivery.DeliveryTarget(wm_class="kitty", window_id="9"))
-        assert seen["fc"] == "kitty"
+        assert seen["fc"].wm_class == "kitty"
+
+
+class TestMacOriginPaste:
+    def test_capture_records_front_pid(self, monkeypatch):
+        monkeypatch.setitem(delivery._SESSION, "macos", True)
+        monkeypatch.setattr(delivery, "_macos_front_pid", lambda: "4242")
+        t = delivery.capture_target()
+        assert t.pid == "4242" and t.window_id == ""
+
+    def test_paste_activates_the_origin_pid(self, monkeypatch):
+        activated = []
+        monkeypatch.setitem(delivery._SESSION, "macos", True)
+        monkeypatch.setattr(delivery, "activate_pid", lambda pid: activated.append(pid) or True)
+        monkeypatch.setattr(
+            delivery.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess([], 0)
+        )
+        delivery._macos_paste(pid="4242")
+        assert activated == ["4242"]
 
 
 class TestOriginFocus:

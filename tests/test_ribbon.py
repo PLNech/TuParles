@@ -198,6 +198,31 @@ class TestBubbleRibbonWiring:
         assert b.width() == WIDTH
         assert b.height() == HEIGHT
 
+    def test_long_take_grows_past_two_lines_up_to_a_third(self, tmp_path, monkeypatch):
+        pytest.importorskip("PySide6")
+        from tuparles.ui import HEIGHT, RIBBON_MAX_HEIGHT_FRAC, WIDTH
+
+        b = self._bubble(tmp_path, monkeypatch)
+        b.set_partial("mot " * 800)
+        assert b.width() > WIDTH
+        assert b.width() <= round(1920 * 0.92)
+        # A paragraph, not a two-line strip. Still anchored under a third.
+        assert b.height() > HEIGHT * 3
+        assert b.height() <= round(1200 * RIBBON_MAX_HEIGHT_FRAC) + 4
+        layout = b._ribbon_layout()
+        assert layout.single_line is False
+        assert layout.history and layout.live
+
+    def test_pinned_two_lines_stays_short(self, tmp_path, monkeypatch):
+        pytest.importorskip("PySide6")
+        from tuparles import settings
+        from tuparles.ui import HEIGHT
+
+        b = self._bubble(tmp_path, monkeypatch)
+        settings.put("bubble_lines", 2)
+        b.set_partial("mot " * 300)
+        assert HEIGHT < b.height() < HEIGHT * 3
+
     def test_long_take_widens_and_grows_to_two_lines(self, tmp_path, monkeypatch):
         pytest.importorskip("PySide6")
         from tuparles.ui import HEIGHT, WIDTH

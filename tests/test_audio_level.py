@@ -43,7 +43,21 @@ def test_mid_speech_is_clearly_visible():
     mid = (LEVEL_NOISE_FLOOR + LEVEL_FULL_SCALE) / 2
     level = _level_at(mid)
     assert level > mid / 8000  # strictly more visible than the old linear map
-    assert 0.3 < level < 0.8
+    assert 0.25 < level < 0.85
+
+
+def test_ordinary_close_mic_speech_does_not_peg():
+    """A Mac close-talk RMS around 400 used to slam the meter (full scale
+    was 300). It should travel the upper middle, with room left above."""
+    level = _level_at(400)
+    assert 0.45 < level < 0.9
+
+
+def test_soft_speech_still_lifts_the_bars():
+    """Soft speech the decoder already shows as text must move the meter.
+    A near-linear map at full scale 1200 painted this as a stub."""
+    level = _level_at(120)
+    assert level > 0.25
 
 
 def test_monotonic_in_loudness():
