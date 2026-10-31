@@ -385,13 +385,13 @@ def test_empty_final_with_partial_recovers(monkeypatch):
 def test_backend_shift_message_pure():
     assert backend_shift_message("gpu", False) is None  # still on GPU, nothing to say
     assert backend_shift_message("cpu", True) is None  # already announced this session
-    assert backend_shift_message("cpu", False) == "Passé sur CPU — un peu plus lent"
+    assert backend_shift_message("cpu", False) == "Passé sur CPU, un peu plus lent"
 
 
 def test_backend_shift_message_names_the_battery():
     """On battery the move to CPU is a choice, not a breakdown — say so."""
     assert backend_shift_message("cpu", False, "battery") == (
-        "Sur batterie — passé sur CPU pour l'économiser"
+        "Sur batterie : passé sur CPU pour l'économiser"
     )
     assert backend_shift_message("cpu", True, "battery") is None
     assert backend_shift_message("gpu", False, None) is None
@@ -418,7 +418,7 @@ def test_finish_announces_cpu_fallback_once(monkeypatch):
     # Routed through the persistent-STATE channel (#132), not `command`→show_final
     # (which early-returns while recording and could swallow it for the session).
     toasts = [e[0] for e in bridge.status.emits if "CPU" in e[0]]
-    assert toasts == ["Passé sur CPU — un peu plus lent"]
+    assert toasts == ["Passé sur CPU, un peu plus lent"]
     assert not any("CPU" in e[0] for e in bridge.command.emits)
     assert c._backend_announced is True
 

@@ -12,6 +12,7 @@ python = ">=3.11,<3.15"
 # Desktop pulls tuparles-core transitively (its own path dep, develop=true), so a
 # single root install yields both distributions editable in the shared namespace.
 tuparles = { path = "packages/tuparles-desktop", develop = true }
+pyobjc-framework-avfoundation = {markers = "sys_platform == \"darwin\"", version = "^13.0"}
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0"

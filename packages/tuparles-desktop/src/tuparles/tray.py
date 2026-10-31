@@ -166,6 +166,7 @@ class Tray(QObject):
         self._frame = 0  # index into the live animation loop (0.._ANIM_FRAMES-1)
         self._animate = bool(settings.get("tray_animation"))
         self._dev_dot = takes.dev_recording_enabled()
+        self._perm_note = ""  # set by warn_permissions, cleared on re-check
 
         self._menu = QMenu()
         self._toggle_act = self._menu.addAction("Dicter")
@@ -294,7 +295,9 @@ class Tray(QObject):
             if IS_MACOS
             else "Ctrl droit + Alt droit"
         )
-        base = f"TuParles — {chord} pour dicter"
+        base = f"TuParles · {chord} pour dicter"
+        if self._perm_note:
+            base += f"\n{self._perm_note}"
         if self._dev_dot:
             base += "\n⚠ Mode dev : audio brut (non masqué) enregistré sur le disque"
         if base != self._tooltip:
@@ -339,6 +342,15 @@ class Tray(QObject):
         self._sync_timer()
         self._refresh_tooltip()  # dev capture may have just been toggled
         self._show()  # reflect the change at once, if there is one
+
+    def warn_permissions(self, labels: list[str]) -> None:
+        """A missing TCC grant is a standing condition, so the tooltip carries
+        it for as long as it lasts: a boot notification is too quick to read,
+        and clicking it should never land in Script Editor. One banner now,
+        the tooltip until it's fixed."""
+        self._perm_note = "⚠ Autorisations manquantes : " + ", ".join(labels)
+        self._refresh_tooltip()
+        self._tray.showMessage("TuParles", self._perm_note + ". Puis relance.")
 
     def _open_settings(self) -> None:
         from tuparles.settings_ui import SettingsDialog

@@ -11,6 +11,7 @@ never race the final beam decode.
 
 import queue
 import signal
+import subprocess
 import sys
 import threading
 import time
@@ -24,6 +25,7 @@ from tuparles import (
     cue,
     history,
     mapping_canary,
+    permissions,
     privacy_policy,
     quickchat,
     settings,
@@ -111,8 +113,8 @@ def backend_shift_message(
     once already announced. Pure — headless-tested."""
     if backend == "cpu" and not already_announced:
         if reason == "battery":
-            return "Sur batterie — passé sur CPU pour l'économiser"
-        return "Passé sur CPU — un peu plus lent"
+            return "Sur batterie : passé sur CPU pour l'économiser"
+        return "Passé sur CPU, un peu plus lent"
     return None
 
 
@@ -206,7 +208,7 @@ class Controller(QObject):
             # silent drop; the user is told to wait.
             cap = int(settings.get("queue_depth_cap"))
             if self._pending >= cap:
-                self._bridge.error.emit(f"File pleine ({self._pending}) — patiente")
+                self._bridge.error.emit(f"File pleine ({self._pending}), patiente")
                 return
             self._press_started_take = True
             self._last_partial = ""  # fresh take, no preview shown yet (#10)
@@ -778,6 +780,26 @@ def _rss_mb() -> float:
     return 0.0
 
 
+def _macos_notify(title: str, body: str) -> None:
+    """A notification that belongs to TuParles: clicking it activates the
+    app, not Script Editor (osascript notifications are attributed there,
+    and an empty AppleScript document is a poor landing page)."""
+    try:
+        from AppKit import NSUserNotification, NSUserNotificationCenter
+
+        note = NSUserNotification.alloc().init()
+        note.setTitle_(title)
+        note.setInformativeText_(body)
+        NSUserNotificationCenter.defaultUserNotificationCenter().deliverNotification_(
+            note
+        )
+    except Exception:
+        subprocess.run(
+            ["osascript", "-e", f'display notification "{body}" with title "{title}"'],
+            check=False,
+        )
+
+
 def run() -> None:
     import fcntl
     import os
@@ -803,7 +825,14 @@ def run() -> None:
     try:
         fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
-        print("TuParles tourne déjà — cette instance s'efface.")
+        print("TuParles tourne déjà, cette instance s'efface.")
+        # Spotlight launches have no terminal. A silent exit is what made a
+        # second open look like the app had not started.
+        if IS_MACOS:
+            _macos_notify(
+                "TuParles",
+                "Déjà lancé : l'icône est dans la barre de menus.",
+            )
         return
 
     # Wayland: KWin/Mutter ignore client move()/xprop, so the frameless bubble
@@ -813,16 +842,38 @@ def run() -> None:
     # wl-clipboard) since XDG_SESSION_TYPE stays "wayland".
     if IS_WAYLAND and not os.environ.get("QT_QPA_PLATFORM"):
         os.environ["QT_QPA_PLATFORM"] = "xcb"
-        print("Wayland — rendering the bubble via XWayland (QT_QPA_PLATFORM=xcb).")
+        print("Wayland: rendering the bubble via XWayland (QT_QPA_PLATFORM=xcb).")
 
+    perm_missing: list[str] = []  # macOS only; the tray carries the standing note
     app = QApplication([])
     app.setQuitOnLastWindowClosed(False)  # the bubble hides, the daemon lives
+    if IS_MACOS:
+        # Tray-only: the menu-bar status item is the face of the app; a Dock
+        # icon and a Cmd-Tab entry are noise for a push-to-talk daemon.
+        # LSUIElement covers the .app bundle; this covers a terminal run,
+        # which would otherwise land in the switcher as "Python".
+        from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
+
+        NSApplication.sharedApplication().setActivationPolicy_(
+            NSApplicationActivationPolicyAccessory
+        )
+        # Rebuild the .app and TCC forgets you: probe the grants the chord
+        # and the mic depend on. Prompts only when a grant is missing, and
+        # runs before the hotkey listener starts so a grant given on the
+        # spot is used this boot. The tray repeats the warning (a boot
+        # notification is gone before it's read).
+        perm_missing = permissions.missing_macos_permissions(prompt=True)
+        if perm_missing:
+            print(
+                f"Autorisations manquantes : {' et '.join(perm_missing)}. "
+                "Réglages Système › Confidentialité et sécurité, puis relance."
+            )
     if app.platformName() == "wayland":
         # Forced native Wayland (no XWayland / overridden): degrade gracefully —
         # bottom-centre placement and all-desktops stickiness are the
         # compositor's call now (see Bubble._make_sticky). Say so, don't pretend.
         print(
-            "Note: native Wayland (Qt platform 'wayland') — the compositor "
+            "Note: native Wayland (Qt platform 'wayland'): the compositor "
             "controls bubble placement; bottom-centre and stickiness may not apply."
         )
 
@@ -877,6 +928,8 @@ def run() -> None:
         os.execv(sys.argv[0], sys.argv)
 
     tray.restart_requested.connect(_restart)
+    if perm_missing:
+        tray.warn_permissions(perm_missing)
 
     listener = HotkeyListener(
         on_toggle=bridge.toggled.emit,
@@ -890,7 +943,7 @@ def run() -> None:
         if IS_MACOS
         else "Right Ctrl + Right Alt"
     )
-    print(f"TuParles daemon up — {chord} to dictate. Ctrl-C quits.")
+    print(f"TuParles daemon up: {chord} to dictate. Ctrl-C quits.")
 
     # Cross-env capability report (#29): probe what this box can actually do and
     # log it ONCE, so a gap (an absent xdotool subcommand, no paste tool) is
@@ -908,7 +961,7 @@ def run() -> None:
             "TUPARLES_DEV" if os.environ.get("TUPARLES_DEV") is not None else "Réglages"
         )
         print(
-            f"⚠ Mode dev actif ({src}) — l'audio brut non masqué est enregistré sur le disque."
+            f"⚠ Mode dev actif ({src}) : l'audio brut non masqué est enregistré sur le disque."
         )
 
     # First launch (or a release that added an axis): point at the personalization
@@ -921,7 +974,10 @@ def run() -> None:
 
     # Qt's loop won't run Python signal handlers unless the interpreter gets
     # scheduled; the no-op timer keeps Ctrl-C responsive.
+    # SIGINT is Ctrl-C in a terminal. SIGTERM is what a relaunch sends. Without
+    # the handler the Qt loop swallows it and the old daemon keeps the lock.
     signal.signal(signal.SIGINT, lambda *_: app.quit())
+    signal.signal(signal.SIGTERM, lambda *_: app.quit())
     waker = QTimer()
     waker.start(200)
     waker.timeout.connect(lambda: None)
