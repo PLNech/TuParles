@@ -48,6 +48,13 @@ STUB="$REPO/scripts/macos_app_main.m"
   $("$PYCFG" --cflags --ldflags --embed) -lpython3.13
 chmod 755 "$MACOS/TuParles"
 
+# Re-sign with an explicit identifier. clang's linker-signed adhoc signature
+# carries Identifier=TuParles (it ignores CFBundleIdentifier) and no usable
+# designated requirement, so TCC keys grants to the cdhash: they die on
+# relaunch and every rebuild. An explicit adhoc signature with the bundle
+# identifier gives TCC a stable identity — grant once, keep across rebuilds.
+codesign --force --sign - --identifier pl.nech.tuparles "$APP" >/dev/null
+
 # Editable installs live in the checkout, not in site-packages. Take the
 # interpreter's own path so a poetry relink is picked up on reinstall.
 PATHS="$("$VENV/bin/python" -c 'import sys; print("\n".join(p for p in sys.path if p))')"
@@ -93,7 +100,7 @@ cat > "$APP/Contents/Info.plist" << 'EOF'
   <key>CFBundleVersion</key>
   <string>1</string>
   <key>CFBundleShortVersionString</key>
-  <string>0.5.1</string>
+  <string>0.5.2</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleExecutable</key>
