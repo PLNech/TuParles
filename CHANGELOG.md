@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — performance and responsiveness
+## 0.5.2 — 2026-11-01 · the Mac sprint
 
 ### Added
 - **A macOS permission gate at boot.** Rebuilding TuParles.app swaps the
@@ -36,6 +36,30 @@
   above it. `bubble_lines` 0 is that growth; 1–3 still pin the short ribbon.
 
 ### Fixed
+- **The AX permission preflight segfaulted the bundle at boot — the tray
+  never appeared.** `AXIsProcessTrustedWithOptions({})` handed PyObjC's
+  un-bridged Python dict to CoreFoundation: under launchd (Spotlight,
+  `open -a`) the call dereferences it and dies with SIGSEGV ~1 s after
+  boot. From a terminal the trusted short-circuit never reads the
+  options, which is why the same code ran fine there. The preflight now
+  passes a toll-free-bridged `NSDictionary` with
+  `kAXTrustedCheckOptionPrompt: False` — silent, as intended, and alive.
+
+- **The tray says when the event tap is born dead.** pynput's macOS
+  listener fails silently without Accessibility: it starts, hears
+  nothing, and logs a warning nobody configured. The boot now surfaces
+  pynput's own `IS_TRUSTED` verdict with the System Settings path when
+  it is False — the diagnosis that took a debug session is one boot
+  line away next time.
+
+- **TuParles.app signs with an explicit adhoc identifier.** clang's
+  linker-signed stub carried `Identifier=TuParles` (it ignores
+  CFBundleIdentifier) and no usable designated requirement, so TCC keyed
+  grants to the cdhash: permissions reset on relaunch and every rebuild,
+  and the chord went deaf. The install script now re-signs with
+  `--identifier pl.nech.tuparles` — grant once, survives relaunches and
+  rebuilds. One re-grant after upgrading to this version.
+
 - **TuParles leaves the Cmd-Tab switcher.** The generated Info.plist said
   `LSUIElement false`, so the tray daemon registered as a regular
   application: Dock icon, switcher entry, all of it. It is now
