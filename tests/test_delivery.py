@@ -677,9 +677,13 @@ class TestMacOriginPaste:
     def test_paste_activates_the_origin_pid(self, monkeypatch):
         activated = []
         monkeypatch.setitem(delivery._SESSION, "macos", True)
-        monkeypatch.setattr(delivery, "activate_pid", lambda pid: activated.append(pid) or True)
         monkeypatch.setattr(
-            delivery.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess([], 0)
+            delivery, "activate_pid", lambda pid: activated.append(pid) or True
+        )
+        monkeypatch.setattr(
+            delivery.subprocess,
+            "run",
+            lambda *a, **k: subprocess.CompletedProcess([], 0),
         )
         delivery._macos_paste(pid="4242")
         assert activated == ["4242"]

@@ -97,7 +97,9 @@ def _replace_segment_text(seg, new_text: str):
         d["text"] = new_text
         return seg.__class__(**d)
     # Last resort: attribute copy.
-    result = type(seg)(seg.text, seg.start, seg.end) if not hasattr(seg, "text") else seg
+    result = (
+        type(seg)(seg.text, seg.start, seg.end) if not hasattr(seg, "text") else seg
+    )
     result.text = new_text  # type: ignore[attr-defined]
     return result
 
@@ -307,7 +309,9 @@ class GpuEngine:
                     multilingual=False,
                     without_timestamps=True,
                 )
-                corrected_text = " ".join(s.text.strip() for s in chunk_segments).strip()
+                corrected_text = " ".join(
+                    s.text.strip() for s in chunk_segments
+                ).strip()
                 if corrected_text:
                     segments[i] = _replace_segment_text(seg, corrected_text)
             except Exception:
@@ -408,9 +412,7 @@ class MlxEngine:
             mel = self._mlx.audio.log_mel_spectrogram(
                 pcm, n_mels=model.dims.n_mels, padding=self._mlx.audio.N_SAMPLES
             )
-            window = self._mlx.audio.pad_or_trim(
-                mel, self._mlx.audio.N_FRAMES, axis=-2
-            )
+            window = self._mlx.audio.pad_or_trim(mel, self._mlx.audio.N_FRAMES, axis=-2)
             _, probs = model.detect_language(window)
             pairs = [(lang, float(prob)) for lang, prob in dict(probs).items()]
         except Exception:

@@ -57,13 +57,20 @@ DEFAULT_MODELS = [
 def say(voice: str, text: str, dest: Path) -> None:
     """macOS say → 16 kHz mono wav. Deterministic enough to compare models."""
     aiff = dest.with_suffix(".aiff")
-    subprocess.run(
-        ["say", "-v", voice, "-o", str(aiff), text], check=True, timeout=60
-    )
+    subprocess.run(["say", "-v", voice, "-o", str(aiff), text], check=True, timeout=60)
     subprocess.run(
         [
-            "ffmpeg", "-y", "-loglevel", "error", "-i", str(aiff),
-            "-ar", "16000", "-ac", "1", str(dest),
+            "ffmpeg",
+            "-y",
+            "-loglevel",
+            "error",
+            "-i",
+            str(aiff),
+            "-ar",
+            "16000",
+            "-ac",
+            "1",
+            str(dest),
         ],
         check=True,
         timeout=60,
@@ -105,7 +112,12 @@ def main() -> int:
         say(fr if label != "en" else en, text, path)
         audio = load_wav(path)
         clips.append(
-            {"label": label, "text": text, "seconds": round(audio.size / 16000, 2), "audio": audio}
+            {
+                "label": label,
+                "text": text,
+                "seconds": round(audio.size / 16000, 2),
+                "audio": audio,
+            }
         )
         print(f"clip {label}: {clips[-1]['seconds']}s", flush=True)
 

@@ -41,7 +41,12 @@ class _FakeMlx:
                     "text": self._text,
                     "words": [
                         {"word": "bonjour", "start": 0.0, "end": 0.4},
-                        {"word": "fan out", "start": 0.5, "end": 0.9, "probability": 0.4},
+                        {
+                            "word": "fan out",
+                            "start": 0.5,
+                            "end": 0.9,
+                            "probability": 0.4,
+                        },
                     ],
                 }
             ],

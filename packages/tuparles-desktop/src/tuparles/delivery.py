@@ -55,6 +55,7 @@ def _on_macos() -> bool:
 def _on_wayland() -> bool:
     return _SESSION["wayland"] and not _SESSION["macos"]
 
+
 # Every modifier the stop-tap (RCtrl+RAlt/AltGr) or a hasty hand might hold
 # when typing starts. Released explicitly *before* typing instead of using
 # xdotool --clearmodifiers: that flag re-presses the modifiers afterward even

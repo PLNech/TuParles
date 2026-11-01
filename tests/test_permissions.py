@@ -95,9 +95,7 @@ def test_denied_mic_is_named_not_reasked(monkeypatch):
     _force_darwin(monkeypatch)
     _fake_quartz(monkeypatch, listen=True)
     _fake_appservices(monkeypatch, trusted=True)
-    calls = _fake_avfoundation(
-        monkeypatch, mic=_DENIED, grant_on_request=True
-    )
+    calls = _fake_avfoundation(monkeypatch, mic=_DENIED, grant_on_request=True)
     assert permissions.missing_macos_permissions(prompt=True) == ["Micro"]
     assert calls["requests"] == 0  # a denial is final; never nag on a hunch
 

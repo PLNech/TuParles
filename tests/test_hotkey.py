@@ -94,7 +94,9 @@ def test_macos_chord_is_right_option_and_right_command(monkeypatch):
     keyboard = types.SimpleNamespace(Key=keys, Listener=lambda **k: None)
     monkeypatch.setitem(sys.modules, "pynput", types.SimpleNamespace(keyboard=keyboard))
     monkeypatch.setitem(
-        sys.modules, "pynput.keyboard", types.SimpleNamespace(Key=keys, Listener=lambda **k: None)
+        sys.modules,
+        "pynput.keyboard",
+        types.SimpleNamespace(Key=keys, Listener=lambda **k: None),
     )
     monkeypatch.setattr(hotkey, "IS_MACOS", True)
     listener = hotkey._PynputListener(lambda: None)
@@ -110,10 +112,14 @@ def test_linux_chord_stays_right_ctrl_and_right_alt(monkeypatch):
         cmd_r="cmd_r", alt_r="alt_r", alt_gr="alt_gr", ctrl_r="ctrl_r", esc="esc"
     )
     monkeypatch.setitem(
-        sys.modules, "pynput.keyboard", types.SimpleNamespace(Key=keys, Listener=lambda **k: None)
+        sys.modules,
+        "pynput.keyboard",
+        types.SimpleNamespace(Key=keys, Listener=lambda **k: None),
     )
     monkeypatch.setitem(
-        sys.modules, "pynput", types.SimpleNamespace(keyboard=sys.modules["pynput.keyboard"])
+        sys.modules,
+        "pynput",
+        types.SimpleNamespace(keyboard=sys.modules["pynput.keyboard"]),
     )
     monkeypatch.setattr(hotkey, "IS_MACOS", False)
     listener = hotkey._PynputListener(lambda: None)

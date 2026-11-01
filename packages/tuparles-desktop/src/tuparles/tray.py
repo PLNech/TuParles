@@ -291,9 +291,7 @@ class Tray(QObject):
         from tuparles.config import IS_MACOS
 
         chord = (
-            "Option droit + Commande droit"
-            if IS_MACOS
-            else "Ctrl droit + Alt droit"
+            "Option droit + Commande droit" if IS_MACOS else "Ctrl droit + Alt droit"
         )
         base = f"TuParles · {chord} pour dicter"
         if self._perm_note:

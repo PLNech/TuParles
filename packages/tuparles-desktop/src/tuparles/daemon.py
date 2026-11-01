@@ -909,9 +909,7 @@ def run() -> None:
     bridge.queued.connect(bubble.on_queued)  # queue chips (#15)
     bridge.delivered.connect(bubble.on_delivered)
 
-    tray = Tray(
-        backend_source=backend_source, level_source=lambda: recorder.level
-    )
+    tray = Tray(backend_source=backend_source, level_source=lambda: recorder.level)
     bridge.state.connect(tray.set_state)
     bridge.final.connect(tray.on_final)
     tray.toggle_requested.connect(controller.toggle_from_tray)
@@ -938,11 +936,7 @@ def run() -> None:
     )
     listener.start()
     app.aboutToQuit.connect(listener.stop)
-    chord = (
-        "Right Option + Right Command"
-        if IS_MACOS
-        else "Right Ctrl + Right Alt"
-    )
+    chord = "Right Option + Right Command" if IS_MACOS else "Right Ctrl + Right Alt"
     print(f"TuParles daemon up: {chord} to dictate. Ctrl-C quits.")
 
     # Cross-env capability report (#29): probe what this box can actually do and
