@@ -10,6 +10,12 @@ import pytest
 
 from tuparles import cli, service
 
+# The unit is a systemd user unit and the fixtures build POSIX paths
+# (venv/bin/...); Windows can neither host nor mean them.
+pytestmark = pytest.mark.skipif(
+    sys.platform == "win32", reason="systemd user units are Linux-only"
+)
+
 TEMPLATE = service.template_path().read_text(encoding="utf-8")
 
 

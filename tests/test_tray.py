@@ -394,6 +394,7 @@ def test_dev_capture_toggle_at_rest_is_one_update(make_tray):
 
 
 def test_recording_pose_lifts_with_the_mic():
+    pytest.importorskip("PySide6")
     from tuparles.tray import frame_pose
 
     quiet = frame_pose("recording", 0, level=0.0)[0]

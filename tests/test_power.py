@@ -12,7 +12,10 @@ battery, a tree we can't read, a status we don't recognise — answers "not on
 battery", so the engine keeps the GPU it would have used before this feature.
 """
 
+import sys
 from pathlib import Path
+
+import pytest
 
 from tuparles.power import PowerProbe, read_on_battery
 
@@ -37,6 +40,9 @@ def test_charging_full_or_not_charging_is_not_on_battery(tmp_path):
         assert read_on_battery(root) is False, status
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="sysfs fixture names carry ':' — not a Windows path"
+)
 def test_a_discharging_battery_wins_over_online_supplies(tmp_path):
     # The dev laptop's real tree, draining at ~45 %: AC and one UCSI port both
     # say online=1 (a dock / weak PD partner), yet the battery is discharging.
