@@ -153,6 +153,24 @@ class _PynputListener:
 
     def start(self) -> None:
         self._listener.start()
+        if IS_MACOS:
+            # pynput's tap dies silently when AXIsProcessTrusted() is False
+            # at listener start: no exception, no key ever arrives — only a
+            # logging warning nobody configured. Its own signal is
+            # Listener.IS_TRUSTED, set once the listener thread has probed
+            # TCC. Print it: under Spotlight/launchd stdout is the only log.
+            trusted: bool | None = None
+            for _ in range(20):  # ≤2s: the thread probes TCC at startup
+                time.sleep(0.1)
+                trusted = self._listener.__dict__.get("IS_TRUSTED")
+                if trusted is not None:
+                    break
+            if trusted is False:
+                print(
+                    "hotkey: pynput IS_TRUSTED=False — l'event tap est mort. "
+                    "Réglages Système › Confidentialité et sécurité › "
+                    "Accessibilité › TuParles."
+                )
         if self._focus_watch is not None:
             self._focus_watch.start()
 
