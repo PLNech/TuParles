@@ -90,7 +90,7 @@ def _replace_segment_text(seg, new_text: str):
     import dataclasses
 
     if dataclasses.is_dataclass(seg):
-        return dataclasses.replace(seg, text=new_text)
+        return dataclasses.replace(seg, text=new_text)  # type: ignore[type-var]
     # Fallback for named-tuple segments: rebuild from _asdict.
     if hasattr(seg, "_asdict"):
         d = seg._asdict()
@@ -100,7 +100,7 @@ def _replace_segment_text(seg, new_text: str):
     result = (
         type(seg)(seg.text, seg.start, seg.end) if not hasattr(seg, "text") else seg
     )
-    result.text = new_text  # type: ignore[attr-defined]
+    result.text = new_text
     return result
 
 

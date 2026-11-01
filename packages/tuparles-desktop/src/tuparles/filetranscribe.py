@@ -31,6 +31,7 @@ import logging
 import subprocess
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -222,6 +223,11 @@ class FileTranscriber:
     def _load(self, dev: str, compute: str, model_name: str) -> None:
         self.device = dev
         self.model_name = model_name
+        # Backends are mutually exclusive and lazily imported; annotate up
+        # front so each branch can assign None or a real engine.
+        self._mlx: MlxEngine | None = None
+        self._model: Any = None
+        self._batched: Any = None
         if dev == "mlx":
             # The daemon's engine, reused so a file and a live take cannot
             # diverge. BatchedInferencePipeline is a CUDA concept; the MLX
@@ -276,9 +282,12 @@ class FileTranscriber:
         carries no probability unless the conversion stored one), so those
         fields stay None — the JSON contract for a value the decode didn't
         supply."""
-        result = self._mlx.transcribe(pcm.astype(np.float32))
+        mlx = self._mlx
+        if mlx is None:  # _load picked another backend; unreachable via _decode
+            raise RuntimeError("MLX engine not loaded")
+        result = mlx.transcribe(pcm.astype(np.float32))
         out: list[Segment] = []
-        for raw in self._mlx.last_segments:
+        for raw in mlx.last_segments:
             raw_words = raw.get("words") or []
             words = tuple(
                 Word(

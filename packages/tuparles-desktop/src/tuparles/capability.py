@@ -228,6 +228,9 @@ def probe(
     # server are listed, native path first — so `resolved`/`degraded` describe the
     # box we're on, not a hypothetical one. The cross-env story lives in both
     # branches being visible here (and in the research note), not in mixing them.
+    class_layers: tuple[Layer, ...]
+    paste_layers: tuple[Layer, ...]
+    activate_layers: tuple[Layer, ...]
     if is_macos:
         class_layers = (Layer("frontmost-app", False, "no window id on macOS"),)
         paste_layers = (
