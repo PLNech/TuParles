@@ -1,6 +1,9 @@
 """Telemetry primitives: events persist locally, the opt-out is a hard gate,
 and the readout answers the discovery question."""
 
+import time
+import types
+
 import pytest
 
 from tuparles import history, syntax, telemetry
@@ -478,14 +481,31 @@ class TestDaemonEntryInstrumentation:
             bridge=Bridge(),
         )
 
+    def _wait_entry_rows(self, monkeypatch):
+        # Arming is async since 75fe0e3 (the take starts before the mic
+        # opens): the entry event lands on the arm-capture thread. Poll —
+        # a synchronous read raced the thread and failed on fast boots.
+        monkeypatch.setattr(
+            "tuparles.daemon.capture_target",
+            lambda: types.SimpleNamespace(wm_class=None, window_id=None),
+        )
+        deadline = time.monotonic() + 2
+        rows = []
+        while time.monotonic() < deadline:
+            rows = sink.read(name="entry.dictation")
+            if rows:
+                return rows
+            time.sleep(0.02)
+        return rows
+
     def test_tray_entry_tagged(self, tmp_path, monkeypatch):
         _isolate(tmp_path, monkeypatch)
         self._controller(monkeypatch).toggle_from_tray()
-        rows = sink.read(name="entry.dictation")
+        rows = self._wait_entry_rows(monkeypatch)
         assert rows and rows[0][2] == {"source": "tray"}
 
     def test_hotkey_entry_tagged(self, tmp_path, monkeypatch):
         _isolate(tmp_path, monkeypatch)
         self._controller(monkeypatch).toggle_from_hotkey()
-        rows = sink.read(name="entry.dictation")
+        rows = self._wait_entry_rows(monkeypatch)
         assert rows and rows[0][2] == {"source": "hotkey"}
