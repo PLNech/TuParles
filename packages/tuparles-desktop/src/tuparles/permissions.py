@@ -53,10 +53,22 @@ def _accessibility_granted() -> bool:
     the paste falls back to the clipboard + manual Cmd+V — and the tray
     note names it."""
     try:
-        from ApplicationServices import AXIsProcessTrustedWithOptions
+        from ApplicationServices import (
+            AXIsProcessTrustedWithOptions,
+            kAXTrustedCheckOptionPrompt,
+        )
+        from Foundation import NSDictionary
     except ImportError:
         return True
-    return bool(AXIsProcessTrustedWithOptions({}))
+    # A bare Python dict is not bridged to CFDictionaryRef: under a
+    # terminal the trusted short-circuit never reads the options, but
+    # launched by launchd the call dereferences the raw PyObject and
+    # segfaults. A toll-free-bridged NSDictionary is a real CFDictionary.
+    # prompt=False keeps this a silent preflight.
+    options = NSDictionary.dictionaryWithObject_forKey_(
+        False, kAXTrustedCheckOptionPrompt
+    )
+    return bool(AXIsProcessTrustedWithOptions(options))
 
 
 def _listen_granted(prompt: bool) -> bool:

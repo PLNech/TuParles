@@ -46,8 +46,27 @@ def _fake_avfoundation(monkeypatch, *, mic: int, grant_on_request: bool):
 
 def _fake_appservices(monkeypatch, *, trusted: bool = True):
     ax = types.ModuleType("ApplicationServices")
-    ax.AXIsProcessTrustedWithOptions = lambda options: trusted
+    ax.kAXTrustedCheckOptionPrompt = "AXTrustedCheckOptionPrompt"
+
+    seen: list = []
+
+    def _ax(options):
+        seen.append(options)
+        return trusted
+
+    ax.AXIsProcessTrustedWithOptions = _ax
     monkeypatch.setitem(sys.modules, "ApplicationServices", ax)
+
+    fd = types.ModuleType("Foundation")
+
+    class NSDictionary:
+        @classmethod
+        def dictionaryWithObject_forKey_(cls, obj, key):
+            return {key: obj}
+
+    fd.NSDictionary = NSDictionary
+    monkeypatch.setitem(sys.modules, "Foundation", fd)
+    return seen
 
 
 def _force_darwin(monkeypatch):
@@ -88,10 +107,11 @@ def test_untrusted_accessibility_is_named_without_prompt(monkeypatch):
     _force_darwin(monkeypatch)
     _fake_quartz(monkeypatch, listen=True)
     _fake_avfoundation(monkeypatch, mic=_AUTHORIZED, grant_on_request=False)
-    _fake_appservices(monkeypatch, trusted=False)
+    seen = _fake_appservices(monkeypatch, trusted=False)
     assert permissions.missing_macos_permissions(prompt=True) == [
         "Accessibilité (le collage auto)"
     ]
+    assert seen == [{"AXTrustedCheckOptionPrompt": False}]  # silent preflight
 
 
 def test_undetermined_mic_prompts_and_grants(monkeypatch):
